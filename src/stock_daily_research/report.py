@@ -382,7 +382,7 @@ def sectors_in_use(report: DailyReport) -> list[str]:
     return sorted(seen)
 
 
-# Within this percent of 20D SMA (from above) ??"Near 20D support".
+# Within this percent of 20D SMA (from above) - "Near 20D support".
 # Defined as a module constant so the rule is documented and uniform.
 NEAR_SUPPORT_PCT = 2.0
 
@@ -390,12 +390,12 @@ NEAR_SUPPORT_PCT = 2.0
 def ma_signals(item: TickerReport) -> list[str]:
     """Short trend signals from simple moving averages.
 
-    Unified grammar ??direction first, MAs joined by " / ":
+    Unified grammar - direction first, MAs joined by " / ":
       - "Above 20D / 60D / 120D"
       - "Above 20D / 60D, below 120D"
       - "Below 20D / 60D / 120D"
       - "Near 20D support"   (within NEAR_SUPPORT_PCT% above SMA20)
-      - "5D below 20D"       (SMA5 ??1% below SMA20)
+      - "5D below 20D"       (SMA5 >=1% below SMA20)
 
     Empty list when SMAs are unavailable (new IPOs, halted symbols).
     """
@@ -460,12 +460,12 @@ def ma_distances(item: TickerReport) -> dict[str, float]:
 
 
 def format_ma_distances(item: TickerReport) -> str:
-    """Compact one-liner for the Trend tooltip: '20D +2.1% 繚 60D +5.3% 繚 120D +8.4%'."""
+    """Compact one-liner for the Trend tooltip: '20D +2.1% | 60D +5.3% | 120D +8.4%'."""
     parts: list[str] = []
     for label, pct in ma_distances(item).items():
         sign = "+" if pct >= 0 else ""
         parts.append(f"{label} {sign}{pct:.1f}%")
-    return " 繚 ".join(parts)
+    return " | ".join(parts)
 
 
 def trend_tone(signals: list[str]) -> str:
@@ -595,7 +595,7 @@ def hero_items(report: DailyReport) -> list[dict[str, object]]:
             "tone": "info",
             "label": "Valuation watch",
             "headline": ", ".join(symbols),
-            "subtitle": f"{len(stretched)} ticker{'s' if len(stretched) != 1 else ''} with P/E ??100",
+            "subtitle": f"{len(stretched)} ticker{'s' if len(stretched) != 1 else ''} with P/E >=100",
             "anchor": "#valuation",
         })
 
@@ -608,7 +608,7 @@ def hero_items(report: DailyReport) -> list[dict[str, object]]:
                 "tone": "info",
                 "label": event_label(article.event_type),
                 "headline": article.title,
-                "subtitle": f"{tr.ticker.symbol} 繚 {article.source}",
+                "subtitle": f"{tr.ticker.symbol} | {article.source}",
                 "anchor": "#news",
             })
 
@@ -832,7 +832,7 @@ def _highest_pe(item: TickerReport) -> tuple[str, float] | None:
 
 
 def _stretched_valuation_tickers(report: DailyReport) -> list[TickerReport]:
-    """Tickers with trailing or forward P/E ??100, ordered by the higher of the two."""
+    """Tickers with trailing or forward P/E >=100, ordered by the higher of the two."""
     stretched: list[tuple[float, TickerReport]] = []
     for tr in report.ticker_reports:
         if not tr.valuation:
@@ -863,7 +863,7 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
         n = len(item.articles)
         top_count = sum(1 for a in item.articles if a.importance_score >= 1.0)
         if top_count >= 1:
-            setup.append(f"{n} headlines 繚 {top_count} top stor{'y' if top_count == 1 else 'ies'}")
+            setup.append(f"{n} headlines | {top_count} top stor{'y' if top_count == 1 else 'ies'}")
         else:
             setup.append(f"{n} headlines")
 
@@ -882,7 +882,7 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
         change = daily_change_pct(item)
         if isinstance(change, (int, float)):
             if abs(change) >= 5.0:
-                # Big single-day move ??surface as risk for awareness
+                # Big single-day move - surface as risk for awareness
                 risk.append(f"{format_pct(change)} today")
             elif abs(change) >= 0.1:
                 setup.append(f"{format_pct(change)} today")
@@ -924,7 +924,7 @@ def card_state(item: TickerReport, anchor: date) -> str:
     """Visual weight class for a ticker card: hot / warm / warn / quiet.
 
     Hot is reserved for the strongest catalysts so the red signal stays
-    meaningful ??earnings TODAY only, or ?? top-tier articles. Earnings
+    meaningful: earnings TODAY only, or 2+ top-tier articles. Earnings
     tomorrow / within-7-days drops to warm, where the warmer color band
     can stand on its own without diluting hot.
     """
@@ -964,4 +964,3 @@ def pe_class(value: object) -> str:
     if number >= 50:
         return "elevated"
     return ""
-

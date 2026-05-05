@@ -956,7 +956,7 @@
     <header class="header">
       <div>
         <h1>Daily Stock Research</h1>
-        <div class="muted">{{ report.report_date.isoformat() }} 繚 Generated {{ report.generated_at.strftime("%Y-%m-%d %H:%M %Z") }}</div>
+        <div class="muted">{{ report.report_date.isoformat() }} | Generated {{ report.generated_at.strftime("%Y-%m-%d %H:%M %Z") }}</div>
       </div>
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
@@ -964,7 +964,7 @@
           <button id="export-watchlist" type="button" class="tool-button" title="TXT: ticker, state, earnings timing, tag">Export watchlist</button>
           <button id="export-notes" type="button" class="tool-button" title="JSON: notes and revisit dates saved in this browser">Export notes</button>
           <button id="export-earnings" type="button" class="tool-button" title="JSON: ticker, company, earnings timing">Export earnings</button>
-          <div id="export-status" class="export-status" aria-live="polite">Exports: watchlist TXT 繚 notes JSON 繚 earnings JSON</div>
+          <div id="export-status" class="export-status" aria-live="polite">Exports: watchlist TXT | notes JSON | earnings JSON</div>
         </div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
@@ -972,9 +972,9 @@
         </button>
         <div class="focus-line">
           <span><span class="focus-num">{{ summary.ticker_count }}</span> tickers</span>
-          <span class="sep">繚</span>
-          <span><span class="focus-num">{{ summary.earnings_soon_count }}</span> earnings ??7d</span>
-          <span class="sep">繚</span>
+          <span class="sep">|</span>
+          <span><span class="focus-num">{{ summary.earnings_soon_count }}</span> earnings <=7d</span>
+          <span class="sep">|</span>
           <span><span class="focus-num">{{ summary.economic_event_count }}</span> macro</span>
         </div>
       </div>
@@ -1014,7 +1014,7 @@
         </div>
         <div class="summary-grid" aria-label="Summary">
           <div class="stat {% if summary.hot_count %}alert danger{% endif %}" title="Tickers with earnings today or 2+ top stories"><span class="stat-value">{{ summary.hot_count }}</span><span class="stat-label">Hot</span></div>
-          <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">Earnings ??7d</span></div>
+          <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">Earnings <=7d</span></div>
           <div class="stat {% if summary.economic_event_count %}alert{% endif %}" title="Tracked macro events"><span class="stat-value">{{ summary.economic_event_count }}</span><span class="stat-label">Macro</span></div>
           <div class="stat"><span class="stat-value">{{ summary.ticker_count }}</span><span class="stat-label">Tickers</span></div>
           <div class="stat" title="Checklist-based review status in this browser"><span class="stat-value" id="reviewed-count">0 / {{ summary.ticker_count }}</span><span class="stat-label">Reviewed</span></div>
@@ -1027,7 +1027,7 @@
         <div class="command-alerts">
           <div class="command-alerts-head">
             <span class="cc-label">Top alerts</span>
-            {% if rule_alerts|length > 3 %}<a href="#rule-alerts" class="cc-more">+{{ rule_alerts|length - 3 }} more ??/a>{% endif %}
+            {% if rule_alerts|length > 3 %}<a href="#rule-alerts" class="cc-more">+{{ rule_alerts|length - 3 }} more</a>{% endif %}
           </div>
           <ul class="command-alert-list">
             {% for alert in rule_alerts[:3] %}
@@ -1134,7 +1134,7 @@
             <span class="when">{{ item.earnings.earnings_date|days_until }}</span>
           </div>
           <span class="name">{{ item.ticker.company_name }}</span>
-          <span class="date">{{ item.earnings.earnings_date|date_or_na }} 繚 {{ item.earnings.source }}</span>
+          <span class="date">{{ item.earnings.earnings_date|date_or_na }} | {{ item.earnings.source }}</span>
         </a>
         {% endfor %}
       </div>
@@ -1162,7 +1162,7 @@
         {% endfor %}
       </ul>
       {% else %}
-      <div class="section-empty">No high-priority news (importance ??0.8) found for this run.</div>
+      <div class="section-empty">No high-priority news (importance >=0.8) found for this run.</div>
       {% endif %}
     </section>
 
@@ -1235,11 +1235,11 @@
       <div class="sort-hint">Sorted by market cap (largest first)</div>
       <div class="legend" aria-label="Card state legend">
         <span class="badge danger">Hot</span> earnings today or 2+ top stories
-        <span class="legend-sep">繚</span>
-        <span class="badge good">Warm</span> news or earnings ??7d
-        <span class="legend-sep">繚</span>
+        <span class="legend-sep">|</span>
+        <span class="badge good">Warm</span> news or earnings <=7d
+        <span class="legend-sep">|</span>
         <span class="badge warn">Warn</span> data warnings
-        <span class="legend-sep">繚</span>
+        <span class="legend-sep">|</span>
         <span class="badge">Quiet</span> no major catalyst
       </div>
       <div class="ticker-controls">
@@ -1337,10 +1337,10 @@
 
           {% if insights.setup or insights.trend or insights.risk or insights.watch %}
           <div class="insights">
-            {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' 繚 ') }}</span></div>{% endif %}
-            {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' 繚 ') }}</span></div>{% endif %}
-            {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">Risk</span><span class="insight-text">{{ insights.risk|join(' 繚 ') }}</span></div>{% endif %}
-            {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">Watch</span><span class="insight-text">{{ insights.watch|join(' 繚 ') }}</span></div>{% endif %}
+            {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
+            {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
+            {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">Risk</span><span class="insight-text">{{ insights.risk|join(' | ') }}</span></div>{% endif %}
+            {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">Watch</span><span class="insight-text">{{ insights.watch|join(' | ') }}</span></div>{% endif %}
           </div>
           {% endif %}
 
@@ -1387,7 +1387,7 @@
             {% if item.articles %}
             <ul>
               {% for article in item.articles %}
-              <li><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a> <span class="muted">??{{ article.source }}</span></li>
+              <li><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a> <span class="muted">- {{ article.source }}</span></li>
               {% endfor %}
             </ul>
             {% else %}
@@ -1407,8 +1407,8 @@
     </section>
 
     <footer class="footer">
-      stock-daily-research 繚 {{ report.report_date.isoformat() }} 繚 <a href="#summary">Back to top</a>
-      <div class="disclaimer" style="margin-top: 6px;">Personal research 繚 Not investment advice</div>
+      stock-daily-research | {{ report.report_date.isoformat() }} | <a href="#summary">Back to top</a>
+      <div class="disclaimer" style="margin-top: 6px;">Personal research | Not investment advice</div>
     </footer>
   </main>
   <script>
@@ -1876,7 +1876,7 @@
           var target = new Date(el.dataset.countdown + "T00:00:00");
           var days = Math.round((target - today) / 86400000);
           var session = { before_market: "before open", after_market: "after close", during_market: "during market", unknown: "time TBD" }[el.dataset.timeOfDay] || el.dataset.timeOfDay;
-          el.textContent = days <= 0 ? "Earnings today 繚 " + session : "Earnings in " + days + "d 繚 " + session;
+          el.textContent = days <= 0 ? "Earnings today | " + session : "Earnings in " + days + "d | " + session;
         });
       }
 
@@ -2121,4 +2121,3 @@
   </script>
 </body>
 </html>
-
