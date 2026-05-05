@@ -1,0 +1,342 @@
+settings:
+  report_timezone: Asia/Taipei
+  news:
+    lookback_days: 3
+    max_articles_per_ticker: 8
+    provider: google_news_rss
+  x_signals:
+    mode: manual
+    manual_file: data/x_posts.yaml
+  valuation:
+    provider: yfinance
+  earnings:
+    provider_order:
+      - yfinance
+  macro:
+    enabled: true
+    days_back: 1
+    days_ahead: 14
+  notifications:
+    telegram:
+      enabled: false
+      disable_web_page_preview: true
+
+tickers:
+  - symbol: NVDA
+    company_name: NVIDIA Corporation
+    aliases:
+      - Nvidia
+      - NVIDIA
+    keywords:
+      - GPU
+      - AI chips
+      - data center
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts:
+      - handle: example_analyst
+        category: industry_expert
+        display_name: Example Analyst
+
+  - symbol: MSFT
+    company_name: Microsoft Corporation
+    aliases:
+      - Microsoft
+    keywords:
+      - Azure
+      - Copilot
+      - OpenAI
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: MRVL
+    company_name: Marvell Technology, Inc.
+    aliases:
+      - Marvell
+      - Marvell Technology
+    keywords:
+      - data center
+      - networking
+      - custom silicon
+      - AI infrastructure
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: COHR
+    company_name: Coherent Corp.
+    aliases:
+      - Coherent
+      - Coherent Corp
+    keywords:
+      - optical networking
+      - photonics
+      - lasers
+      - transceivers
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: RKLB
+    company_name: Rocket Lab USA, Inc.
+    aliases:
+      - Rocket Lab
+      - Rocket Lab USA
+    keywords:
+      - space launch
+      - Electron rocket
+      - Neutron rocket
+      - satellites
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: PLTR
+    company_name: Palantir Technologies Inc.
+    aliases:
+      - Palantir
+      - Palantir Technologies
+    keywords:
+      - AIP
+      - government contracts
+      - data analytics
+      - artificial intelligence
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: AMD
+    company_name: Advanced Micro Devices, Inc.
+    aliases:
+      - AMD
+      - Advanced Micro Devices
+    keywords:
+      - GPU
+      - CPU
+      - AI chips
+      - data center
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: ARM
+    company_name: Arm Holdings plc
+    aliases:
+      - Arm
+      - Arm Holdings
+    keywords:
+      - chip design
+      - semiconductor IP
+      - CPU architecture
+      - licensing
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: INTC
+    company_name: Intel Corporation
+    aliases:
+      - Intel
+    keywords:
+      - foundry
+      - CPU
+      - semiconductor
+      - data center
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: AVGO
+    company_name: Broadcom Inc.
+    aliases:
+      - Broadcom
+    keywords:
+      - networking chips
+      - custom silicon
+      - VMware
+      - AI infrastructure
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: TSM
+    company_name: Taiwan Semiconductor Manufacturing Company Limited
+    aliases:
+      - TSMC
+      - Taiwan Semiconductor
+    keywords:
+      - foundry
+      - semiconductor manufacturing
+      - advanced nodes
+      - chips
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: AAPL
+    company_name: Apple Inc.
+    aliases:
+      - Apple
+    keywords:
+      - iPhone
+      - Mac
+      - services
+      - AI
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: AMZN
+    company_name: Amazon.com, Inc.
+    aliases:
+      - Amazon
+      - AWS
+    keywords:
+      - cloud
+      - ecommerce
+      - AWS
+      - advertising
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: GOOGL
+    company_name: Alphabet Inc.
+    aliases:
+      - Alphabet
+      - Google
+    keywords:
+      - search
+      - advertising
+      - Google Cloud
+      - Gemini
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: META
+    company_name: Meta Platforms, Inc.
+    aliases:
+      - Meta
+      - Facebook
+    keywords:
+      - advertising
+      - Instagram
+      - Reality Labs
+      - AI
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: TSLA
+    company_name: Tesla, Inc.
+    aliases:
+      - Tesla
+    keywords:
+      - EV
+      - electric vehicles
+      - autonomous driving
+      - energy storage
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: MU
+    company_name: Micron Technology, Inc.
+    aliases:
+      - Micron
+      - Micron Technology
+    keywords:
+      - memory
+      - DRAM
+      - NAND
+      - HBM
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []
+
+  - symbol: SNDK
+    company_name: SanDisk Corporation
+    aliases:
+      - SanDisk
+    keywords:
+      - NAND
+      - flash storage
+      - memory
+      - SSD
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []

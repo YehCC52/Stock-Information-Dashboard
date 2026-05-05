@@ -1,0 +1,98 @@
+# Daily Stock Research - {{ report.report_date.isoformat() }}
+
+Generated at: {{ report.generated_at.isoformat() }}
+
+{% if report.warnings %}
+## Global Warnings
+
+{% for warning in report.warnings %}
+- {{ warning }}
+{% endfor %}
+{% endif %}
+
+{% if report.market_sentiment %}
+## Market Sentiment
+
+- Score: {{ report.market_sentiment.score }} / 100
+- Label: {{ report.market_sentiment.label }}
+- Source: {{ report.market_sentiment.source }}
+{% for component in report.market_sentiment.components %}
+- {{ component.name }}: {{ "%.0f"|format(component.score) }} / 100 ({{ component.label }}) - {{ component.detail }}
+{% endfor %}
+
+{% endif %}
+
+## Macro Calendar
+
+{% if report.economic_events %}
+{% for event in report.economic_events %}
+- **{{ event.name }}** ({{ event.category }}) - {{ event.event_datetime.strftime("%Y-%m-%d %H:%M %Z") }}
+  - Source: {{ event.source }}
+  - {{ event.source_url }}
+{% if event.notes %}  - {{ event.notes }}
+{% endif %}
+{% endfor %}
+{% else %}
+No upcoming macro events found for this run.
+{% endif %}
+
+{% for item in report.ticker_reports %}
+## {{ item.ticker.symbol }} - {{ item.ticker.company_name }}
+
+{% if item.warnings %}
+Warnings:
+{% for warning in item.warnings %}
+- {{ warning }}
+{% endfor %}
+{% endif %}
+
+### Next Earnings
+
+{% if item.earnings and item.earnings.earnings_date %}
+- Date: {{ item.earnings.earnings_date.isoformat() }}
+- Time: {{ item.earnings.time_of_day }}
+- Source: {{ item.earnings.source }}
+{% elif item.earnings %}
+- Date: N/A
+- Source: {{ item.earnings.source }}
+{% else %}
+- Date: N/A
+{% endif %}
+
+### Valuation Measures
+
+{% if item.valuation %}
+| Metric | Current |
+| --- | ---: |
+{% for key, value in item.valuation.metrics.items() %}
+| {{ key|metric_label }} | {{ value|metric_value }} |
+{% endfor %}
+
+Source: {{ item.valuation.source }}, retrieved at {{ item.valuation.retrieved_at.isoformat() }}
+{% else %}
+Valuation data unavailable.
+{% endif %}
+
+### Trusted News
+
+{% if item.articles %}
+{% for article in item.articles %}
+- **{{ article.title }}** ({{ article.source }}, {{ article.event_type }}, score {{ "%.2f"|format(article.importance_score) }})
+  - {{ article.url }}
+{% endfor %}
+{% else %}
+No trusted news found for this run.
+{% endif %}
+
+### Trusted X Signals
+
+{% if item.x_signals %}
+{% for signal in item.x_signals %}
+- @{{ signal.author_handle }} ({{ signal.author_category }}, score {{ "%.2f"|format(signal.credibility_score) }}): {{ signal.text }}
+  - {{ signal.url }}
+{% endfor %}
+{% else %}
+No manual trusted X signals included. The MVP does not call the paid/usage-billed X API.
+{% endif %}
+
+{% endfor %}

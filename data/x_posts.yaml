@@ -1,0 +1,4 @@
+# Manual X signal input.
+# The MVP intentionally does not call the paid/usage-billed X API.
+# Paste trusted posts here when you want them included in the daily report.
+posts: []

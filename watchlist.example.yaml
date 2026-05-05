@@ -1,0 +1,59 @@
+settings:
+  report_timezone: Asia/Taipei
+  news:
+    lookback_days: 3
+    max_articles_per_ticker: 8
+    provider: google_news_rss
+  x_signals:
+    mode: manual
+    manual_file: data/x_posts.yaml
+  valuation:
+    provider: yfinance
+  earnings:
+    provider_order:
+      - yfinance
+  macro:
+    enabled: true
+    days_back: 1
+    days_ahead: 14
+  notifications:
+    telegram:
+      enabled: false
+      disable_web_page_preview: true
+
+tickers:
+  - symbol: NVDA
+    company_name: NVIDIA Corporation
+    aliases:
+      - Nvidia
+      - NVIDIA
+    keywords:
+      - GPU
+      - AI chips
+      - data center
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts:
+      - handle: example_analyst
+        category: industry_expert
+        display_name: Example Analyst
+
+  - symbol: MSFT
+    company_name: Microsoft Corporation
+    aliases:
+      - Microsoft
+    keywords:
+      - Azure
+      - Copilot
+      - OpenAI
+    trusted_news_domains:
+      - reuters.com
+      - cnbc.com
+      - wsj.com
+      - ft.com
+      - bloomberg.com
+    trusted_x_accounts: []

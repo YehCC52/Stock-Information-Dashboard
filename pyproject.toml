@@ -1,0 +1,25 @@
+[project]
+name = "stock-daily-research"
+version = "0.1.0"
+description = "Personal daily stock research reports from trusted news, manual X signals, valuation measures, and earnings dates."
+requires-python = ">=3.11"
+dependencies = [
+  "feedparser>=6.0.11",
+  "jinja2>=3.1.4",
+  "python-dotenv>=1.0.1",
+  "pyyaml>=6.0.2",
+  "requests>=2.32.3",
+  "yfinance>=0.2.66",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.3",
+]
+
+[project.scripts]
+stock-daily = "stock_daily_research.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
