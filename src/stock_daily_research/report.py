@@ -72,6 +72,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["earnings_delta"] = lambda item: earnings_delta(item, report.report_date)
     env.filters["ticker_anchor"] = lambda symbol: f"ticker-{symbol.lower()}"
     env.filters["event_label"] = event_label
+    env.filters["news_rationale"] = news_rationale
+    env.filters["post_earnings"] = lambda item: post_earnings_status(item, report.report_date)
     env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date)
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
@@ -100,6 +102,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         valuation_rows=sorted(report.ticker_reports, key=lambda item: item.ticker.symbol),
         ticker_cards=sort_by_market_cap(report.ticker_reports),
         sectors=sectors_in_use(report),
+        overextended=overextended_tickers(report),
         valuation_keys=[
             "last_close",
             "rsi_14",
@@ -324,6 +327,83 @@ def event_label(event_type: object) -> str:
     return EVENT_LABELS.get(str(event_type), str(event_type).replace("_", " ").title())
 
 
+# One-line interpretation for top news, by event_type.
+# Goal: turn "headline" into "judgment" — what should the reader take from it.
+NEWS_RATIONALE: dict[str, str] = {
+    "earnings": "Earnings read-through",
+    "guidance": "Forward-look impact",
+    "ai": "AI / capex implication",
+    "deal": "Strategic positioning",
+    "regulation": "Regulatory overhang",
+    "lawsuit": "Litigation risk",
+    "antitrust": "Antitrust overhang",
+    "supply": "Supply-chain signal",
+    "product": "Product cycle signal",
+    "analyst": "Sell-side view shift",
+    "analyst_call": "Sell-side view shift",
+    "management": "Leadership transition",
+    "macro": "Macro tape risk",
+    "market": "Macro tape risk",
+}
+
+
+def news_rationale(article: object) -> str:
+    """Short interpretation phrase for top news items. Empty when no clear angle."""
+    return NEWS_RATIONALE.get(str(getattr(article, "event_type", "")), "")
+
+
+def earnings_action(item: TickerReport, anchor: date) -> str | None:
+    """Rule-based action recommendation tied to earnings timing + RSI.
+
+    Returns None when the ticker isn't in any earnings window.
+
+    The rules are intentionally short verbs so the user can act without thinking:
+      - Earnings TODAY + overbought (RSI ≥ 70)   → "Wait reaction"
+      - Earnings TODAY + oversold (RSI ≤ 30)     → "Watch capitulation"
+      - Earnings TODAY (other)                   → "Watch reaction"
+      - Earnings TOMORROW                        → "Prepare plan"
+      - Earnings 2-7d                            → "Build thesis"
+      - Reported 1-7d ago                        → "Review outcome"
+    """
+    if not item.earnings or not isinstance(item.earnings.earnings_date, date):
+        return None
+    delta = (item.earnings.earnings_date - anchor).days
+    rsi = None
+    if item.valuation:
+        rsi = _as_float(item.valuation.metrics.get("rsi_14"))
+
+    if delta == 0:
+        if rsi is not None and rsi >= 70:
+            return "Wait reaction (overextended)"
+        if rsi is not None and rsi <= 30:
+            return "Watch capitulation"
+        return "Watch reaction"
+    if delta == 1:
+        return "Prepare plan"
+    if 2 <= delta <= 7:
+        return "Build thesis"
+    if -7 <= delta <= -1:
+        return "Review outcome"
+    return None
+
+
+def post_earnings_status(item: TickerReport, anchor: date) -> dict[str, object] | None:
+    """If the ticker reported earnings within the last N days, return a small
+    banner descriptor so the card can prompt the user to log a review.
+
+    Returns None when the ticker hasn't reported recently (or has no earnings
+    date). Returns {"days_ago", "earnings_date"} otherwise. The actual review
+    fields (EPS beat/miss, guidance, conclusion) are persisted client-side via
+    localStorage — this descriptor only controls when the banner shows.
+    """
+    if not item.earnings or not isinstance(item.earnings.earnings_date, date):
+        return None
+    delta = (anchor - item.earnings.earnings_date).days
+    if 0 < delta <= 7:
+        return {"days_ago": delta, "earnings_date": item.earnings.earnings_date}
+    return None
+
+
 def daily_change_pct(item: TickerReport) -> float | None:
     """Return today's price change % vs previous close, or None if unavailable."""
     if not item.valuation:
@@ -380,6 +460,44 @@ def sectors_in_use(report: DailyReport) -> list[str]:
             if isinstance(sector, str) and sector.strip():
                 seen.add(sector.strip())
     return sorted(seen)
+
+
+def overextended_tickers(report: DailyReport) -> list[dict[str, object]]:
+    """Tickers ringing multiple "danger" bells at once — caution-on-entry list.
+
+    Three core conditions:
+      - RSI ≥ 70                                  (overbought)
+      - Within 5% of 52-week high                 (no margin from peak)
+      - Trailing or Forward P/E ≥ 100             (extreme valuation)
+
+    Threshold: at least 2 of the 3 must trigger. A ticker hitting all 3 is
+    the loudest "wait for pullback" signal the dashboard can produce.
+    """
+    out: list[dict[str, object]] = []
+    for tr in report.ticker_reports:
+        if not tr.valuation:
+            continue
+        m = tr.valuation.metrics
+        flags: list[str] = []
+
+        rsi = _as_float(m.get("rsi_14"))
+        if rsi is not None and rsi >= 70:
+            flags.append(f"RSI {rsi:.0f}")
+
+        from_high = from_52w_high_pct(tr)
+        if from_high is not None and from_high >= -5.0:
+            flags.append("near 52w high")
+
+        for key in ("trailing_pe", "forward_pe"):
+            pe = _as_float(m.get(key))
+            if pe is not None and pe >= 100:
+                flags.append(f"{METRIC_LABELS[key]} {pe:.0f}")
+                break
+
+        if len(flags) >= 2:
+            out.append({"item": tr, "score": len(flags), "reasons": flags})
+
+    return sorted(out, key=lambda entry: entry["score"], reverse=True)
 
 
 # Within this percent of 20D SMA (from above) - "Near 20D support".
@@ -909,6 +1027,7 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
 
     trend = ma_signals(item) if item.valuation else []
     watch = list(item.ticker.keywords[:3]) if item.ticker.keywords else []
+    action = earnings_action(item, anchor)
 
     return {
         "setup": setup,
@@ -917,6 +1036,7 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
         "trend_title": format_ma_distances(item) if trend else "",
         "risk": risk,
         "watch": watch,
+        "action": action,
     }
 
 

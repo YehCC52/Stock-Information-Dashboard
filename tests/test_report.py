@@ -468,6 +468,145 @@ def test_trend_tone_from_signals() -> None:
     assert trend_tone([]) == ""
 
 
+def test_news_rationale_maps_event_types() -> None:
+    from stock_daily_research.report import news_rationale
+
+    class FakeArticle:
+        def __init__(self, ev):
+            self.event_type = ev
+
+    assert news_rationale(FakeArticle("earnings")) == "Earnings read-through"
+    assert news_rationale(FakeArticle("ai")) == "AI / capex implication"
+    assert news_rationale(FakeArticle("deal")) == "Strategic positioning"
+    assert news_rationale(FakeArticle("regulation")) == "Regulatory overhang"
+    # Unknown event_type → empty
+    assert news_rationale(FakeArticle("unknown_thing")) == ""
+
+
+def test_overextended_tickers_requires_two_of_three_flags() -> None:
+    from stock_daily_research.report import overextended_tickers
+
+    def make(symbol, metrics):
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=symbol),
+            articles=[], x_signals=[], earnings=None,
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=date(2026, 4, 28), source="yfinance",
+                metrics=metrics,
+                retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ),
+        )
+
+    # All 3 flags
+    all_three = make("ALL3", {
+        "rsi_14": 75.0, "last_close": 105.0,
+        "fifty_two_week_high": 106.0, "trailing_pe": 150.0,
+    })
+    # 2 flags: RSI + near high
+    two = make("TWO", {
+        "rsi_14": 72.0, "last_close": 100.0,
+        "fifty_two_week_high": 102.0, "trailing_pe": 25.0,
+    })
+    # 1 flag only — not enough
+    one = make("ONE", {
+        "rsi_14": 75.0, "last_close": 80.0,
+        "fifty_two_week_high": 130.0, "trailing_pe": 25.0,
+    })
+    # zero
+    none = make("CALM", {
+        "rsi_14": 50.0, "last_close": 80.0,
+        "fifty_two_week_high": 100.0, "trailing_pe": 20.0,
+    })
+
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[all_three, two, one, none],
+    )
+
+    out = overextended_tickers(report)
+    symbols = [entry["item"].ticker.symbol for entry in out]
+    assert symbols == ["ALL3", "TWO"]  # ALL3 has score 3, TWO has 2; ONE/CALM filtered out
+    assert out[0]["score"] == 3
+    assert out[1]["score"] == 2
+
+
+def test_earnings_action_routes_by_timing_and_rsi() -> None:
+    from stock_daily_research.report import earnings_action
+
+    def make(earnings_date, rsi=None):
+        metrics = {"rsi_14": rsi} if rsi is not None else {}
+        return TickerReport(
+            ticker=TickerConfig(symbol="X", company_name="X"),
+            articles=[], x_signals=[],
+            valuation=ValuationSnapshot(
+                ticker="X", as_of_date=date(2026, 4, 28), source="yfinance",
+                metrics=metrics,
+                retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ) if rsi is not None else None,
+            earnings=EarningsDate(
+                ticker="X", company_name="X",
+                earnings_date=earnings_date, time_of_day="unknown",
+                fiscal_quarter=None, fiscal_year=None,
+                eps_estimate=None, revenue_estimate=None, source="yfinance",
+                source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ) if earnings_date else None,
+        )
+
+    today = date(2026, 4, 28)
+
+    assert earnings_action(make(today, rsi=75), today) == "Wait reaction (overextended)"
+    assert earnings_action(make(today, rsi=25), today) == "Watch capitulation"
+    assert earnings_action(make(today, rsi=50), today) == "Watch reaction"
+    assert earnings_action(make(date(2026, 4, 29)), today) == "Prepare plan"
+    assert earnings_action(make(date(2026, 5, 3)), today) == "Build thesis"
+    assert earnings_action(make(date(2026, 4, 27)), today) == "Review outcome"
+    assert earnings_action(make(date(2026, 4, 21)), today) == "Review outcome"  # 7d ago boundary
+    assert earnings_action(make(date(2026, 4, 20)), today) is None  # outside window
+    assert earnings_action(make(None), today) is None
+
+
+def test_post_earnings_status_window() -> None:
+    from stock_daily_research.report import post_earnings_status
+
+    def make(earnings_date):
+        return TickerReport(
+            ticker=TickerConfig(symbol="X", company_name="X"),
+            articles=[], x_signals=[], valuation=None,
+            earnings=EarningsDate(
+                ticker="X", company_name="X",
+                earnings_date=earnings_date, time_of_day="unknown",
+                fiscal_quarter=None, fiscal_year=None,
+                eps_estimate=None, revenue_estimate=None, source="yfinance",
+                source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ) if earnings_date else None,
+        )
+
+    today = date(2026, 4, 28)
+
+    # 1 day after earnings → banner shows
+    status = post_earnings_status(make(date(2026, 4, 27)), today)
+    assert status is not None
+    assert status["days_ago"] == 1
+
+    # 7 days after — still in window
+    status = post_earnings_status(make(date(2026, 4, 21)), today)
+    assert status is not None
+    assert status["days_ago"] == 7
+
+    # 8 days — past window
+    assert post_earnings_status(make(date(2026, 4, 20)), today) is None
+
+    # Earnings today (delta 0) — pre-earnings, no banner
+    assert post_earnings_status(make(today), today) is None
+
+    # Future earnings — no banner
+    assert post_earnings_status(make(date(2026, 5, 1)), today) is None
+
+    # No earnings → None
+    assert post_earnings_status(make(None), today) is None
+
+
 def test_sectors_in_use_collects_distinct_sorted_sectors() -> None:
     from stock_daily_research.report import sectors_in_use
 

@@ -655,6 +655,173 @@
     .news-item .symbol { font-weight: 800; font-size: 13px; min-width: 56px; }
     .news-item .title { font-size: 14px; line-height: 1.35; }
     .news-item .title a { color: var(--text); }
+    .news-item .news-why {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+      font-style: italic;
+    }
+    .news-item .news-why .why-label {
+      font-style: normal;
+      font-weight: 700;
+      color: var(--info);
+      letter-spacing: 0.02em;
+    }
+
+    /* Watchlist-only mode */
+    body.watchlist-mode #watchlist-mode-toggle {
+      background: var(--info);
+      color: var(--bg);
+      border-color: var(--info);
+    }
+    body.watchlist-mode .ticker-card:not(.is-pinned) { display: none; }
+    /* Hide everything that isn't the daily-driver core when in watchlist mode */
+    body.watchlist-mode #overextended,
+    body.watchlist-mode #market-sentiment,
+    body.watchlist-mode #changes,
+    body.watchlist-mode #valuation,
+    body.watchlist-mode #news,
+    body.watchlist-mode .legend,
+    body.watchlist-mode .filter-row { display: none; }
+    /* Bigger pinned cards */
+    body.watchlist-mode .ticker-grid {
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+    }
+    body.watchlist-mode .ticker-card {
+      padding: 18px 20px;
+    }
+    body.watchlist-mode .ticker-card .ticker-symbol { font-size: 22px; }
+    body.watchlist-mode .ticker-card .ticker-name { font-size: 14px; }
+    /* Surface review status, revisit, and notes preview directly — no need to expand Manage */
+    body.watchlist-mode .ticker-card .note-preview { display: block; }
+    body.watchlist-mode .ticker-card .review-status { display: inline-flex; }
+    body.watchlist-mode .ticker-card .insights {
+      font-size: 13px;
+    }
+
+    /* Post-earnings review banner */
+    .post-earnings {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background: var(--info-bg);
+      border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
+      border-radius: 6px;
+    }
+    .post-earnings > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .post-earnings > summary::-webkit-details-marker { display: none; }
+    .post-earnings > summary::before {
+      content: "▸ ";
+      font-size: 10px;
+      color: var(--info);
+    }
+    .post-earnings[open] > summary::before { content: "▾ "; }
+    .pe-pill {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--info);
+      background: var(--surface);
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    .pe-meta { color: var(--muted); font-size: 11px; }
+    .pe-status { color: var(--good); font-size: 11px; font-weight: 700; margin-left: auto; }
+    .pe-status:empty::before { content: "Not reviewed yet"; color: var(--warning); font-weight: 600; }
+    .post-earnings-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .pe-row { display: flex; align-items: center; gap: 8px; }
+    .pe-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      width: 64px;
+    }
+    .pe-buttons { display: flex; gap: 4px; }
+    .pe-buttons button {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .pe-buttons button:hover { background: var(--surface-soft); }
+    .pe-buttons button[aria-pressed="true"] {
+      background: var(--info-bg);
+      border-color: var(--info);
+      color: var(--info);
+      font-weight: 700;
+    }
+    .pe-buttons button[data-pe-value="miss"][aria-pressed="true"],
+    .pe-buttons button[data-pe-value="down"][aria-pressed="true"] {
+      background: var(--danger-bg);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .pe-buttons button[data-pe-value="beat"][aria-pressed="true"],
+    .pe-buttons button[data-pe-value="up"][aria-pressed="true"] {
+      background: var(--good-bg);
+      border-color: var(--good);
+      color: var(--good);
+    }
+    .pe-text {
+      width: 100%;
+      min-height: 36px;
+      resize: vertical;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+
+    /* Overextended list (top-of-dashboard danger panel) */
+    .overextended-section {
+      border: 1px solid var(--danger);
+      background: color-mix(in srgb, var(--danger-bg) 25%, var(--surface));
+    }
+    .overextended-section h2 { color: var(--danger); }
+    .overextended-list { list-style: none; margin: 6px 0 0; padding: 0; }
+    .overextended-item {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 12px;
+      align-items: baseline;
+      padding: 8px 12px;
+      margin: 4px -12px;
+      border-left: 3px solid var(--danger);
+      background: color-mix(in srgb, var(--danger-bg) 30%, transparent);
+      border-radius: 0 4px 4px 0;
+    }
+    .overextended-item:nth-child(odd) { background: color-mix(in srgb, var(--danger-bg) 45%, transparent); }
+    .overextended-item .symbol { font-weight: 800; font-size: 14px; color: var(--text); }
+    .overextended-item .ext-reasons { font-size: 12px; color: var(--text); }
+    .overextended-item .ext-score {
+      font-weight: 800;
+      font-size: 13px;
+      color: var(--danger);
+      font-variant-numeric: tabular-nums;
+    }
     .news-item .meta { color: var(--muted); font-size: 12px; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
 
     /* Event-typed badges */
@@ -730,6 +897,8 @@
       color: var(--muted);
       font-weight: 700;
     }
+    .insight-row.action .insight-label { color: var(--info); }
+    .insight-row.action .insight-text { color: var(--info); font-weight: 700; }
     .insight-row.setup .insight-label { color: var(--good); }
     .insight-row.trend .insight-label { color: var(--muted); }
     .insight-row.trend.trend-up .insight-label { color: var(--good); }
@@ -886,6 +1055,11 @@
       margin-bottom: 8px;
     }
     .compare-table-wrap { overflow: auto; }
+    .compare-table-wrap td.trend-up { color: var(--good); }
+    .compare-table-wrap td.trend-down { color: var(--danger); }
+    .compare-table-wrap td.trend-mixed { color: var(--warning); }
+    .compare-table-wrap td.change-pos { color: var(--good); font-weight: 600; }
+    .compare-table-wrap td.change-neg { color: var(--danger); font-weight: 600; }
     .ticker-symbol { font-weight: 800; font-size: 18px; line-height: 1.1; }
     .ticker-name { color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .metrics {
@@ -961,6 +1135,7 @@
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
           <input id="quick-search" class="search-box" type="search" placeholder="Search ticker or company" autocomplete="off">
+          <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="Show only pinned tickers; everything else is hidden">Watchlist only</button>
           <button id="export-watchlist" type="button" class="tool-button" title="TXT: ticker, state, earnings timing, tag">Export watchlist</button>
           <button id="export-notes" type="button" class="tool-button" title="JSON: notes and revisit dates saved in this browser">Export notes</button>
           <button id="export-earnings" type="button" class="tool-button" title="JSON: ticker, company, earnings timing">Export earnings</button>
@@ -983,6 +1158,7 @@
     <nav class="toc" aria-label="Sections">
       {% if hero %}<a href="#hero">Today</a>{% endif %}
       <a href="#summary">Summary</a>
+      {% if overextended %}<a href="#overextended" class="toc-pill">Stretched {{ overextended|length }}</a>{% endif %}
       {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">Alerts {{ rule_alerts|length }}</a>{% endif %}
       {% if report.warnings %}<a href="#global-warnings" class="toc-pill">Warnings {{ report.warnings|length }}</a>{% endif %}
       {% if report.market_sentiment %}<a href="#market-sentiment">Sentiment</a>{% endif %}
@@ -1043,6 +1219,24 @@
         {% endif %}
       </aside>
     </section>
+
+    {% if overextended %}
+    <section id="overextended" class="section overextended-section">
+      <div class="section-header">
+        <h2>Overextended <span class="count">({{ overextended|length }})</span></h2>
+      </div>
+      <div class="sort-hint">Two or more of: RSI ≥ 70 · near 52w high · P/E ≥ 100 — caution on entry.</div>
+      <ul class="overextended-list">
+        {% for entry in overextended %}
+        <li class="overextended-item">
+          <a class="symbol" href="#{{ entry.item.ticker.symbol|ticker_anchor }}">{{ entry.item.ticker.symbol }}</a>
+          <span class="ext-reasons">{{ entry.reasons|join(' · ') }}</span>
+          <span class="ext-score" title="Number of danger flags (max 3)">{{ entry.score }}/3</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
 
     {% if report.market_sentiment %}
     <section id="market-sentiment" class="section">
@@ -1151,9 +1345,13 @@
       {% if important_news %}
       <ul class="news-list">
         {% for item, article, tier in important_news %}
+        {% set rationale = article|news_rationale %}
         <li class="news-item tier-{{ tier }} {% if loop.index <= 5 %}editor-pick{% else %}news-extra is-hidden{% endif %}">
           <a class="symbol" href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a>
-          <div class="title"><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></div>
+          <div class="title">
+            <a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a>
+            {% if rationale %}<div class="news-why"><span class="why-label">Why:</span> {{ rationale }}</div>{% endif %}
+          </div>
           <div class="meta">
             <span class="badge event-badge event-{{ article.event_type }}">{{ article.event_type|event_label }}</span>
             <span>{{ article.source }}</span>
@@ -1296,7 +1494,9 @@
         {% set insights = item|ticker_insights %}
         {% set delta = item|earnings_delta %}
         {% set sector = item.valuation.metrics.get("sector") if item.valuation else None %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}">
+        {% set dchg = item|daily_change %}
+        {% set fhigh = item|from_52w_high %}
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
@@ -1306,7 +1506,8 @@
             </div>
             <div class="ticker-actions">
               <button type="button" class="icon-button pin-button" aria-label="Pin {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">Pin</button>
-              <label class="compare-label"><input type="checkbox" class="compare-check" value="{{ item.ticker.symbol }}"> Compare</label>
+              <button type="button" class="icon-button quick-done" aria-label="Mark all checklist items reviewed" data-quick-done="{{ item.ticker.symbol }}" title="Mark earnings/guidance/valuation/news/thesis as reviewed">Done</button>
+              <button type="button" class="icon-button quick-revisit" aria-label="Bump revisit date by one day" data-quick-revisit="{{ item.ticker.symbol }}" title="Set revisit to today + 1d (or push existing date forward)">+1d</button>
               {% if state == "hot" %}<span class="badge danger">Hot</span>
               {% elif state == "warn" %}<span class="badge warn">Warn</span>
               {% elif state == "warm" %}<span class="badge good">Warm</span>
@@ -1335,8 +1536,9 @@
             </div>
           </div>
 
-          {% if insights.setup or insights.trend or insights.risk or insights.watch %}
+          {% if insights.setup or insights.trend or insights.risk or insights.watch or insights.action %}
           <div class="insights">
+            {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
             {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
             {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">Risk</span><span class="insight-text">{{ insights.risk|join(' | ') }}</span></div>{% endif %}
@@ -1350,11 +1552,51 @@
           </ul>
           {% endif %}
 
+          {% set post_er = item|post_earnings %}
+          {% if post_er %}
+          <details class="post-earnings" data-post-earnings="{{ item.ticker.symbol }}" data-earnings-date="{{ post_er.earnings_date.isoformat() }}">
+            <summary>
+              <span class="pe-pill">Post-earnings review</span>
+              <span class="pe-meta">reported {{ post_er.days_ago }}d ago · {{ post_er.earnings_date.isoformat() }}</span>
+              <span class="pe-status" data-pe-status="{{ item.ticker.symbol }}"></span>
+            </summary>
+            <div class="post-earnings-form">
+              <div class="pe-row">
+                <label class="pe-label">EPS</label>
+                <div class="pe-buttons" data-pe-field="eps" data-pe-symbol="{{ item.ticker.symbol }}">
+                  <button type="button" data-pe-value="beat">Beat</button>
+                  <button type="button" data-pe-value="inline">In line</button>
+                  <button type="button" data-pe-value="miss">Miss</button>
+                </div>
+              </div>
+              <div class="pe-row">
+                <label class="pe-label">Revenue</label>
+                <div class="pe-buttons" data-pe-field="rev" data-pe-symbol="{{ item.ticker.symbol }}">
+                  <button type="button" data-pe-value="beat">Beat</button>
+                  <button type="button" data-pe-value="inline">In line</button>
+                  <button type="button" data-pe-value="miss">Miss</button>
+                </div>
+              </div>
+              <div class="pe-row">
+                <label class="pe-label">Guidance</label>
+                <div class="pe-buttons" data-pe-field="guide" data-pe-symbol="{{ item.ticker.symbol }}">
+                  <button type="button" data-pe-value="up">Up</button>
+                  <button type="button" data-pe-value="flat">Flat</button>
+                  <button type="button" data-pe-value="down">Down</button>
+                </div>
+              </div>
+              <textarea class="pe-text" data-pe-field="conclusion" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Conclusion: thesis intact / cracked / pivoting"></textarea>
+              <textarea class="pe-text" data-pe-field="next_step" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Next step: hold / add / trim / re-evaluate at $X"></textarea>
+            </div>
+          </details>
+          {% endif %}
+
           <div class="note-preview is-hidden" data-note-preview="{{ item.ticker.symbol }}"></div>
 
           <details class="user-tools-details">
             <summary>Manage</summary>
             <div class="user-tools">
+              <label class="compare-label"><input type="checkbox" class="compare-check" value="{{ item.ticker.symbol }}"> Add to compare</label>
               <div class="tag-row">
                 <label class="control-label" for="tag-{{ item.ticker.symbol }}">Tag</label>
                 <select id="tag-{{ item.ticker.symbol }}" class="tag-select" data-tag="{{ item.ticker.symbol }}">
@@ -1603,15 +1845,17 @@
         var topic = topicFilter ? topicFilter.value : "all";
         var sector = sectorFilter ? sectorFilter.value : "all";
         var riskOnly = !!(riskFilter && riskFilter.checked);
+        var watchlistOnly = document.body.classList.contains("watchlist-mode");
         var visible = 0;
 
         cards.forEach(function (card) {
           var textMatch = !q || symbol(card).toLowerCase().indexOf(q) >= 0 || (card.dataset.company || "").indexOf(q) >= 0;
-          var stateMatch = state === "all" ? (showQuiet || focus !== "all" || card.dataset.state !== "quiet") : card.dataset.state === state;
+          var stateMatch = state === "all" ? (showQuiet || focus !== "all" || watchlistOnly || card.dataset.state !== "quiet") : card.dataset.state === state;
           var topicMatch = topic === "all" || (" " + (card.dataset.topics || "") + " ").indexOf(" " + topic + " ") >= 0;
           var sectorMatch = sector === "all" || (card.dataset.sector || "") === sector;
           var riskMatch = !riskOnly || card.dataset.hasRisk === "1";
-          var match = textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && riskMatch && workModeMatch(card);
+          var pinnedMatch = !watchlistOnly || card.classList.contains("is-pinned");
+          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && riskMatch && workModeMatch(card);
           card.classList.toggle("is-hidden", !match);
           syncModeDetails(card, match);
           if (match) visible += 1;
@@ -1788,6 +2032,36 @@
         return tags[symbol(card)] || "None";
       }
 
+      function revisitFor(sym) {
+        var rec = notes[sym];
+        return (rec && rec.revisit) || "—";
+      }
+
+      function reviewStatusFor(sym) {
+        var rec = notes[sym] || {};
+        var checks = rec.checklist || {};
+        var keys = ["earnings", "guidance", "valuation", "news", "thesis"];
+        var done = keys.filter(function (k) { return checks[k]; }).length;
+        if (done === 0) return "—";
+        if (done === keys.length) return "✓ done";
+        return done + "/" + keys.length;
+      }
+
+      function formattedPct(value) {
+        var num = numberOrNull(value);
+        if (num == null) return "—";
+        var sign = num >= 0 ? "+" : "";
+        return sign + num.toFixed(2) + "%";
+      }
+
+      function signClass(value) {
+        var num = numberOrNull(value);
+        if (num == null) return "flat";
+        if (num > 0) return "pos";
+        if (num < 0) return "neg";
+        return "flat";
+      }
+
       function renderCompare() {
         var panel = document.getElementById("compare-panel");
         if (!panel) return;
@@ -1799,19 +2073,30 @@
         }
         panel.classList.remove("is-hidden");
         var rows = selected.map(function (card) {
-          return "<tr><td><a href=\"#" + card.id + "\">" + symbol(card) + "</a></td>" +
+          var sym = symbol(card);
+          return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
             "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
+            "<td class=\"trend-" + escapeHtml(card.dataset.trendTone || "") + "\">" + escapeHtml(card.dataset.trend || "—") + "</td>" +
+            "<td class=\"num change-" + signClass(card.dataset.dailyChange) + "\">" + formattedPct(card.dataset.dailyChange) + "</td>" +
+            "<td class=\"num change-" + signClass(card.dataset.fromHigh) + "\">" + formattedPct(card.dataset.fromHigh) + "</td>" +
             "<td>" + earningsText(card.dataset.earningsDays) + "</td>" +
+            "<td>" + escapeHtml(reviewStatusFor(sym)) + "</td>" +
+            "<td>" + escapeHtml(tagFor(card)) + "</td>" +
+            "<td>" + escapeHtml(revisitFor(sym)) + "</td>" +
             "<td>" + escapeHtml(topWatch(card)) + "</td>" +
             "<td>" + escapeHtml(valuationRisk(card)) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.rsi) + "</td>" +
             "<td class=\"num\">" + (card.dataset.topNewsCount || "0") + "</td>" +
-            "<td>" + escapeHtml(tagFor(card)) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.marketCap) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.forwardPe, "x") + "</td></tr>";
         }).join("");
         panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
-          "<div class=\"compare-table-wrap\"><table><thead><tr><th>Ticker</th><th>State</th><th>Next earnings</th><th>Top watch</th><th>Valuation risk</th><th class=\"num\">RSI 14</th><th class=\"num\">Top news</th><th>User tag</th><th class=\"num\">Market Cap</th><th class=\"num\">Forward P/E</th></tr></thead><tbody>" +
+          "<div class=\"compare-table-wrap\"><table><thead><tr>" +
+          "<th>Ticker</th><th>State</th><th>Trend</th><th class=\"num\">Daily %</th><th class=\"num\">From High</th>" +
+          "<th>Next earnings</th><th>Review</th><th>User tag</th><th>Revisit</th>" +
+          "<th>Top watch</th><th>Valuation risk</th><th class=\"num\">RSI 14</th><th class=\"num\">Top news</th>" +
+          "<th class=\"num\">Market Cap</th><th class=\"num\">Forward P/E</th>" +
+          "</tr></thead><tbody>" +
           rows + "</tbody></table></div>";
         var exportBtn = document.getElementById("export-compare");
         if (exportBtn) exportBtn.addEventListener("click", exportCompare);
@@ -1940,6 +2225,135 @@
         };
         if (modeHint) modeHint.textContent = hints[mode] || hints.overview;
         applyFilters();
+      }
+
+      function setupQuickActions() {
+        cards.forEach(function (card) {
+          var sym = symbol(card);
+          var doneBtn = card.querySelector("[data-quick-done]");
+          var bumpBtn = card.querySelector("[data-quick-revisit]");
+
+          if (doneBtn) {
+            doneBtn.addEventListener("click", function () {
+              var rec = notes[sym] || {};
+              rec.checklist = rec.checklist || {};
+              ["earnings", "guidance", "valuation", "news", "thesis"].forEach(function (k) {
+                rec.checklist[k] = true;
+              });
+              notes[sym] = rec;
+              writeJson("stock-daily-notes", notes);
+              // Reflect in checkboxes if Manage is open
+              card.querySelectorAll("[data-checklist] input").forEach(function (cb) {
+                cb.checked = true;
+              });
+              updateReviewSummary();
+              applyFilters();
+            });
+          }
+
+          if (bumpBtn) {
+            bumpBtn.addEventListener("click", function () {
+              var rec = notes[sym] || {};
+              var current = rec.revisit ? new Date(rec.revisit + "T00:00:00") : new Date();
+              current.setDate(current.getDate() + 1);
+              var iso = current.toISOString().slice(0, 10);
+              rec.revisit = iso;
+              notes[sym] = rec;
+              writeJson("stock-daily-notes", notes);
+              var input = card.querySelector("[data-revisit]");
+              if (input) input.value = iso;
+              applyFilters();
+            });
+          }
+        });
+      }
+
+      function setupPostEarnings() {
+        var STORAGE_KEY = "stock-daily-post-earnings";
+        var state;
+        try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch (e) { state = {}; }
+        function persist() {
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        }
+        function statusOf(rec) {
+          if (!rec) return "";
+          var parts = [];
+          if (rec.eps) parts.push("EPS " + rec.eps);
+          if (rec.rev) parts.push("Rev " + rec.rev);
+          if (rec.guide) parts.push("Guide " + rec.guide);
+          return parts.join(" / ");
+        }
+        cards.forEach(function (card) {
+          var details = card.querySelector("[data-post-earnings]");
+          if (!details) return;
+          var sym = details.dataset.postEarnings;
+          var rec = state[sym] || {};
+          var statusEl = details.querySelector("[data-pe-status]");
+          if (statusEl) statusEl.textContent = statusOf(rec);
+
+          // Buttons (eps / rev / guide)
+          var buttonGroups = details.querySelectorAll("[data-pe-field]");
+          buttonGroups.forEach(function (group) {
+            var field = group.dataset.peField;
+            var buttons = group.querySelectorAll("button[data-pe-value]");
+            buttons.forEach(function (btn) {
+              var val = btn.dataset.peValue;
+              btn.setAttribute("aria-pressed", rec[field] === val ? "true" : "false");
+              btn.addEventListener("click", function () {
+                rec = state[sym] || {};
+                rec[field] = rec[field] === val ? null : val;
+                state[sym] = rec;
+                persist();
+                buttons.forEach(function (b) {
+                  b.setAttribute("aria-pressed", rec[field] === b.dataset.peValue ? "true" : "false");
+                });
+                if (statusEl) statusEl.textContent = statusOf(rec);
+              });
+            });
+          });
+
+          // Textareas (conclusion / next_step)
+          var textareas = details.querySelectorAll("textarea[data-pe-field]");
+          textareas.forEach(function (ta) {
+            var field = ta.dataset.peField;
+            ta.value = (rec[field] || "");
+            ta.addEventListener("input", function () {
+              rec = state[sym] || {};
+              rec[field] = ta.value;
+              state[sym] = rec;
+              persist();
+            });
+          });
+        });
+      }
+
+      function setupWatchlistMode() {
+        var btn = document.getElementById("watchlist-mode-toggle");
+        if (!btn) return;
+        var STORAGE_KEY = "stock-daily-watchlist-mode";
+        var active;
+        try { active = localStorage.getItem(STORAGE_KEY) === "1"; } catch (e) { active = false; }
+        function apply() {
+          document.body.classList.toggle("watchlist-mode", active);
+          btn.setAttribute("aria-pressed", active ? "true" : "false");
+          btn.textContent = active ? "Exit watchlist" : "Watchlist only";
+          // Force-open user-tools details for pinned cards in watchlist mode
+          if (active) {
+            cards.forEach(function (card) {
+              if (card.classList.contains("is-pinned")) {
+                var d = card.querySelector(".user-tools-details");
+                if (d) d.open = true;
+              }
+            });
+          }
+          applyFilters();
+        }
+        btn.addEventListener("click", function () {
+          active = !active;
+          try { localStorage.setItem(STORAGE_KEY, active ? "1" : "0"); } catch (e) {}
+          apply();
+        });
+        apply();
       }
 
       function cardSnapshot(card) {
@@ -2115,6 +2529,9 @@
       setupCountdowns();
       setupCollapsers();
       setupWorkModes();
+      setupQuickActions();
+      setupPostEarnings();
+      setupWatchlistMode();
       persistAndRenderChanges();
       applyFilters();
     })();
