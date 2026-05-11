@@ -175,6 +175,41 @@ class MarketSentiment:
 
 
 @dataclass(frozen=True)
+class RateLevel:
+    """Single rates / FX point for the macro overlay."""
+    name: str            # "10Y" / "5Y" / "DXY"
+    last: float
+    prev: float
+    change: float        # bp for yields, % for DXY
+    unit: str            # "bp" or "%"
+
+
+@dataclass(frozen=True)
+class BreadthRow:
+    """Pair-wise relative-return comparison (cap-weight vs equal-weight, etc.)."""
+    label: str           # "QQQ vs QQQE"
+    a_symbol: str
+    b_symbol: str
+    a_return: float      # 20-day total return %
+    b_return: float
+    spread: float        # a - b in pct points
+
+
+@dataclass(frozen=True)
+class MarketContext:
+    """Macro overlay: rates direction, market breadth, benchmark returns.
+
+    Computed once per run (one global fetch) — not per-ticker. Powers the
+    "is the tide going up or down" framing alongside MarketSentiment.
+    """
+    rates: list[RateLevel] = field(default_factory=list)
+    breadth: list[BreadthRow] = field(default_factory=list)
+    benchmark_returns: dict[str, float] = field(default_factory=dict)
+    retrieved_at: datetime | None = None
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class TickerReport:
     ticker: TickerConfig
     articles: list[NewsArticle]
@@ -192,3 +227,4 @@ class DailyReport:
     warnings: list[str] = field(default_factory=list)
     economic_events: list[EconomicEvent] = field(default_factory=list)
     market_sentiment: MarketSentiment | None = None
+    market_context: MarketContext | None = None

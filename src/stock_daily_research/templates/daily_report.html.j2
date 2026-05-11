@@ -795,6 +795,41 @@
       border-radius: 4px;
     }
 
+    /* Macro overlay (rates + breadth) — sits next to market sentiment */
+    .macro-overlay {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 760px) { .macro-overlay { grid-template-columns: 1fr; } }
+    .rates-list, .breadth-list { list-style: none; margin: 6px 0 8px; padding: 0; }
+    .rate-row, .breadth-row {
+      display: grid;
+      gap: 12px;
+      align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 13px;
+    }
+    .rate-row { grid-template-columns: 56px 1fr auto; }
+    .breadth-row { grid-template-columns: 1fr auto; }
+    .rate-row:last-child, .breadth-row:last-child { border-bottom: none; }
+    .rate-name { font-weight: 800; color: var(--muted); letter-spacing: 0.04em; }
+    .rate-last { font-variant-numeric: tabular-nums; }
+    .rate-change { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+    .change-pos { color: var(--good); }
+    .change-neg { color: var(--danger); }
+    .change-flat { color: var(--muted); }
+    .breadth-label { font-weight: 700; }
+    .breadth-spread { font-weight: 800; font-variant-numeric: tabular-nums; }
+    .rates-interp, .breadth-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-style: italic;
+    }
+
     /* Overextended list (top-of-dashboard danger panel) */
     .overextended-section {
       border: 1px solid var(--danger);
@@ -899,6 +934,11 @@
     }
     .insight-row.action .insight-label { color: var(--info); }
     .insight-row.action .insight-text { color: var(--info); font-weight: 700; }
+    .insight-row.rs .insight-label { color: var(--muted); }
+    .insight-row.rs.trend-up .insight-label { color: var(--good); }
+    .insight-row.rs.trend-down .insight-label { color: var(--danger); }
+    .insight-row.rs.trend-down .insight-text { color: var(--danger); }
+    .insight-row.rs.trend-mixed .insight-label { color: var(--warning); }
     .insight-row.setup .insight-label { color: var(--good); }
     .insight-row.trend .insight-label { color: var(--muted); }
     .insight-row.trend.trend-up .insight-label { color: var(--good); }
@@ -1162,6 +1202,8 @@
       {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">Alerts {{ rule_alerts|length }}</a>{% endif %}
       {% if report.warnings %}<a href="#global-warnings" class="toc-pill">Warnings {{ report.warnings|length }}</a>{% endif %}
       {% if report.market_sentiment %}<a href="#market-sentiment">Sentiment</a>{% endif %}
+      {% if report.market_context and report.market_context.rates %}<a href="#rates">Rates</a>{% endif %}
+      {% if report.market_context and report.market_context.breadth %}<a href="#breadth">Breadth</a>{% endif %}
       <a href="#macro">Macro ({{ report.economic_events|length }})</a>
       <a href="#earnings">Earnings ({{ earnings_soon|length }})</a>
       <a href="#news">News ({{ important_news|length }})</a>
@@ -1259,6 +1301,50 @@
           {% endfor %}
         </div>
       </div>
+    </section>
+    {% endif %}
+
+    {% if report.market_context and (report.market_context.rates or report.market_context.breadth) %}
+    <section class="macro-overlay">
+      {% if report.market_context.rates %}
+      <div id="rates" class="section">
+        <div class="section-header">
+          <h2>Rates &amp; Dollar</h2>
+        </div>
+        <ul class="rates-list">
+          {% for r in report.market_context.rates %}
+          <li class="rate-row">
+            <span class="rate-name">{{ r.name }}</span>
+            <span class="rate-last">{{ "%.2f"|format(r.last) }}{% if r.unit == "bp" %}%{% endif %}</span>
+            <span class="rate-change change-{{ 'pos' if r.change > 0 else 'neg' if r.change < 0 else 'flat' }}">
+              {{ "+%.1f"|format(r.change) if r.change > 0 else "%.1f"|format(r.change) }}{{ r.unit }}
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% set tip = report.market_context.rates|rates_interpretation %}
+        {% if tip %}<div class="rates-interp">{{ tip }}</div>{% endif %}
+      </div>
+      {% endif %}
+
+      {% if report.market_context.breadth %}
+      <div id="breadth" class="section">
+        <div class="section-header">
+          <h2>Breadth (20D)</h2>
+        </div>
+        <ul class="breadth-list">
+          {% for b in report.market_context.breadth %}
+          <li class="breadth-row">
+            <span class="breadth-label">{{ b.label }}</span>
+            <span class="breadth-spread change-{{ 'pos' if b.spread > 0.5 else 'neg' if b.spread < -0.5 else 'flat' }}" title="{{ b.a_symbol }} {{ '%+.2f'|format(b.a_return) }}% vs {{ b.b_symbol }} {{ '%+.2f'|format(b.b_return) }}%">
+              {{ "%+.2f"|format(b.spread) }}%
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="breadth-hint">Positive = first leg outperformed. Negative cap-weight (e.g. QQQ−QQQE &lt; 0) hints at narrow leadership.</div>
+      </div>
+      {% endif %}
     </section>
     {% endif %}
 
@@ -1541,6 +1627,7 @@
             {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
             {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
+            {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">Strength</span><span class="insight-text">{{ insights.rs|join(' · ') }}</span></div>{% endif %}
             {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">Risk</span><span class="insight-text">{{ insights.risk|join(' | ') }}</span></div>{% endif %}
             {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">Watch</span><span class="insight-text">{{ insights.watch|join(' | ') }}</span></div>{% endif %}
           </div>

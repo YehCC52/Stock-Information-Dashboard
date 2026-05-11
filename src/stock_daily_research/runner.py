@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from .config import load_config
 from .macro import OfficialMacroCalendarProvider
+from .market_context import fetch_market_context
 from .market_sentiment import fetch_market_sentiment
 from .models import DailyReport, TickerConfig, TickerReport, XSignal
 from .news import GoogleNewsRssProvider
@@ -56,12 +57,18 @@ def run_daily(
         global_warnings.append("Macro calendar fetching skipped by --no-macro.")
 
     market_sentiment = None
+    market_context = None
     if fetch_valuation:
         try:
             market_sentiment = fetch_market_sentiment()
             global_warnings.extend(market_sentiment.warnings)
         except Exception as exc:
             global_warnings.append(f"Market sentiment fetch failed: {exc}")
+        try:
+            market_context = fetch_market_context()
+            global_warnings.extend(market_context.warnings)
+        except Exception as exc:
+            global_warnings.append(f"Market context fetch failed: {exc}")
     else:
         global_warnings.append("Market sentiment skipped because valuation fetching is disabled.")
 
@@ -114,6 +121,7 @@ def run_daily(
             warnings=list(global_warnings),
             economic_events=economic_events,
             market_sentiment=market_sentiment,
+            market_context=market_context,
         )
         save_report(conn, preliminary_report)
 
@@ -130,6 +138,7 @@ def run_daily(
         warnings=global_warnings,
         economic_events=economic_events,
         market_sentiment=market_sentiment,
+        market_context=market_context,
     )
     write_report(report, output_dir)
     return report

@@ -67,7 +67,7 @@ def fetch_moving_averages(yf_ticker: Any, period: str = "1y") -> dict[str, float
 
 
 def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, float | None]:
-    keys = ("sma_5", "sma_20", "sma_60", "sma_120", "rsi_14")
+    keys = ("sma_5", "sma_20", "sma_60", "sma_120", "rsi_14", "return_5d", "return_20d", "return_60d")
     empty = {k: None for k in keys}
     try:
         hist = yf_ticker.history(period=period, auto_adjust=True)
@@ -82,7 +82,20 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         "sma_60": _mean_last_n(closes, 60),
         "sma_120": _mean_last_n(closes, 120),
         "rsi_14": compute_rsi(closes, 14),
+        "return_5d": _n_session_return(closes, 5),
+        "return_20d": _n_session_return(closes, 20),
+        "return_60d": _n_session_return(closes, 60),
     }
+
+
+def _n_session_return(closes: list[float], n: int) -> float | None:
+    if not closes or len(closes) <= n:
+        return None
+    last = closes[-1]
+    base = closes[-(n + 1)]
+    if not base:
+        return None
+    return round((last - base) / base * 100, 2)
 
 
 def _mean_last_n(values: list[float], n: int) -> float | None:

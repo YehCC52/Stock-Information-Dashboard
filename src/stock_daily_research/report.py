@@ -73,8 +73,13 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["ticker_anchor"] = lambda symbol: f"ticker-{symbol.lower()}"
     env.filters["event_label"] = event_label
     env.filters["news_rationale"] = news_rationale
+    from .market_context import rates_interpretation
+    env.filters["rates_interpretation"] = rates_interpretation
     env.filters["post_earnings"] = lambda item: post_earnings_status(item, report.report_date)
-    env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date)
+    benchmarks = {}
+    if report.market_context and report.market_context.benchmark_returns:
+        benchmarks = report.market_context.benchmark_returns
+    env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks)
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
     env.filters["metric_raw"] = metric_raw
@@ -385,6 +390,36 @@ def earnings_action(item: TickerReport, anchor: date) -> str | None:
     if -7 <= delta <= -1:
         return "Review outcome"
     return None
+
+
+def relative_strength(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, float]:
+    """Return ticker's 20D return spread vs SPY and QQQ.
+
+    benchmarks maps "spy_20d" / "qqq_20d" → return %. Returns
+    {"vs_spy": spread, "vs_qqq": spread} for whichever is available.
+    """
+    if not item.valuation:
+        return {}
+    ticker_return = _as_float(item.valuation.metrics.get("return_20d"))
+    if ticker_return is None:
+        return {}
+    out: dict[str, float] = {}
+    for bench_label, bench_key in (("vs_spy", "spy_20d"), ("vs_qqq", "qqq_20d")):
+        bench_return = benchmarks.get(bench_key)
+        if isinstance(bench_return, (int, float)):
+            out[bench_label] = round(ticker_return - bench_return, 2)
+    return out
+
+
+def format_relative_strength(rs: dict[str, float]) -> list[str]:
+    """Compact phrases like '+2.3% vs SPY 20D'."""
+    parts: list[str] = []
+    for key, label in (("vs_spy", "vs SPY 20D"), ("vs_qqq", "vs QQQ 20D")):
+        if key in rs:
+            value = rs[key]
+            sign = "+" if value >= 0 else ""
+            parts.append(f"{sign}{value:.1f}% {label}")
+    return parts
 
 
 def post_earnings_status(item: TickerReport, anchor: date) -> dict[str, object] | None:
@@ -966,7 +1001,7 @@ def _stretched_valuation_tickers(report: DailyReport) -> list[TickerReport]:
     return [tr for _, tr in stretched]
 
 
-def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
+def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, float] | None = None) -> dict[str, list[str]]:
     """Auto-derived signals for a ticker card. Pure data summarization, no sentiment."""
     setup: list[str] = []
     risk: list[str] = []
@@ -1029,11 +1064,28 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
     watch = list(item.ticker.keywords[:3]) if item.ticker.keywords else []
     action = earnings_action(item, anchor)
 
+    rs_phrases: list[str] = []
+    rs_tone = ""
+    if benchmarks:
+        rs = relative_strength(item, benchmarks)
+        rs_phrases = format_relative_strength(rs)
+        if rs:
+            both_pos = all(v >= 0 for v in rs.values())
+            both_neg = all(v <= 0 for v in rs.values())
+            if both_pos:
+                rs_tone = "up"
+            elif both_neg:
+                rs_tone = "down"
+            else:
+                rs_tone = "mixed"
+
     return {
         "setup": setup,
         "trend": trend,
         "trend_tone": trend_tone(trend),
         "trend_title": format_ma_distances(item) if trend else "",
+        "rs": rs_phrases,
+        "rs_tone": rs_tone,
         "risk": risk,
         "watch": watch,
         "action": action,

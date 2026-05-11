@@ -531,6 +531,57 @@ def test_overextended_tickers_requires_two_of_three_flags() -> None:
     assert out[1]["score"] == 2
 
 
+def test_relative_strength_computes_spread_vs_benchmarks() -> None:
+    from stock_daily_research.report import format_relative_strength, relative_strength
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={"return_20d": 8.3},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+    rs = relative_strength(item, {"spy_20d": 2.1, "qqq_20d": 5.5})
+    assert rs == {"vs_spy": 6.2, "vs_qqq": 2.8}
+
+    phrases = format_relative_strength(rs)
+    assert any("vs SPY 20D" in p for p in phrases)
+    assert any("+6.2%" in p for p in phrases)
+
+
+def test_relative_strength_skips_when_data_missing() -> None:
+    from stock_daily_research.report import relative_strength
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=None,
+    )
+    assert relative_strength(item, {"spy_20d": 1.0}) == {}
+
+
+def test_ticker_insights_includes_rs_phrases() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={"return_20d": 10.0, "last_close": 100.0},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+    insights = ticker_insights(item, anchor=date(2026, 4, 28), benchmarks={"spy_20d": 2.0, "qqq_20d": 4.0})
+    assert insights["rs"]
+    assert insights["rs_tone"] == "up"
+    assert any("vs SPY 20D" in p for p in insights["rs"])
+
+    # No benchmarks → empty
+    insights_no_bench = ticker_insights(item, anchor=date(2026, 4, 28))
+    assert insights_no_bench["rs"] == []
+
+
 def test_earnings_action_routes_by_timing_and_rsi() -> None:
     from stock_daily_research.report import earnings_action
 
