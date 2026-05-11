@@ -4,17 +4,22 @@ from datetime import timezone
 
 from stock_daily_research.macro import (
     BLS_EMPSIT_URL,
+    BLS_SELECTED_RELEASES_URL,
     FED_FOMC_URL,
     OfficialMacroCalendarProvider,
     build_fomc_statement_url,
     filter_event_window,
     filter_upcoming_events,
     fallback_bls_employment_situation,
+    fallback_core_bls_calendar,
     fallback_fomc_calendar,
+    load_cached_macro_events,
     manual_macro_events,
     parse_bls_employment_situation,
+    parse_bls_selected_releases,
     parse_fomc_calendar,
     parse_fomc_statement_highlights,
+    save_cached_macro_events,
 )
 from stock_daily_research.models import ManualMacroEvent
 
@@ -33,6 +38,32 @@ def test_parse_bls_employment_situation_converts_to_report_timezone() -> None:
     assert event.category == "jobs"
     assert event.event_datetime.strftime("%Y-%m-%d %H:%M") == "2026-05-08 20:30"
     assert "April 2026" in event.notes
+
+
+def test_parse_bls_selected_releases_keeps_core_macro_events() -> None:
+    html = """
+    Tuesday, May 12, 2026
+    08:30 AM
+    Employment Situation for April 2026
+    Tuesday, May 12, 2026
+    08:30 AM
+    Consumer Price Index for April 2026
+    Wednesday, May 13, 2026
+    10:00 AM
+    Minor Release for April 2026
+    Thursday, May 14, 2026
+    08:30 AM
+    Producer Price Index for April 2026
+    """
+
+    events = parse_bls_selected_releases(html, "Asia/Taipei", year=2026)
+
+    assert [event.name for event in events] == [
+        "Nonfarm Payrolls / Employment Situation",
+        "CPI / Consumer Price Index",
+        "PPI / Producer Price Index",
+    ]
+    assert events[1].event_datetime.strftime("%Y-%m-%d %H:%M") == "2026-05-12 20:30"
 
 
 def test_parse_fomc_calendar_uses_decision_day_and_time() -> None:
@@ -118,6 +149,13 @@ def test_fallback_bls_employment_situation_keeps_official_2026_schedule() -> Non
     assert april_release.source_url == BLS_EMPSIT_URL
 
 
+def test_fallback_core_bls_calendar_includes_cpi() -> None:
+    events = fallback_core_bls_calendar("Asia/Taipei")
+
+    cpi = next(event for event in events if event.name == "CPI / Consumer Price Index" and "April 2026" in (event.notes or ""))
+    assert cpi.event_datetime.strftime("%Y-%m-%d %H:%M") == "2026-05-12 20:30"
+
+
 def test_fallback_fomc_calendar_keeps_2026_schedule() -> None:
     events = fallback_fomc_calendar("Asia/Taipei")
 
@@ -145,6 +183,8 @@ def test_provider_uses_bls_fallback_without_noisy_warning(monkeypatch) -> None:
     provider = OfficialMacroCalendarProvider()
 
     def fake_get(url: str) -> str:
+        if url == BLS_SELECTED_RELEASES_URL.format(year=2026):
+            raise RuntimeError("403 blocked")
         if url == BLS_EMPSIT_URL:
             raise RuntimeError("403 blocked")
         if url == FED_FOMC_URL:
@@ -165,16 +205,17 @@ def test_provider_uses_bls_fallback_without_noisy_warning(monkeypatch) -> None:
     )
 
     assert result.warnings == []
-    assert [event.name for event in result.events] == [
-        "FOMC Rate Decision",
-        "Nonfarm Payrolls / Employment Situation",
-    ]
+    assert "Macro calendar fetch failed" not in " ".join(result.warnings)
+    assert "FOMC Rate Decision" in [event.name for event in result.events]
+    assert "Nonfarm Payrolls / Employment Situation" in [event.name for event in result.events]
 
 
 def test_provider_uses_fomc_fallback_when_fed_fetch_fails(monkeypatch) -> None:
     provider = OfficialMacroCalendarProvider()
 
     def fake_get(url: str) -> str:
+        if url == BLS_SELECTED_RELEASES_URL.format(year=2026):
+            raise RuntimeError("selected blocked")
         if url == BLS_EMPSIT_URL:
             return "April 2026 May 08, 2026 08:30 AM"
         if url == FED_FOMC_URL:
@@ -191,6 +232,35 @@ def test_provider_uses_fomc_fallback_when_fed_fetch_fails(monkeypatch) -> None:
 
     assert result.warnings == []
     assert any(event.source == "Federal Reserve fallback" for event in result.events)
+
+
+def test_macro_cache_roundtrip_and_provider_uses_cache_when_empty(tmp_path, monkeypatch) -> None:
+    cached_event = manual_macro_events([
+        ManualMacroEvent(
+            name="CPI Release",
+            category="inflation",
+            event_datetime=datetime(2026, 5, 12, 20, 30, tzinfo=timezone.utc),
+        )
+    ])[0]
+    cache_path = tmp_path / "macro_cache.json"
+    save_cached_macro_events(cache_path, [cached_event])
+    assert load_cached_macro_events(cache_path)[0].name == "CPI Release"
+
+    provider = OfficialMacroCalendarProvider()
+    monkeypatch.setattr(provider, "_get", lambda _url: (_ for _ in ()).throw(RuntimeError("offline")))
+    monkeypatch.setattr("stock_daily_research.macro.fallback_bls_employment_situation", lambda _tz: [])
+    monkeypatch.setattr("stock_daily_research.macro.fallback_core_bls_calendar", lambda _tz: [])
+    monkeypatch.setattr("stock_daily_research.macro.fallback_fomc_calendar", lambda _tz: [])
+
+    result = provider.fetch(
+        report_date=date(2026, 5, 12),
+        days_ahead=1,
+        timezone_name="Asia/Taipei",
+        cache_path=cache_path,
+    )
+
+    assert result.events[0].name == "CPI Release"
+    assert any("cached events" in warning for warning in result.warnings)
 
 
 def test_provider_enriches_recent_fomc_with_official_statement(monkeypatch) -> None:

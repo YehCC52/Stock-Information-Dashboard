@@ -215,6 +215,18 @@ def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | No
         "fy1_eps_revision_30d": None,
         "fy1_eps_revision_up_30d": None,
         "fy1_eps_revision_down_30d": None,
+        "next_q_revenue": None,
+        "next_q_revenue_growth_pct": None,
+        "next_fy_revenue": None,
+        "revenue_growth_pct": None,
+        "fy1_revenue_revision_30d": None,
+        "next_q_revenue_revision_30d": None,
+        "latest_reported_eps": None,
+        "latest_eps_estimate": None,
+        "latest_eps_surprise_pct": None,
+        "latest_reported_revenue": None,
+        "latest_revenue_estimate": None,
+        "latest_revenue_surprise_pct": None,
     }
 
     estimate = _safe_dataframe(lambda: yf_ticker.get_earnings_estimate())
@@ -252,6 +264,28 @@ def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | No
             metrics["fy1_eps_revision_up_30d"] = _clean_float(_row_get(row, "upLast30days"))
             metrics["fy1_eps_revision_down_30d"] = _clean_float(_row_get(row, "downLast30days"))
 
+    revenue = _safe_dataframe(lambda: getattr(yf_ticker, "revenue_estimate", None))
+    if revenue is None:
+        revenue = _safe_dataframe(lambda: yf_ticker.get_revenue_estimate())
+    if revenue is not None:
+        q_row = _estimate_row(revenue, "+1q")
+        if q_row is None:
+            q_row = _estimate_row(revenue, "0q")
+        if q_row is not None:
+            metrics["next_q_revenue"] = _clean_float(_row_get(q_row, "avg"))
+            q_growth = _clean_float(_row_get(q_row, "growth"))
+            if q_growth is not None:
+                metrics["next_q_revenue_growth_pct"] = round(q_growth * 100.0, 2)
+
+        row = _estimate_row(revenue, "+1y")
+        if row is None:
+            row = _estimate_row(revenue, "0y")
+        if row is not None:
+            metrics["next_fy_revenue"] = _clean_float(_row_get(row, "avg"))
+            growth = _clean_float(_row_get(row, "growth"))
+            if growth is not None:
+                metrics["revenue_growth_pct"] = round(growth * 100.0, 2)
+
     base = base_metrics or {}
     if metrics["next_fy_eps"] is None:
         metrics["next_fy_eps"] = _clean_float(base.get("forward_eps"))
@@ -261,7 +295,90 @@ def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | No
         if ttm not in (None, 0) and next_fy is not None:
             metrics["eps_growth_pct"] = round((next_fy - ttm) / abs(ttm) * 100.0, 2)
 
+    metrics.update(fetch_yfinance_post_earnings_metrics(yf_ticker))
+
     return metrics
+
+
+def fetch_yfinance_post_earnings_metrics(yf_ticker: Any) -> dict[str, float | None]:
+    metrics: dict[str, float | None] = {
+        "latest_reported_eps": None,
+        "latest_eps_estimate": None,
+        "latest_eps_surprise_pct": None,
+        "latest_reported_revenue": None,
+        "latest_revenue_estimate": None,
+        "latest_revenue_surprise_pct": None,
+    }
+    history = _safe_dataframe(lambda: yf_ticker.get_earnings_history())
+    if history is None:
+        history = _safe_dataframe(lambda: getattr(yf_ticker, "earnings_history", None))
+    row = _latest_record(history)
+    if row:
+        metrics["latest_reported_eps"] = _first_float(row, ("epsActual", "reportedEPS", "Reported EPS", "actual"))
+        metrics["latest_eps_estimate"] = _first_float(row, ("epsEstimate", "EPS Estimate", "estimate"))
+        surprise = _first_float(row, ("surprisePercent", "Surprise(%)", "epsSurprisePercent"))
+        if surprise is None:
+            actual = metrics["latest_reported_eps"]
+            estimate = metrics["latest_eps_estimate"]
+            if actual is not None and estimate not in (None, 0):
+                surprise = (actual - estimate) / abs(estimate) * 100.0
+        metrics["latest_eps_surprise_pct"] = round(surprise, 2) if surprise is not None else None
+        metrics["latest_reported_revenue"] = _first_float(row, ("reportedRevenue", "Reported Revenue", "revenueActual"))
+        metrics["latest_revenue_estimate"] = _first_float(row, ("revenueEstimate", "Revenue Estimate", "revenueAverage"))
+        revenue_surprise = _first_float(row, ("revenueSurprisePercent", "Revenue Surprise(%)", "revenueSurprisePct"))
+        if revenue_surprise is None:
+            actual_revenue = metrics["latest_reported_revenue"]
+            estimate_revenue = metrics["latest_revenue_estimate"]
+            if actual_revenue is not None and estimate_revenue not in (None, 0):
+                revenue_surprise = (actual_revenue - estimate_revenue) / abs(estimate_revenue) * 100.0
+        metrics["latest_revenue_surprise_pct"] = round(revenue_surprise, 2) if revenue_surprise is not None else None
+
+    dates = _safe_dataframe(lambda: yf_ticker.get_earnings_dates(limit=4))
+    if dates is None:
+        dates = _safe_dataframe(lambda: getattr(yf_ticker, "earnings_dates", None))
+    date_row = _latest_record(dates)
+    if date_row:
+        if metrics["latest_reported_eps"] is None:
+            metrics["latest_reported_eps"] = _first_float(date_row, ("Reported EPS", "reportedEPS", "epsActual"))
+        if metrics["latest_eps_estimate"] is None:
+            metrics["latest_eps_estimate"] = _first_float(date_row, ("EPS Estimate", "epsEstimate"))
+        if metrics["latest_eps_surprise_pct"] is None:
+            surprise = _first_float(date_row, ("Surprise(%)", "surprisePercent"))
+            metrics["latest_eps_surprise_pct"] = round(surprise, 2) if surprise is not None else None
+
+    return metrics
+
+
+def _latest_record(df: Any | None) -> dict[str, Any] | None:
+    if df is None:
+        return None
+    try:
+        records = df.reset_index().to_dict("records")
+    except Exception:
+        return None
+    if not records:
+        return None
+    today = datetime.now(timezone.utc).date()
+
+    def sort_key(row: dict[str, Any]) -> tuple[int, date]:
+        for key in ("quarter", "date", "Earnings Date", "index"):
+            parsed = coerce_date(row.get(key))
+            if parsed is not None:
+                return (0 if parsed <= today else 1, parsed)
+        return (2, date.min)
+
+    past = [row for row in records if sort_key(row)[0] == 0]
+    if past:
+        return sorted(past, key=lambda row: sort_key(row)[1], reverse=True)[0]
+    return records[0]
+
+
+def _first_float(row: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _clean_float(row.get(key))
+        if value is not None:
+            return value
+    return None
 
 
 def _safe_dataframe(fetcher: Any) -> Any | None:

@@ -222,4 +222,5 @@ __marimo__/
 .claude/
 .codex/
 data/*.sqlite3
+data/macro_events_cache.json
 reports/

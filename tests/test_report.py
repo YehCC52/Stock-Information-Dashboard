@@ -18,6 +18,7 @@ from stock_daily_research.models import (
 )
 from stock_daily_research.report import (
     build_summary,
+    book_today_summary,
     card_state,
     days_until,
     earnings_delta,
@@ -28,6 +29,7 @@ from stock_daily_research.report import (
     hero_items,
     important_news,
     macro_risk_meter,
+    morning_briefing_cards,
     news_tier,
     pe_class,
     position_view,
@@ -42,6 +44,7 @@ from stock_daily_research.report import (
     rule_alerts,
     sector_leadership,
     sort_by_market_cap,
+    source_reliability,
     topic_tags,
     todays_catalysts,
     todays_focus,
@@ -70,9 +73,15 @@ def test_render_html_report_includes_visual_sections() -> None:
     output = render_html_report(_sample_report())
 
     assert "<!doctype html>" in output
+    assert "Regime" in output
+    assert "Premarket tone" in output
+    assert "Top risk" in output
+    assert "Focus" in output
     assert "Macro Calendar" in output
     assert "Overnight / Premarket" in output
     assert "Today&#39;s Focus" in output or "Today's Focus" in output
+    assert "focus-rank" in output
+    assert "section-primary" in output
     assert "Today's Catalysts" in output
     assert "Sector Leadership" in output
     assert "Macro risk meter" in output
@@ -80,10 +89,15 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "Valuation Snapshot" in output
     assert "TTM EPS" in output
     assert "FY1 EPS Rev 30D" in output
+    assert "FY1 Revenue Rev 30D" in output
+    assert "Next Q Revenue Rev 30D" in output
+    assert "My Book Today" in output
+    assert "My Book Impact Today" in output
     assert "Ticker Cards" in output
     assert "Nvidia revenue beats" in output
     assert "+4.00% on 1.8x volume" in output
     assert "5.26T" in output
+    assert "Position &amp; book" in output
 
 
 def test_write_report_outputs_markdown_and_html(tmp_path) -> None:
@@ -228,9 +242,19 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert 'stock-daily-notes' in output
     assert 'data-checklist="NVDA"' in output
     assert 'data-thesis="NVDA"' in output
+    assert 'data-thesis-trigger="NVDA"' in output
     assert "stock-daily-thesis" in output
+    assert "stock-daily-thesis-triggers" in output
     assert "data-premarket-change=" in output
     assert "data-volume-x=" in output
+    assert "data-position-weight=" in output
+    assert "data-revenue-rev-30d=" in output
+    assert "data-next-q-revenue-rev-30d=" in output
+    assert "enhanceFocusFromLocalState" in output
+    assert "thesis_trigger" in output
+    assert "FY1 rev rev" in output
+    assert "NextQ rev rev" in output
+    assert "stock-daily-post-earnings" in output
     assert "Manage" in output
     assert "Next earnings" in output
     assert "Valuation risk" in output
@@ -729,6 +753,43 @@ def test_todays_catalysts_groups_earnings_macro_and_post_earnings() -> None:
     assert post_earnings_items(report)[0]["days_ago"] == 1
 
 
+def test_post_earnings_scoreboard_uses_metric_defaults_before_manual_review() -> None:
+    today = date(2026, 4, 28)
+    earnings = EarningsDate(
+        ticker="MSFT", company_name="Microsoft",
+        earnings_date=date(2026, 4, 27), time_of_day="after_market",
+        fiscal_quarter=None, fiscal_year=None, eps_estimate=None, revenue_estimate=None,
+        source="yfinance", source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="MSFT", company_name="Microsoft"),
+                articles=[], x_signals=[], earnings=earnings,
+                valuation=ValuationSnapshot(
+                    ticker="MSFT", as_of_date=today, source="yfinance",
+                    metrics={
+                        "latest_eps_surprise_pct": 6.5,
+                        "latest_revenue_surprise_pct": -2.0,
+                        "fy1_eps_revision_30d": 1.5,
+                        "fy1_revenue_revision_30d": -0.8,
+                    },
+                    retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                ),
+            )
+        ],
+    )
+
+    output = render_html_report(report)
+
+    assert 'data-pe-score-row="MSFT"' in output
+    assert 'data-default="beat"' in output
+    assert '+6.50%' in output
+    assert 'data-default="-2.0"' in output
+
+
 def test_quality_of_move_summarizes_volume_gap_and_atr() -> None:
     item = TickerReport(
         ticker=TickerConfig(symbol="X", company_name="X"),
@@ -813,6 +874,82 @@ def test_position_view_computes_pl_and_book_impact() -> None:
     assert abs(view["book_impact"] - 0.263) < 0.01
 
 
+def test_book_impact_ranking_prioritizes_holdings_by_estimated_impact() -> None:
+    from stock_daily_research.report import book_impact_ranking
+
+    def make(symbol, weight, move):
+        return TickerReport(
+            ticker=TickerConfig(
+                symbol=symbol,
+                company_name=symbol,
+                position=PositionConfig(status="holding", portfolio_weight=weight),
+            ),
+            articles=[], x_signals=[], earnings=None,
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=date(2026, 4, 28), source="yfinance",
+                metrics={"last_close": 100.0 + move, "previous_close": 100.0},
+                retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ),
+        )
+
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[make("LOW", 2.0, 1.0), make("HIGH", 10.0, -3.0)],
+    )
+
+    rows = book_impact_ranking(report)
+
+    assert rows[0]["item"].ticker.symbol == "HIGH"
+    assert rows[0]["action"] == "Review now"
+
+
+def test_book_today_summary_surfaces_portfolio_morning_cards() -> None:
+    today = date(2026, 4, 28)
+
+    def make(symbol, weight, move, *, pe=None, rsi=None, earnings_date=None):
+        earnings = None
+        if earnings_date:
+            earnings = EarningsDate(
+                ticker=symbol, company_name=symbol,
+                earnings_date=earnings_date, time_of_day="unknown",
+                fiscal_quarter=None, fiscal_year=None, eps_estimate=None, revenue_estimate=None,
+                source="yfinance", source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            )
+        return TickerReport(
+            ticker=TickerConfig(
+                symbol=symbol,
+                company_name=symbol,
+                position=PositionConfig(status="holding", portfolio_weight=weight),
+            ),
+            articles=[], x_signals=[], earnings=earnings,
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=today, source="yfinance",
+                metrics={"last_close": 100.0 + move, "previous_close": 100.0, "trailing_pe": pe, "rsi_14": rsi},
+                retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ),
+        )
+
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[
+            make("WIN", 12.0, 3.0),
+            make("LOSS", 10.0, -4.0),
+            make("RISK", 7.0, 0.5, pe=150.0, rsi=76.0),
+            make("EVENT", 5.0, 0.2, earnings_date=today),
+        ],
+    )
+
+    cards = book_today_summary(report)
+    labels = [card["label"] for card in cards]
+
+    assert "Biggest positive impact" in labels
+    assert "Biggest negative impact" in labels
+    assert "Highest risk holding" in labels
+    assert "Holding with event soon" in labels
+
+
 def test_todays_focus_combines_alerts_premarket_and_positions() -> None:
     today = date(2026, 4, 28)
     earnings = EarningsDate(
@@ -834,7 +971,7 @@ def test_todays_focus_combines_alerts_premarket_and_positions() -> None:
         x_signals=[],
         valuation=ValuationSnapshot(
             ticker="NVDA", as_of_date=today, source="yfinance",
-            metrics={"last_close": 110.0, "previous_close": 100.0, "rsi_14": 75.0, "trailing_pe": 130.0},
+            metrics={"last_close": 110.0, "previous_close": 100.0, "rsi_14": 75.0, "trailing_pe": 130.0, "fy1_eps_revision_30d": -2.0},
             retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         ),
         earnings=earnings,
@@ -853,6 +990,7 @@ def test_todays_focus_combines_alerts_premarket_and_positions() -> None:
     focus = todays_focus(report)
 
     assert focus["review_first"][0]["item"].ticker.symbol == "NVDA"
+    assert any("EPS rev" in reason for reason in focus["review_first"][0]["reasons"])
     assert focus["do_not_chase"][0]["item"].ticker.symbol == "NVDA"
 
 
@@ -902,7 +1040,20 @@ def test_sector_leadership_and_premarket_triage() -> None:
 
     assert any(row["label"] == "Semis" for row in groups)
     assert triage["catalyst_backed"][0]["item"].ticker.symbol == "NVDA"
+    assert triage["catalyst_backed"][0]["headline_count"] == 1
+    assert "trusted" in triage["catalyst_backed"][0]["source_tier"] or "tier" in triage["catalyst_backed"][0]["source_tier"]
     assert triage["unclear"][0]["item"].ticker.symbol == "QUIET"
+
+
+def test_source_reliability_buckets_official_and_tier1() -> None:
+    class Article:
+        def __init__(self, domain, source=""):
+            self.domain = domain
+            self.source = source
+
+    assert source_reliability(Article("sec.gov"))["tier"] == "official"
+    assert source_reliability(Article("reuters.com"))["tier"] == "tier1"
+    assert source_reliability(Article("example.com"))["tier"] == "trusted"
 
 
 def test_sectors_in_use_collects_distinct_sorted_sectors() -> None:
@@ -1050,7 +1201,11 @@ def test_hero_items_groups_imminent_earnings_by_day() -> None:
         generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         ticker_reports=[
             TickerReport(
-                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                ticker=TickerConfig(
+                    symbol="NVDA",
+                    company_name="NVIDIA Corporation",
+                    position=PositionConfig(status="holding", portfolio_weight=10.0),
+                ),
                 articles=[], x_signals=[], valuation=None, earnings=earnings_today,
             ),
             TickerReport(
@@ -1082,7 +1237,11 @@ def test_hero_items_falls_back_to_top_news_when_no_imminent() -> None:
         generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         ticker_reports=[
             TickerReport(
-                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                ticker=TickerConfig(
+                    symbol="NVDA",
+                    company_name="NVIDIA Corporation",
+                    position=PositionConfig(status="holding", portfolio_weight=10.0),
+                ),
                 articles=[article], x_signals=[], valuation=None, earnings=None,
             ),
         ],
@@ -1185,6 +1344,15 @@ def test_hero_items_surfaces_valuation_watch_when_room() -> None:
     assert len(valuation_cards) == 1
     assert "COHR" in valuation_cards[0]["headline"]
     assert "P/E" in valuation_cards[0]["subtitle"]
+
+
+def test_morning_briefing_cards_build_four_first_screen_cards() -> None:
+    cards = morning_briefing_cards(_sample_report())
+    labels = [card["label"] for card in cards]
+
+    assert labels == ["Regime", "Premarket tone", "Top risk", "Focus"]
+    assert "QQQ" in str(cards[1]["headline"])
+    assert cards[3]["anchor"] == "#todays-focus"
 
 
 def test_rule_alerts_and_priority_items_surface_risk_workflow() -> None:
@@ -1403,7 +1571,11 @@ def _sample_report() -> DailyReport:
         generated_at=datetime(2026, 4, 28, 7, 0, tzinfo=timezone.utc),
         ticker_reports=[
             TickerReport(
-                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                ticker=TickerConfig(
+                    symbol="NVDA",
+                    company_name="NVIDIA Corporation",
+                    position=PositionConfig(status="holding", portfolio_weight=10.0),
+                ),
                 articles=[
                     NewsArticle(
                         ticker="NVDA",
@@ -1430,6 +1602,9 @@ def _sample_report() -> DailyReport:
                         "next_fy_eps": 5.1,
                         "eps_growth_pct": 21.4,
                         "fy1_eps_revision_30d": 2.2,
+                        "fy1_revenue_revision_30d": 3.4,
+                        "next_q_revenue_revision_30d": 1.1,
+                        "revenue_growth_pct": 18.0,
                         "rsi_14": 62.5,
                         "last_close": 104.0,
                         "previous_close": 100.0,

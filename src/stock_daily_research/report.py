@@ -38,6 +38,14 @@ METRIC_LABELS = {
     "next_fy_eps": "Next FY EPS",
     "eps_growth_pct": "EPS Growth",
     "fy1_eps_revision_30d": "FY1 EPS Rev 30D",
+    "next_q_revenue": "Next Q Revenue",
+    "next_q_revenue_growth_pct": "Next Q Rev Growth",
+    "next_fy_revenue": "Next FY Revenue",
+    "revenue_growth_pct": "Revenue Growth",
+    "fy1_revenue_revision_30d": "FY1 Revenue Rev 30D",
+    "next_q_revenue_revision_30d": "Next Q Revenue Rev 30D",
+    "latest_eps_surprise_pct": "Latest EPS Surprise",
+    "latest_revenue_surprise_pct": "Latest Revenue Surprise",
     "peg_ratio": "PEG Ratio",
     "price_to_sales": "Price/Sales",
     "price_to_book": "Price/Book",
@@ -108,6 +116,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["premarket_change"] = lambda item: premarket_change_pct(report, item.ticker.symbol)
     env.filters["position_view"] = position_view
     env.filters["eps_revision_class"] = eps_revision_class
+    env.filters["source_reliability"] = source_reliability
+    env.filters["post_earnings_defaults"] = post_earnings_defaults
     env.filters["format_pct"] = format_pct
     env.filters["change_class"] = change_class
     env.filters["format_ratio"] = format_ratio
@@ -120,11 +130,13 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         summary=build_summary(report),
         earnings_soon=earnings_soon(report),
         important_news=important_news(report),
-        hero=hero_items(report),
+        hero=morning_briefing_cards(report),
         todays_catalysts=todays_catalysts(report),
         post_earnings_items=post_earnings_items(report),
         macro_risk=macro_risk_meter(report.market_context),
         todays_focus=todays_focus(report),
+        book_today=book_today_summary(report),
+        book_impact=book_impact_ranking(report),
         sector_leadership=sector_leadership(report),
         premarket_triage=premarket_triage(report),
         priority_items=priority_items(report),
@@ -146,6 +158,9 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
             "next_fy_eps",
             "eps_growth_pct",
             "fy1_eps_revision_30d",
+            "fy1_revenue_revision_30d",
+            "next_q_revenue_revision_30d",
+            "revenue_growth_pct",
             "peg_ratio",
             "price_to_sales",
             "price_to_book",
@@ -342,6 +357,30 @@ def news_triage_label(item: TickerReport, article: object, anchor: date) -> str:
     return "watchlist"
 
 
+TIER1_NEWS_DOMAINS = {
+    "reuters.com",
+    "bloomberg.com",
+    "wsj.com",
+    "ft.com",
+    "cnbc.com",
+    "apnews.com",
+}
+OFFICIAL_SOURCE_HINTS = ("sec.gov", "investor.", "ir.", "businesswire.com", "prnewswire.com", "globenewswire.com")
+
+
+def source_reliability(article: object) -> dict[str, object]:
+    domain = str(getattr(article, "domain", "")).lower()
+    source = str(getattr(article, "source", "")).lower()
+    combined = f"{domain} {source}"
+    if any(hint in combined for hint in OFFICIAL_SOURCE_HINTS):
+        return {"tier": "official", "label": "official/company", "score": 3}
+    if domain in TIER1_NEWS_DOMAINS or any(domain.endswith("." + d) for d in TIER1_NEWS_DOMAINS):
+        return {"tier": "tier1", "label": "tier 1 media", "score": 2}
+    if "seekingalpha" in combined or "fool.com" in combined:
+        return {"tier": "commentary", "label": "commentary", "score": 0}
+    return {"tier": "trusted", "label": "trusted media", "score": 1}
+
+
 def date_or_na(value: object) -> str:
     if value is None:
         return "N/A"
@@ -511,6 +550,31 @@ def post_earnings_items(report: DailyReport, days: int = 7) -> list[dict[str, ob
     return sorted(rows, key=lambda row: (int(row["days_ago"]), row["item"].ticker.symbol))
 
 
+def post_earnings_defaults(item: TickerReport) -> dict[str, object]:
+    """Best-effort post-earnings defaults from fetched valuation metrics."""
+    eps_surprise = _metric_float(item, "latest_eps_surprise_pct")
+    rev_surprise = _metric_float(item, "latest_revenue_surprise_pct")
+    return {
+        "eps": _surprise_label(eps_surprise),
+        "eps_surprise": eps_surprise,
+        "rev": _surprise_label(rev_surprise),
+        "rev_surprise": rev_surprise,
+        "guide": None,
+        "fy1_eps_revision_after": _metric_float(item, "fy1_eps_revision_30d"),
+        "fy1_revenue_revision_after": _metric_float(item, "fy1_revenue_revision_30d"),
+    }
+
+
+def _surprise_label(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if value > 1.0:
+        return "beat"
+    if value < -1.0:
+        return "miss"
+    return "inline"
+
+
 def premarket_change_pct(report: DailyReport, symbol: str) -> float | None:
     if not report.premarket:
         return None
@@ -593,6 +657,33 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
         if item.ticker.position.status == "holding":
             reasons.append("holding")
             score += 3
+        book_view = position_view(item)
+        book_impact = _as_float(book_view.get("book_impact"))
+        if book_impact is not None:
+            reasons.append(f"book impact {format_pct(book_impact)}")
+            score += min(abs(book_impact) * 2, 8)
+
+        eps_revision = _metric_float(item, "fy1_eps_revision_30d")
+        if eps_revision is not None:
+            if eps_revision < -0.5:
+                reasons.append(f"EPS rev {format_pct(eps_revision)}")
+                score += 4
+            elif eps_revision > 1.0:
+                reasons.append(f"EPS rev {format_pct(eps_revision)}")
+                score += 2
+
+        revenue_growth = _metric_float(item, "revenue_growth_pct")
+        if revenue_growth is not None and revenue_growth < 0:
+            reasons.append(f"revenue growth {format_pct(revenue_growth, sign=False)}")
+            score += 2
+        revenue_revision = _metric_float(item, "fy1_revenue_revision_30d")
+        if revenue_revision is not None:
+            if revenue_revision < -0.5:
+                reasons.append(f"revenue rev {format_pct(revenue_revision)}")
+                score += 3
+            elif revenue_revision > 1.0:
+                reasons.append(f"revenue rev {format_pct(revenue_revision)}")
+                score += 2
 
         if score > 0:
             review_candidates.append((score, item, reasons))
@@ -626,7 +717,7 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
 
     def pack(rows: list[tuple[float, TickerReport, list[str]]]) -> list[dict[str, object]]:
         return [
-            {"item": item, "score": score, "reasons": reasons[:3]}
+            {"item": item, "score": score, "reasons": reasons[:6]}
             for score, item, reasons in sorted(rows, key=lambda row: (-row[0], row[1].ticker.symbol))[:3]
         ]
 
@@ -634,6 +725,128 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
         "review_first": pack(review_candidates),
         "do_not_chase": pack(do_not_chase),
         "watch_pullback": pack(pullback),
+    }
+
+
+def book_impact_ranking(report: DailyReport) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for item in report.ticker_reports:
+        pos = item.ticker.position
+        if pos.status != "holding" or pos.portfolio_weight is None:
+            continue
+        move = premarket_change_pct(report, item.ticker.symbol)
+        move_source = "premarket"
+        if move is None:
+            move = daily_change_pct(item)
+            move_source = "latest daily"
+        if move is None:
+            continue
+        impact = pos.portfolio_weight * (move / 100.0)
+        action = "Review now" if abs(impact) >= 0.25 or top_news_count(item) or earnings_delta(item, report.report_date) in (0, 1) else "Monitor"
+        rows.append({
+            "item": item,
+            "move": move,
+            "move_source": move_source,
+            "weight": pos.portfolio_weight,
+            "impact": impact,
+            "action": action,
+        })
+    return sorted(rows, key=lambda row: abs(float(row["impact"])), reverse=True)[:8]
+
+
+def book_today_summary(report: DailyReport) -> list[dict[str, object]]:
+    """Four-card portfolio lens for the morning home view."""
+    impact_rows = book_impact_ranking(report)
+    holdings = [item for item in report.ticker_reports if item.ticker.position.status == "holding"]
+    cards: list[dict[str, object]] = []
+
+    positive = [row for row in impact_rows if isinstance(row.get("impact"), (int, float)) and float(row["impact"]) > 0]
+    negative = [row for row in impact_rows if isinstance(row.get("impact"), (int, float)) and float(row["impact"]) < 0]
+    if positive:
+        row = max(positive, key=lambda r: float(r["impact"]))
+        cards.append(_book_card(
+            "Biggest positive impact",
+            row["item"],
+            format_pct(row["impact"]),
+            f"{format_pct(row['move'])} {row['move_source']} | {format_pct(row['weight'], sign=False)} weight",
+            "pos",
+        ))
+    if negative:
+        row = min(negative, key=lambda r: float(r["impact"]))
+        cards.append(_book_card(
+            "Biggest negative impact",
+            row["item"],
+            format_pct(row["impact"]),
+            f"{format_pct(row['move'])} {row['move_source']} | {format_pct(row['weight'], sign=False)} weight",
+            "neg",
+        ))
+
+    risk_rows: list[tuple[float, TickerReport, list[str]]] = []
+    risk_rank = {"None": 0, "Elevated": 2, "High": 5, "Extreme": 8}
+    for item in holdings:
+        reasons: list[str] = []
+        score = 0.0
+        risk = valuation_risk_label(item)
+        score += risk_rank.get(risk, 0)
+        if risk != "None":
+            reasons.append(f"{risk} valuation")
+        rsi = rsi_value(item)
+        if rsi is not None and rsi >= 70:
+            score += 3
+            reasons.append(f"RSI {rsi:.0f}")
+        eps_revision = _metric_float(item, "fy1_eps_revision_30d")
+        if eps_revision is not None and eps_revision < -0.5:
+            score += 3
+            reasons.append(f"EPS rev {format_pct(eps_revision)}")
+        revenue_revision = _metric_float(item, "fy1_revenue_revision_30d")
+        if revenue_revision is not None and revenue_revision < -0.5:
+            score += 2
+            reasons.append(f"revenue rev {format_pct(revenue_revision)}")
+        delta = earnings_delta(item, report.report_date)
+        if delta is not None and 0 <= delta <= 7:
+            score += 3
+            reasons.append("event soon")
+        impact = next((float(row["impact"]) for row in impact_rows if row["item"] is item), 0.0)
+        score += min(abs(impact) * 2, 4)
+        if impact:
+            reasons.append(f"book {format_pct(impact)}")
+        if score > 0:
+            risk_rows.append((score, item, reasons))
+    if risk_rows:
+        _score, item, reasons = sorted(risk_rows, key=lambda row: (-row[0], row[1].ticker.symbol))[0]
+        cards.append(_book_card(
+            "Highest risk holding",
+            item,
+            item.ticker.symbol,
+            " | ".join(reasons[:3]),
+            "warn",
+        ))
+
+    event_rows: list[tuple[int, float, TickerReport]] = []
+    for item in holdings:
+        delta = earnings_delta(item, report.report_date)
+        if delta is not None and 0 <= delta <= 7:
+            weight = item.ticker.position.portfolio_weight or 0.0
+            event_rows.append((delta, -weight, item))
+    if event_rows:
+        delta, _weight_sort, item = sorted(event_rows)[0]
+        when = "today" if delta == 0 else "tomorrow" if delta == 1 else f"in {delta}d"
+        weight = item.ticker.position.portfolio_weight
+        detail = f"earnings {when}"
+        if weight is not None:
+            detail += f" | {format_pct(weight, sign=False)} weight"
+        cards.append(_book_card("Holding with event soon", item, item.ticker.symbol, detail, "info"))
+
+    return cards[:4]
+
+
+def _book_card(label: str, item: TickerReport, value: object, detail: str, tone: str) -> dict[str, object]:
+    return {
+        "label": label,
+        "item": item,
+        "value": value,
+        "detail": detail,
+        "tone": tone,
     }
 
 
@@ -942,19 +1155,33 @@ def premarket_triage(report: DailyReport) -> dict[str, list[dict[str, object]]]:
         if item is None:
             continue
         headline_count = len(item.articles)
+        best_source = max((int(source_reliability(article)["score"]) for article in item.articles), default=0)
+        best_label = "no linked headline"
+        if item.articles:
+            best_article = max(item.articles, key=lambda article: int(source_reliability(article)["score"]))
+            best_label = str(source_reliability(best_article)["label"])
         delta = earnings_delta(item, report.report_date)
         move_vs_atr = _metric_float(item, "move_vs_atr")
         volume_x = _metric_float(item, "volume_vs_20d")
         reasons: list[str] = []
         if headline_count:
             reasons.append(f"{headline_count} headline{'s' if headline_count != 1 else ''}")
+            reasons.append(best_label)
         if delta is not None and -1 <= delta <= 1:
             reasons.append("earnings window")
         if move_vs_atr is not None and move_vs_atr >= 1.0:
             reasons.append(f"> ATR ({move_vs_atr:.1f}x)")
         if volume_x is not None and volume_x >= 1.5:
             reasons.append(f"{volume_x:.1f}x volume")
-        row = {"move": move, "item": item, "reasons": reasons}
+        confidence = "high" if best_source >= 2 or len(reasons) >= 3 else "medium" if headline_count or len(reasons) >= 2 else "low"
+        row = {
+            "move": move,
+            "item": item,
+            "reasons": reasons,
+            "headline_count": headline_count,
+            "source_tier": best_label,
+            "confidence": confidence,
+        }
         if headline_count or (delta is not None and -1 <= delta <= 1) or len(reasons) >= 2:
             catalyst_backed.append(row)
         else:
@@ -1234,6 +1461,91 @@ def hero_items(report: DailyReport) -> list[dict[str, object]]:
             })
 
     return items[:3]
+
+
+def morning_briefing_cards(report: DailyReport) -> list[dict[str, object]]:
+    """First-screen briefing: regime, premarket tone, top risk, and focus."""
+    cards: list[dict[str, object]] = []
+
+    regime_headline = "Regime check"
+    regime_subtitle = "No market context available."
+    regime_tone = "info"
+    risks = macro_risk_meter(report.market_context)
+    high_risks = [risk for risk in risks if risk["level"] == "high"]
+    medium_risks = [risk for risk in risks if risk["level"] == "medium"]
+    if high_risks:
+        lead = high_risks[0]
+        regime_headline = f"{lead['name'].replace(' pressure', '')}-led pressure"
+        regime_subtitle = lead["detail"]
+        regime_tone = "soon"
+    elif medium_risks:
+        lead = medium_risks[0]
+        regime_headline = f"{lead['name'].replace(' pressure', '')} pressure building"
+        regime_subtitle = lead["detail"]
+        regime_tone = "info"
+    elif report.market_sentiment:
+        regime_headline = f"{report.market_sentiment.label} tape"
+        regime_subtitle = f"Sentiment {report.market_sentiment.score} / 100"
+        regime_tone = "imminent" if report.market_sentiment.score <= 24 or report.market_sentiment.score >= 76 else "info"
+    cards.append({
+        "label": "Regime",
+        "headline": regime_headline,
+        "subtitle": regime_subtitle,
+        "tone": regime_tone,
+        "anchor": "#rates" if report.market_context and report.market_context.rates else "#market-sentiment",
+    })
+
+    pm_headline = "No premarket snapshot"
+    pm_subtitle = "Run with valuation fetching enabled for ES/NQ/SPY/QQQ tone."
+    pm_tone = "info"
+    if report.premarket and report.premarket.benchmarks:
+        parts = []
+        values: list[float] = []
+        for move in report.premarket.benchmarks[:3]:
+            if move.change_pct is None:
+                continue
+            parts.append(f"{move.symbol} {format_pct(move.change_pct)}")
+            values.append(move.change_pct)
+        if parts:
+            avg = sum(values) / len(values)
+            pm_headline = ", ".join(parts[:2])
+            pm_subtitle = "Risk-on premarket tone" if avg > 0.15 else "Risk-off premarket tone" if avg < -0.15 else "Mixed premarket tone"
+            pm_tone = "info" if avg >= 0 else "soon"
+    cards.append({
+        "label": "Premarket tone",
+        "headline": pm_headline,
+        "subtitle": pm_subtitle,
+        "tone": pm_tone,
+        "anchor": "#premarket",
+    })
+
+    stretched = overextended_tickers(report)
+    macro_warning_count = sum(1 for warning in report.warnings if "macro" in warning.lower())
+    risk_bits: list[str] = []
+    if stretched:
+        risk_bits.append(f"{len(stretched)} stretched")
+    if macro_warning_count:
+        risk_bits.append(f"{macro_warning_count} macro warning{'s' if macro_warning_count != 1 else ''}")
+    if not risk_bits and rule_alerts(report):
+        risk_bits.append(f"{len(rule_alerts(report))} rule alert{'s' if len(rule_alerts(report)) != 1 else ''}")
+    cards.append({
+        "label": "Top risk",
+        "headline": ", ".join(risk_bits) if risk_bits else "No major tape risk",
+        "subtitle": "Check valuation and feed quality before chasing." if risk_bits else "No stretched or feed-risk cluster flagged.",
+        "tone": "imminent" if macro_warning_count or len(stretched) >= 5 else "soon" if stretched else "info",
+        "anchor": "#overextended" if stretched else "#global-warnings" if macro_warning_count else "#rule-alerts",
+    })
+
+    focus = todays_focus(report)
+    focus_symbols = [str(row["item"].ticker.symbol) for row in focus["review_first"][:3]]
+    cards.append({
+        "label": "Focus",
+        "headline": " / ".join(focus_symbols) if focus_symbols else "No urgent review queue",
+        "subtitle": "Review first from holdings, catalysts, gaps, revisions, and alerts." if focus_symbols else "Dashboard is quiet after current rules.",
+        "tone": "info",
+        "anchor": "#todays-focus",
+    })
+    return cards
 
 
 def priority_items(report: DailyReport) -> list[dict[str, object]]:

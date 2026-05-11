@@ -10,12 +10,12 @@ This project is built for personal research workflow only. It is not investment 
 - Trusted news collection from Google News RSS, filtered by allowed domains
 - Manual trusted X/Twitter signal input from `data/x_posts.yaml`
 - Yahoo Finance style valuation snapshots via `yfinance`
-- EPS power fields: TTM EPS, next FY EPS, EPS growth, and FY1 EPS revision trend when available
+- EPS and revenue estimate layer: TTM EPS, next FY EPS, EPS growth, FY1 EPS revision, FY1 revenue revision, and next-quarter revenue revision when available
 - Last-known-good valuation fallback from SQLite
 - Earnings date tracking
-- Official macro calendar highlights for FOMC and Employment Situation
+- Macro calendar reliability: official BLS selected releases, BLS/FOMC fallback schedules, cached macro events, and optional manual events
 - Interactive HTML dashboard with search, filters, pins, notes, tags, checklist status, compare mode, exports, and work modes
-- Morning workflow blocks: Today's Focus, overnight / premarket movers, catalyst list, post-earnings scoreboard, sector leadership, thesis state, and position view
+- Morning workflow blocks: Today's Focus, My Book Today, overnight / premarket movers, catalyst list, post-earnings scoreboard, sector leadership, thesis state / trigger, and position view
 - RSI 14 technical indicator and rule-based alerts
 - Free Fear & Greed style market sentiment proxy using SPY, QQQ, VIX, and HYG/LQD
 - Optional Telegram daily summary
@@ -143,7 +143,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register_daily_task.ps1 -Time 0
 - Google News RSS: free RSS search, constrained by trusted domains and relevance checks
 - `yfinance`: unofficial Yahoo Finance data for valuation, price history, RSI, moving averages, and earnings dates
 - Federal Reserve: official FOMC calendar and statements
-- BLS: official Employment Situation calendar, with a local fallback schedule
+- BLS: official selected-release calendar for NFP, CPI, and PPI, with BLS-specific and built-in fallback schedules
 - X/Twitter: manual input only; this MVP does not call paid or usage-billed X APIs
 
 ## Telegram Summary

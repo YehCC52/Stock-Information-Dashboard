@@ -5,7 +5,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 import sqlite3
 from zoneinfo import ZoneInfo
@@ -113,6 +113,7 @@ def run_daily(
             days_back=config.settings.macro.days_back,
             days_ahead=config.settings.macro.days_ahead,
             manual_events=config.settings.macro.manual_events,
+            cache_path=Path(db_path).parent / "macro_events_cache.json",
         )
         economic_events = macro_result.events
         global_warnings.extend(macro_result.warnings)
@@ -120,6 +121,7 @@ def run_daily(
     with closing(init_db(db_path)) as conn:
         if fetch_valuation:
             ticker_reports = _apply_valuation_fallbacks(conn, ticker_reports, actual_report_date)
+            ticker_reports = _apply_estimate_revision_history(conn, ticker_reports, actual_report_date)
 
         report_path = Path(output_dir) / f"{actual_report_date.isoformat()}.html"
         preliminary_report = DailyReport(
@@ -230,6 +232,45 @@ def _apply_valuation_fallbacks(
         ]
         result.append(replace(item, valuation=fallback, warnings=warnings))
     return result
+
+
+def _apply_estimate_revision_history(
+    conn: sqlite3.Connection,
+    ticker_reports: list[TickerReport],
+    report_date: date,
+) -> list[TickerReport]:
+    result: list[TickerReport] = []
+    anchor = report_date - timedelta(days=30)
+    for item in ticker_reports:
+        if not item.valuation:
+            result.append(item)
+            continue
+        prior = load_latest_valuation_snapshot(conn, item.ticker.symbol, before_or_on=anchor)
+        if not prior:
+            result.append(item)
+            continue
+        metrics = dict(item.valuation.metrics)
+        _fill_revision_metric(metrics, prior.metrics, "next_fy_revenue", "fy1_revenue_revision_30d")
+        _fill_revision_metric(metrics, prior.metrics, "next_q_revenue", "next_q_revenue_revision_30d")
+        result.append(replace(item, valuation=replace(item.valuation, metrics=metrics)))
+    return result
+
+
+def _fill_revision_metric(
+    metrics: dict[str, object],
+    prior_metrics: dict[str, object],
+    source_key: str,
+    revision_key: str,
+) -> None:
+    if metrics.get(revision_key) is not None:
+        return
+    current = metrics.get(source_key)
+    prior = prior_metrics.get(source_key)
+    if not isinstance(current, (int, float)) or not isinstance(prior, (int, float)):
+        return
+    if current != current or prior != prior or prior == 0:
+        return
+    metrics[revision_key] = round((float(current) - float(prior)) / abs(float(prior)) * 100.0, 2)
 
 
 def _has_usable_valuation(metrics: dict[str, object]) -> bool:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from dataclasses import replace
 from datetime import date, datetime, time
 from html import unescape
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import requests
@@ -12,6 +14,7 @@ import requests
 from .models import EconomicEvent, ManualMacroEvent
 
 BLS_EMPSIT_URL = "https://www.bls.gov/schedule/news_release/empsit.htm"
+BLS_SELECTED_RELEASES_URL = "https://www.bls.gov/schedule/{year}/home.htm"
 FED_FOMC_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?os=f"
 FED_PRESS_RELEASE_BASE_URL = "https://www.federalreserve.gov/newsevents/pressreleases"
 NEW_YORK_TZ = ZoneInfo("America/New_York")
@@ -39,6 +42,24 @@ FOMC_FALLBACK_SCHEDULE = (
     ("Sep. 16, 2026", True),
     ("Oct. 28, 2026", False),
     ("Dec. 09, 2026", True),
+)
+CORE_BLS_RELEASES = {
+    "Employment Situation": ("Nonfarm Payrolls / Employment Situation", "jobs", "high"),
+    "Consumer Price Index": ("CPI / Consumer Price Index", "inflation", "high"),
+    "Producer Price Index": ("PPI / Producer Price Index", "inflation", "medium"),
+}
+CPI_FALLBACK_SCHEDULE = (
+    ("December 2025", "Jan. 13, 2026", "08:30 AM"),
+    ("January 2026", "Feb. 13, 2026", "08:30 AM"),
+    ("February 2026", "Mar. 11, 2026", "08:30 AM"),
+    ("March 2026", "Apr. 10, 2026", "08:30 AM"),
+    ("April 2026", "May. 12, 2026", "08:30 AM"),
+    ("May 2026", "Jun. 10, 2026", "08:30 AM"),
+    ("June 2026", "Jul. 14, 2026", "08:30 AM"),
+    ("July 2026", "Aug. 12, 2026", "08:30 AM"),
+    ("August 2026", "Sep. 11, 2026", "08:30 AM"),
+    ("September 2026", "Oct. 14, 2026", "08:30 AM"),
+    ("October 2026", "Nov. 10, 2026", "08:30 AM"),
 )
 
 MONTHS = {
@@ -89,22 +110,27 @@ class OfficialMacroCalendarProvider:
         days_back: int = 1,
         days_ahead: int,
         manual_events: list[ManualMacroEvent] | None = None,
+        cache_path: str | Path | None = None,
     ) -> MacroFetchResult:
         warnings: list[str] = []
         events: list[EconomicEvent] = []
         if manual_events:
             events.extend(manual_macro_events(manual_events))
 
+        bls_events: list[EconomicEvent] = []
         try:
-            html = self._get(BLS_EMPSIT_URL)
-            events.extend(parse_bls_employment_situation(html, timezone_name))
-        except Exception as exc:
-            fallback_events = fallback_bls_employment_situation(timezone_name)
-            fallback_window = filter_event_window(fallback_events, report_date, days_back, days_ahead, timezone_name)
-            if fallback_window:
-                events.extend(fallback_events)
-            else:
-                warnings.append(f"Macro calendar fetch failed for BLS Employment Situation: {exc}")
+            html = self._get(BLS_SELECTED_RELEASES_URL.format(year=report_date.year))
+            bls_events = parse_bls_selected_releases(html, timezone_name, year=report_date.year)
+        except Exception:
+            try:
+                html = self._get(BLS_EMPSIT_URL)
+                bls_events = parse_bls_employment_situation(html, timezone_name)
+            except Exception:
+                bls_events = fallback_core_bls_calendar(timezone_name)
+        if bls_events:
+            events.extend(bls_events)
+        else:
+            warnings.append("Macro calendar BLS sources returned no usable core events; add manual macro events for CPI/NFP coverage.")
 
         try:
             html = self._get(FED_FOMC_URL)
@@ -114,7 +140,7 @@ class OfficialMacroCalendarProvider:
             fallback_window = filter_event_window(fallback_events, report_date, days_back, days_ahead, timezone_name)
             if fallback_window:
                 events.extend(fallback_events)
-            else:
+            elif not fallback_events:
                 warnings.append(f"Macro calendar fetch failed for FOMC calendar: {exc}")
 
         events = self._enrich_recent_fomc_events(
@@ -124,10 +150,19 @@ class OfficialMacroCalendarProvider:
             days_back=days_back,
         )
 
-        return MacroFetchResult(
-            events=filter_event_window(events, report_date, days_back, days_ahead, timezone_name),
-            warnings=warnings,
-        )
+        events = dedupe_events(events)
+        filtered = filter_event_window(events, report_date, days_back, days_ahead, timezone_name)
+        if not filtered and cache_path:
+            cached = load_cached_macro_events(cache_path)
+            cached_filtered = filter_event_window(cached, report_date, days_back, days_ahead, timezone_name)
+            if cached_filtered:
+                filtered = cached_filtered
+                warnings = [w for w in warnings if "Macro calendar fetch failed" not in w]
+                warnings.append("Macro calendar using cached events because live sources returned no events.")
+        elif filtered and cache_path:
+            save_cached_macro_events(cache_path, filtered)
+
+        return MacroFetchResult(events=filtered, warnings=warnings)
 
     def _get(self, url: str) -> str:
         response = requests.get(
@@ -200,6 +235,42 @@ def parse_bls_employment_situation(html: str, timezone_name: str) -> list[Econom
     return events
 
 
+def parse_bls_selected_releases(html: str, timezone_name: str, *, year: int) -> list[EconomicEvent]:
+    text = normalize_html_text(html)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    events: list[EconomicEvent] = []
+    for idx, line in enumerate(lines):
+        event_date = parse_bls_long_date(line)
+        if event_date is None or event_date.year != year:
+            continue
+        if idx + 2 >= len(lines):
+            continue
+        release_time = parse_bls_time(lines[idx + 1])
+        if release_time is None:
+            continue
+        release_name = lines[idx + 2]
+        matched = next((name for name in CORE_BLS_RELEASES if release_name.startswith(name)), None)
+        if not matched:
+            continue
+        normalized_name, category, importance = CORE_BLS_RELEASES[matched]
+        local_dt = convert_from_new_york(event_date, release_time, timezone_name)
+        reference = release_name.replace(matched, "").strip()
+        notes = f"Reference period: {reference}" if reference else "Official BLS selected release calendar."
+        events.append(
+            EconomicEvent(
+                name=normalized_name,
+                category=category,
+                event_datetime=local_dt,
+                source="BLS selected releases",
+                source_url=BLS_SELECTED_RELEASES_URL.format(year=year),
+                importance=importance,
+                notes=notes,
+                source_time_label=f"{event_date.isoformat()} {lines[idx + 1]} ET",
+            )
+        )
+    return events
+
+
 def fallback_bls_employment_situation(timezone_name: str) -> list[EconomicEvent]:
     events: list[EconomicEvent] = []
     for reference_month, release_date_text, release_time_text in BLS_EMPSIT_FALLBACK_SCHEDULE:
@@ -215,6 +286,27 @@ def fallback_bls_employment_situation(timezone_name: str) -> list[EconomicEvent]
                 source_url=BLS_EMPSIT_URL,
                 importance="high",
                 notes=f"Reference month: {reference_month}. Official 2026 BLS schedule fallback.",
+                source_time_label=f"{release_date.isoformat()} {release_time_text} ET",
+            )
+        )
+    return events
+
+
+def fallback_core_bls_calendar(timezone_name: str) -> list[EconomicEvent]:
+    events = fallback_bls_employment_situation(timezone_name)
+    for reference_month, release_date_text, release_time_text in CPI_FALLBACK_SCHEDULE:
+        release_date = parse_bls_date(release_date_text)
+        release_time = datetime.strptime(release_time_text, "%I:%M %p").time()
+        local_dt = convert_from_new_york(release_date, release_time, timezone_name)
+        events.append(
+            EconomicEvent(
+                name="CPI / Consumer Price Index",
+                category="inflation",
+                event_datetime=local_dt,
+                source="BLS fallback",
+                source_url=BLS_SELECTED_RELEASES_URL.format(year=release_date.year),
+                importance="high",
+                notes=f"Reference month: {reference_month}. Built-in 2026 BLS selected-releases fallback.",
                 source_time_label=f"{release_date.isoformat()} {release_time_text} ET",
             )
         )
@@ -258,6 +350,53 @@ def manual_macro_events(manual_events: list[ManualMacroEvent]) -> list[EconomicE
         )
         for event in manual_events
     ]
+
+
+def save_cached_macro_events(path: str | Path, events: list[EconomicEvent]) -> None:
+    cache_path = Path(path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = [
+        {
+            "name": event.name,
+            "category": event.category,
+            "event_datetime": event.event_datetime.isoformat(),
+            "source": event.source,
+            "source_url": event.source_url,
+            "importance": event.importance,
+            "notes": event.notes,
+            "source_time_label": event.source_time_label,
+        }
+        for event in events
+    ]
+    cache_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def load_cached_macro_events(path: str | Path) -> list[EconomicEvent]:
+    cache_path = Path(path)
+    if not cache_path.exists():
+        return []
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    events: list[EconomicEvent] = []
+    for row in (payload if isinstance(payload, list) else []):
+        try:
+            events.append(
+                EconomicEvent(
+                    name=str(row["name"]),
+                    category=str(row["category"]),
+                    event_datetime=datetime.fromisoformat(str(row["event_datetime"])),
+                    source=str(row.get("source", "cache")),
+                    source_url=str(row.get("source_url", "")),
+                    importance=str(row.get("importance", "high")),
+                    notes=row.get("notes"),
+                    source_time_label=row.get("source_time_label"),
+                )
+            )
+        except Exception:
+            continue
+    return events
 
 
 def parse_fomc_calendar(html: str, timezone_name: str, years: list[int]) -> list[EconomicEvent]:
@@ -392,6 +531,30 @@ def filter_event_window(
     return sorted(result, key=lambda event: event.event_datetime)
 
 
+def dedupe_events(events: list[EconomicEvent]) -> list[EconomicEvent]:
+    by_key: dict[tuple[str, datetime], EconomicEvent] = {}
+    for event in events:
+        key = (event.name, event.event_datetime)
+        existing = by_key.get(key)
+        if existing is None or source_priority(event.source) > source_priority(existing.source):
+            by_key[key] = event
+    return sorted(by_key.values(), key=lambda event: event.event_datetime)
+
+
+def source_priority(source: str) -> int:
+    if "selected releases" in source:
+        return 4
+    if source in {"BLS", "Federal Reserve", "Federal Reserve FOMC Statement"}:
+        return 3
+    if source == "manual":
+        return 5
+    if "fallback" in source:
+        return 2
+    if "cache" in source:
+        return 1
+    return 0
+
+
 def normalize_html_text(html: str) -> str:
     text = re.sub(r"<[^>]+>", "\n", html)
     text = unescape(text)
@@ -407,6 +570,20 @@ def parse_bls_date(value: str) -> date:
         except ValueError:
             continue
     raise ValueError(f"Could not parse BLS date: {value}")
+
+
+def parse_bls_long_date(value: str) -> date | None:
+    try:
+        return datetime.strptime(value.strip(), "%A, %B %d, %Y").date()
+    except ValueError:
+        return None
+
+
+def parse_bls_time(value: str) -> time | None:
+    try:
+        return datetime.strptime(value.strip(), "%I:%M %p").time()
+    except ValueError:
+        return None
 
 
 def convert_from_new_york(event_date: date, event_time: time, timezone_name: str) -> datetime:
