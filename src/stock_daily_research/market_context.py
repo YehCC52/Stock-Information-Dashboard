@@ -14,13 +14,15 @@ import yfinance as yf
 from .models import BreadthRow, MarketContext, RateLevel
 
 
-# (display_name, yfinance_symbol, unit, multiplier_for_change)
+# (display_name, yfinance_symbol, unit, kind).
 # Yields are in percent in yfinance; we convert change to basis points.
+# DXY and commodities surface as % daily change.
 RATE_SYMBOLS: tuple[tuple[str, str, str, str], ...] = (
     ("5Y", "^FVX", "bp", "yield"),
     ("10Y", "^TNX", "bp", "yield"),
     ("30Y", "^TYX", "bp", "yield"),
     ("DXY", "DX-Y.NYB", "%", "fx"),
+    ("WTI", "CL=F", "%", "commodity"),
 )
 
 # (display_label, A symbol, B symbol)
@@ -108,17 +110,96 @@ def _n_day_return(symbol: str, n: int) -> float | None:
 
 
 def rates_interpretation(rates: list[RateLevel]) -> str:
-    """One-line takeaway from current rates direction. Conservative wording."""
+    """One-line takeaway combining yields, dollar, and oil. Conservative wording.
+
+    Decision matrix (yields × WTI):
+      - Yields up + WTI up           → "Inflation pressure"
+      - Yields down + WTI down       → "Macro tailwind"
+      - Yields up + WTI down         → "Mixed: rates firm, oil soft"
+      - Yields down + WTI up         → "Mixed: oil firm despite easing rates"
+      - Everything flat              → "Rates mixed"
+    """
     if not rates:
         return ""
+
     yields = [r for r in rates if r.unit == "bp"]
-    dxy = next((r for r in rates if r.unit == "%" and r.name == "DXY"), None)
-    if yields and all(r.change > 2 for r in yields):
+    dxy = next((r for r in rates if r.name == "DXY"), None)
+    wti = next((r for r in rates if r.name == "WTI"), None)
+
+    yields_up = bool(yields) and all(r.change > 2 for r in yields)
+    yields_dn = bool(yields) and all(r.change < -2 for r in yields)
+    wti_up = wti is not None and wti.change > 1.0
+    wti_dn = wti is not None and wti.change < -1.0
+
+    if yields_up and wti_up:
+        msg = "Inflation pressure (yields + oil up)"
+    elif yields_dn and wti_dn:
+        msg = "Macro tailwind (yields + oil down)"
+    elif yields_up and wti_dn:
+        msg = "Mixed: yields rising, oil softening"
+    elif yields_dn and wti_up:
+        msg = "Mixed: oil firm despite easing rates"
+    elif yields_up:
         msg = "Yields rising — headwind for high-multiple growth"
-    elif yields and all(r.change < -2 for r in yields):
+    elif yields_dn:
         msg = "Yields falling — tailwind for long-duration assets"
+    elif wti_up:
+        msg = "Oil firm — watch energy spillover"
+    elif wti_dn:
+        msg = "Oil softening — disinflationary nudge"
     else:
         msg = "Rates mixed"
+
     if dxy and abs(dxy.change) >= 0.3:
-        msg += f"; DXY {'+' if dxy.change > 0 else ''}{dxy.change:.2f}% ({'risk-off' if dxy.change > 0 else 'risk-on'} fx)"
+        sign = "+" if dxy.change > 0 else ""
+        fx_tag = "risk-off" if dxy.change > 0 else "risk-on"
+        msg += f"; DXY {sign}{dxy.change:.2f}% ({fx_tag} fx)"
     return msg
+
+
+def market_regime(context: "MarketContext | None", sentiment_score: int | None) -> str:
+    """One-phrase macro regime label for the hero / sentiment area.
+
+    Combines yields direction, oil, dollar, and sentiment score into a short
+    framing line. Returns empty string when there isn't enough data.
+
+    Examples:
+      - "Risk-on with easing rates"
+      - "Oil-led inflation pressure"
+      - "Broad rally with softer dollar"
+      - "Defensive: yields up, sentiment cautious"
+    """
+    if context is None or not context.rates:
+        return ""
+
+    rates = context.rates
+    yields = [r for r in rates if r.unit == "bp"]
+    dxy = next((r for r in rates if r.name == "DXY"), None)
+    wti = next((r for r in rates if r.name == "WTI"), None)
+
+    yields_up = bool(yields) and all(r.change > 2 for r in yields)
+    yields_dn = bool(yields) and all(r.change < -2 for r in yields)
+    wti_up = wti is not None and wti.change > 1.0
+    wti_dn = wti is not None and wti.change < -1.0
+    dxy_up = dxy is not None and dxy.change > 0.3
+    dxy_dn = dxy is not None and dxy.change < -0.3
+    risk_on = sentiment_score is not None and sentiment_score >= 60
+    risk_off = sentiment_score is not None and sentiment_score <= 40
+
+    # Strong combinations — most specific first
+    if yields_up and wti_up:
+        return "Oil-led inflation pressure"
+    if yields_dn and wti_dn and risk_on:
+        return "Risk-on with easing rates"
+    if yields_dn and dxy_dn and risk_on:
+        return "Broad rally with softer dollar"
+    if yields_up and risk_off:
+        return "Defensive: yields up, sentiment cautious"
+    if wti_up and dxy_up:
+        return "Oil and dollar firm — global tightening tone"
+    if yields_dn and risk_on:
+        return "Easing-rates rally"
+    if risk_off and dxy_up:
+        return "Risk-off, dollar haven bid"
+
+    return ""

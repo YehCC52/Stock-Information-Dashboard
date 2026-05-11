@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from .models import EconomicEvent
+from .models import EconomicEvent, ManualMacroEvent
 
 BLS_EMPSIT_URL = "https://www.bls.gov/schedule/news_release/empsit.htm"
 FED_FOMC_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?os=f"
@@ -29,6 +29,16 @@ BLS_EMPSIT_FALLBACK_SCHEDULE = (
     ("September 2026", "Oct. 02, 2026", "08:30 AM"),
     ("October 2026", "Nov. 06, 2026", "08:30 AM"),
     ("November 2026", "Dec. 04, 2026", "08:30 AM"),
+)
+FOMC_FALLBACK_SCHEDULE = (
+    ("Jan. 28, 2026", False),
+    ("Mar. 18, 2026", True),
+    ("Apr. 29, 2026", False),
+    ("Jun. 17, 2026", True),
+    ("Jul. 29, 2026", False),
+    ("Sep. 16, 2026", True),
+    ("Oct. 28, 2026", False),
+    ("Dec. 09, 2026", True),
 )
 
 MONTHS = {
@@ -78,9 +88,12 @@ class OfficialMacroCalendarProvider:
         timezone_name: str,
         days_back: int = 1,
         days_ahead: int,
+        manual_events: list[ManualMacroEvent] | None = None,
     ) -> MacroFetchResult:
         warnings: list[str] = []
         events: list[EconomicEvent] = []
+        if manual_events:
+            events.extend(manual_macro_events(manual_events))
 
         try:
             html = self._get(BLS_EMPSIT_URL)
@@ -97,7 +110,12 @@ class OfficialMacroCalendarProvider:
             html = self._get(FED_FOMC_URL)
             events.extend(parse_fomc_calendar(html, timezone_name, years=[report_date.year, report_date.year + 1]))
         except Exception as exc:
-            warnings.append(f"Macro calendar fetch failed for FOMC calendar: {exc}")
+            fallback_events = fallback_fomc_calendar(timezone_name)
+            fallback_window = filter_event_window(fallback_events, report_date, days_back, days_ahead, timezone_name)
+            if fallback_window:
+                events.extend(fallback_events)
+            else:
+                warnings.append(f"Macro calendar fetch failed for FOMC calendar: {exc}")
 
         events = self._enrich_recent_fomc_events(
             events,
@@ -201,6 +219,45 @@ def fallback_bls_employment_situation(timezone_name: str) -> list[EconomicEvent]
             )
         )
     return events
+
+
+def fallback_fomc_calendar(timezone_name: str) -> list[EconomicEvent]:
+    events: list[EconomicEvent] = []
+    for release_date_text, has_sep in FOMC_FALLBACK_SCHEDULE:
+        meeting_date = parse_bls_date(release_date_text)
+        local_dt = convert_from_new_york(meeting_date, time(14, 0), timezone_name)
+        notes = "Built-in 2026 FOMC fallback; verify official Fed calendar when possible."
+        if has_sep:
+            notes += " Meeting associated with Summary of Economic Projections."
+        events.append(
+            EconomicEvent(
+                name="FOMC Rate Decision",
+                category="rates",
+                event_datetime=local_dt,
+                source="Federal Reserve fallback",
+                source_url=FED_FOMC_URL,
+                importance="high",
+                notes=notes,
+                source_time_label=f"{meeting_date.isoformat()} 02:00 PM ET",
+            )
+        )
+    return events
+
+
+def manual_macro_events(manual_events: list[ManualMacroEvent]) -> list[EconomicEvent]:
+    return [
+        EconomicEvent(
+            name=event.name,
+            category=event.category,
+            event_datetime=event.event_datetime,
+            source=event.source,
+            source_url=event.source_url,
+            importance=event.importance,
+            notes=event.notes,
+            source_time_label=event.event_datetime.isoformat(),
+        )
+        for event in manual_events
+    ]
 
 
 def parse_fomc_calendar(html: str, timezone_name: str, years: list[int]) -> list[EconomicEvent]:

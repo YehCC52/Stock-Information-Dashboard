@@ -50,6 +50,35 @@ tickers:
     assert config.settings.x_signals.mode == "manual"
 
 
+def test_load_config_reads_position_and_manual_macro_events(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+settings:
+  macro:
+    manual_events:
+      - name: CPI Release
+        category: inflation
+        event_datetime: "2026-05-12T20:30:00+08:00"
+tickers:
+  - symbol: nvda
+    company_name: NVIDIA Corporation
+    position:
+      status: holding
+      shares: 10
+      avg_cost: 120
+      portfolio_weight: 6.5
+""",
+    )
+
+    config = load_config(config_path)
+
+    assert config.tickers[0].position.status == "holding"
+    assert config.tickers[0].position.shares == 10
+    assert config.settings.macro.manual_events[0].name == "CPI Release"
+    assert config.settings.macro.manual_events[0].event_datetime.isoformat() == "2026-05-12T20:30:00+08:00"
+
+
 def test_load_config_rejects_invalid_timezone(tmp_path: Path) -> None:
     config_path = _write(
         tmp_path / "watchlist.yaml",

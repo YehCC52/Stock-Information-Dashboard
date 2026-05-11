@@ -1,4 +1,6 @@
 from datetime import date
+from datetime import datetime
+from datetime import timezone
 
 from stock_daily_research.macro import (
     BLS_EMPSIT_URL,
@@ -8,10 +10,13 @@ from stock_daily_research.macro import (
     filter_event_window,
     filter_upcoming_events,
     fallback_bls_employment_situation,
+    fallback_fomc_calendar,
+    manual_macro_events,
     parse_bls_employment_situation,
     parse_fomc_calendar,
     parse_fomc_statement_highlights,
 )
+from stock_daily_research.models import ManualMacroEvent
 
 
 def test_parse_bls_employment_situation_converts_to_report_timezone() -> None:
@@ -113,6 +118,29 @@ def test_fallback_bls_employment_situation_keeps_official_2026_schedule() -> Non
     assert april_release.source_url == BLS_EMPSIT_URL
 
 
+def test_fallback_fomc_calendar_keeps_2026_schedule() -> None:
+    events = fallback_fomc_calendar("Asia/Taipei")
+
+    april = next(event for event in events if event.source_time_label.startswith("2026-04-29"))
+    assert april.event_datetime.strftime("%Y-%m-%d %H:%M") == "2026-04-30 02:00"
+    assert april.source_url == FED_FOMC_URL
+
+
+def test_manual_macro_events_convert_to_economic_events() -> None:
+    events = manual_macro_events([
+        ManualMacroEvent(
+            name="CPI Release",
+            category="inflation",
+            event_datetime=datetime(2026, 5, 12, 20, 30, tzinfo=timezone.utc),
+            notes="manual table",
+        )
+    ])
+
+    assert events[0].name == "CPI Release"
+    assert events[0].category == "inflation"
+    assert events[0].source == "manual"
+
+
 def test_provider_uses_bls_fallback_without_noisy_warning(monkeypatch) -> None:
     provider = OfficialMacroCalendarProvider()
 
@@ -141,6 +169,28 @@ def test_provider_uses_bls_fallback_without_noisy_warning(monkeypatch) -> None:
         "FOMC Rate Decision",
         "Nonfarm Payrolls / Employment Situation",
     ]
+
+
+def test_provider_uses_fomc_fallback_when_fed_fetch_fails(monkeypatch) -> None:
+    provider = OfficialMacroCalendarProvider()
+
+    def fake_get(url: str) -> str:
+        if url == BLS_EMPSIT_URL:
+            return "April 2026 May 08, 2026 08:30 AM"
+        if url == FED_FOMC_URL:
+            raise RuntimeError("fed blocked")
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(provider, "_get", fake_get)
+
+    result = provider.fetch(
+        report_date=date(2026, 4, 29),
+        days_ahead=2,
+        timezone_name="Asia/Taipei",
+    )
+
+    assert result.warnings == []
+    assert any(event.source == "Federal Reserve fallback" for event in result.events)
 
 
 def test_provider_enriches_recent_fomc_with_official_statement(monkeypatch) -> None:

@@ -16,6 +16,13 @@ settings:
     enabled: true
     days_back: 1
     days_ahead: 14
+    manual_events:
+      - name: Example CPI Release
+        category: inflation
+        event_datetime: "2026-05-12T20:30:00+08:00"
+        source: manual
+        source_url: ""
+        notes: Add CPI, Treasury auctions, Fed speeches, or company-specific macro events here.
   notifications:
     telegram:
       enabled: false
@@ -31,6 +38,12 @@ tickers:
       - GPU
       - AI chips
       - data center
+    position:
+      status: holding
+      shares: 10
+      avg_cost: 120.00
+      portfolio_weight: 6.5
+      position_size: 1200
     trusted_news_domains:
       - reuters.com
       - cnbc.com
@@ -50,6 +63,8 @@ tickers:
       - Azure
       - Copilot
       - OpenAI
+    position:
+      status: watchlist
     trusted_news_domains:
       - reuters.com
       - cnbc.com

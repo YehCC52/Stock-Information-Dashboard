@@ -13,6 +13,15 @@ class TrustedXAccount:
 
 
 @dataclass(frozen=True)
+class PositionConfig:
+    status: str = "watchlist"
+    shares: float | None = None
+    avg_cost: float | None = None
+    portfolio_weight: float | None = None
+    position_size: float | None = None
+
+
+@dataclass(frozen=True)
 class TickerConfig:
     symbol: str
     company_name: str
@@ -20,6 +29,7 @@ class TickerConfig:
     keywords: list[str] = field(default_factory=list)
     trusted_news_domains: list[str] = field(default_factory=list)
     trusted_x_accounts: list[TrustedXAccount] = field(default_factory=list)
+    position: PositionConfig = field(default_factory=PositionConfig)
 
     @property
     def search_terms(self) -> list[str]:
@@ -63,6 +73,18 @@ class MacroSettings:
     enabled: bool = True
     days_back: int = 1
     days_ahead: int = 14
+    manual_events: list["ManualMacroEvent"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ManualMacroEvent:
+    name: str
+    category: str
+    event_datetime: datetime
+    source: str = "manual"
+    source_url: str = ""
+    importance: str = "high"
+    notes: str | None = None
 
 
 @dataclass(frozen=True)
@@ -210,6 +232,26 @@ class MarketContext:
 
 
 @dataclass(frozen=True)
+class PremarketMove:
+    symbol: str
+    name: str
+    last: float | None
+    previous_close: float | None
+    change_pct: float | None
+    source: str
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class PremarketSnapshot:
+    retrieved_at: datetime
+    benchmarks: list[PremarketMove] = field(default_factory=list)
+    watchlist_movers: list[PremarketMove] = field(default_factory=list)
+    gap_movers: list[PremarketMove] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class TickerReport:
     ticker: TickerConfig
     articles: list[NewsArticle]
@@ -228,3 +270,4 @@ class DailyReport:
     economic_events: list[EconomicEvent] = field(default_factory=list)
     market_sentiment: MarketSentiment | None = None
     market_context: MarketContext | None = None
+    premarket: PremarketSnapshot | None = None

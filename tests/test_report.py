@@ -4,9 +4,14 @@ from stock_daily_research.models import (
     DailyReport,
     EconomicEvent,
     EarningsDate,
+    MarketContext,
     MarketSentiment,
     MarketSentimentComponent,
     NewsArticle,
+    PositionConfig,
+    PremarketMove,
+    PremarketSnapshot,
+    RateLevel,
     TickerConfig,
     TickerReport,
     ValuationSnapshot,
@@ -17,19 +22,29 @@ from stock_daily_research.report import (
     days_until,
     earnings_delta,
     earnings_urgency,
+    eps_power_summary,
+    eps_revision_class,
     event_label,
     hero_items,
     important_news,
+    macro_risk_meter,
     news_tier,
     pe_class,
+    position_view,
+    post_earnings_items,
+    premarket_triage,
     priority_items,
+    quality_of_move,
     render_html_report,
     render_markdown_report,
     rsi_class,
     rsi_label,
     rule_alerts,
+    sector_leadership,
     sort_by_market_cap,
     topic_tags,
+    todays_catalysts,
+    todays_focus,
     top_news_count,
     ticker_insights,
     valuation_risk_label,
@@ -56,10 +71,18 @@ def test_render_html_report_includes_visual_sections() -> None:
 
     assert "<!doctype html>" in output
     assert "Macro Calendar" in output
+    assert "Overnight / Premarket" in output
+    assert "Today&#39;s Focus" in output or "Today's Focus" in output
+    assert "Today's Catalysts" in output
+    assert "Sector Leadership" in output
+    assert "Macro risk meter" in output
     assert "FOMC Rate Decision" in output
     assert "Valuation Snapshot" in output
+    assert "TTM EPS" in output
+    assert "FY1 EPS Rev 30D" in output
     assert "Ticker Cards" in output
     assert "Nvidia revenue beats" in output
+    assert "+4.00% on 1.8x volume" in output
     assert "5.26T" in output
 
 
@@ -204,6 +227,10 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert 'data-top-news-count=' in output
     assert 'stock-daily-notes' in output
     assert 'data-checklist="NVDA"' in output
+    assert 'data-thesis="NVDA"' in output
+    assert "stock-daily-thesis" in output
+    assert "data-premarket-change=" in output
+    assert "data-volume-x=" in output
     assert "Manage" in output
     assert "Next earnings" in output
     assert "Valuation risk" in output
@@ -354,6 +381,9 @@ def test_format_pct_signs_correctly() -> None:
     assert change_class(-3) == "neg"
     assert change_class(0) == "flat"
     assert change_class(None) == ""
+    assert eps_revision_class(1.2) == "pos"
+    assert eps_revision_class(-1.2) == "neg"
+    assert eps_revision_class(0.1) == "flat"
 
 
 def test_ma_signals_use_unified_grammar() -> None:
@@ -656,6 +686,223 @@ def test_post_earnings_status_window() -> None:
 
     # No earnings → None
     assert post_earnings_status(make(None), today) is None
+
+
+def test_todays_catalysts_groups_earnings_macro_and_post_earnings() -> None:
+    today = date(2026, 4, 28)
+    before_open = EarningsDate(
+        ticker="NVDA", company_name="NVIDIA",
+        earnings_date=today, time_of_day="before_market",
+        fiscal_quarter=None, fiscal_year=None,
+        eps_estimate=None, revenue_estimate=None, source="yfinance",
+        source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    yesterday = EarningsDate(
+        ticker="MSFT", company_name="Microsoft",
+        earnings_date=date(2026, 4, 27), time_of_day="after_market",
+        fiscal_quarter=None, fiscal_year=None,
+        eps_estimate=None, revenue_estimate=None, source="yfinance",
+        source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    macro = EconomicEvent(
+        name="FOMC Rate Decision",
+        category="rates",
+        event_datetime=datetime(2026, 4, 28, 18, 0, tzinfo=timezone.utc),
+        source="Federal Reserve",
+        source_url="https://example.com/fomc",
+    )
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(TickerConfig("NVDA", "NVIDIA"), [], [], None, before_open),
+            TickerReport(TickerConfig("MSFT", "Microsoft"), [], [], None, yesterday),
+        ],
+        economic_events=[macro],
+    )
+
+    catalysts = todays_catalysts(report)
+
+    assert catalysts["before_open"][0].ticker.symbol == "NVDA"
+    assert catalysts["macro"][0].name == "FOMC Rate Decision"
+    assert catalysts["post_earnings"][0]["item"].ticker.symbol == "MSFT"
+    assert post_earnings_items(report)[0]["days_ago"] == 1
+
+
+def test_quality_of_move_summarizes_volume_gap_and_atr() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={
+                "last_close": 104.0,
+                "previous_close": 100.0,
+                "volume_vs_20d": 1.8,
+                "gap_percent": 3.5,
+                "move_vs_atr": 1.2,
+                "eps_growth_pct": -2.0,
+                "fy1_eps_revision_30d": -1.5,
+            },
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+
+    quality = quality_of_move(item)
+
+    assert "+4.00% on 1.8x volume" in quality
+    assert "gap up 3.5%" in quality
+    assert "move > 20D ATR (1.2x)" in quality
+
+
+def test_eps_power_summary_labels_growth_and_revisions() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={"ttm_eps": 5.0, "next_fy_eps": 6.0, "eps_growth_pct": 20.0, "fy1_eps_revision_30d": 2.5},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+
+    summary = eps_power_summary(item)
+
+    assert "EPS: FY1 +20%" in summary
+    assert "revisions up" in summary
+
+
+def test_macro_risk_meter_buckets_pressure() -> None:
+    ctx = MarketContext(
+        rates=[
+            RateLevel(name="5Y", last=4.5, prev=4.4, change=6.0, unit="bp"),
+            RateLevel(name="10Y", last=4.7, prev=4.6, change=8.0, unit="bp"),
+            RateLevel(name="DXY", last=104.5, prev=104.0, change=0.48, unit="%"),
+            RateLevel(name="WTI", last=82.0, prev=80.0, change=2.5, unit="%"),
+        ],
+        retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+
+    rows = macro_risk_meter(ctx)
+    levels = {row["name"]: row["level"] for row in rows}
+
+    assert levels["Rates pressure"] == "high"
+    assert levels["Dollar pressure"] == "medium"
+    assert levels["Oil inflation pressure"] == "high"
+
+
+def test_position_view_computes_pl_and_book_impact() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(
+            symbol="NVDA",
+            company_name="NVIDIA",
+            position=PositionConfig(status="holding", shares=10, avg_cost=80.0, portfolio_weight=5.0),
+        ),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={"last_close": 100.0, "previous_close": 95.0},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+
+    view = position_view(item)
+
+    assert view["position_size"] == 1000.0
+    assert view["pl_pct"] == 25.0
+    assert abs(view["book_impact"] - 0.263) < 0.01
+
+
+def test_todays_focus_combines_alerts_premarket_and_positions() -> None:
+    today = date(2026, 4, 28)
+    earnings = EarningsDate(
+        ticker="NVDA", company_name="NVIDIA",
+        earnings_date=today, time_of_day="unknown",
+        fiscal_quarter=None, fiscal_year=None, eps_estimate=None, revenue_estimate=None,
+        source="yfinance", source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    item = TickerReport(
+        ticker=TickerConfig(
+            symbol="NVDA", company_name="NVIDIA",
+            position=PositionConfig(status="holding", portfolio_weight=8.0),
+        ),
+        articles=[NewsArticle(
+            ticker="NVDA", title="Nvidia earnings headline", source="Reuters", domain="reuters.com",
+            published_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            url="https://example.com/nvda", summary="", event_type="earnings", importance_score=1.2,
+        )],
+        x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=today, source="yfinance",
+            metrics={"last_close": 110.0, "previous_close": 100.0, "rsi_14": 75.0, "trailing_pe": 130.0},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+        earnings=earnings,
+    )
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[item],
+        premarket=PremarketSnapshot(
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            watchlist_movers=[PremarketMove("NVDA", "NVIDIA", 106.0, 100.0, 6.0, "pre-market")],
+            gap_movers=[PremarketMove("NVDA", "NVIDIA", 106.0, 100.0, 6.0, "pre-market")],
+        ),
+    )
+
+    focus = todays_focus(report)
+
+    assert focus["review_first"][0]["item"].ticker.symbol == "NVDA"
+    assert focus["do_not_chase"][0]["item"].ticker.symbol == "NVDA"
+
+
+def test_sector_leadership_and_premarket_triage() -> None:
+    today = date(2026, 4, 28)
+    nvda = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA", keywords=["GPU", "AI data center"]),
+        articles=[NewsArticle(
+            ticker="NVDA", title="Nvidia catalyst", source="Reuters", domain="reuters.com",
+            published_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            url="https://example.com/nvda", summary="", event_type="product", importance_score=1.0,
+        )],
+        x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=today, source="yfinance",
+            metrics={"last_close": 104.0, "previous_close": 100.0, "return_5d": 6.0, "return_20d": 12.0, "move_vs_atr": 1.1, "volume_vs_20d": 1.8},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+        earnings=None,
+    )
+    quiet = TickerReport(
+        ticker=TickerConfig(symbol="QUIET", company_name="Quiet Corp"),
+        articles=[], x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker="QUIET", as_of_date=today, source="yfinance",
+            metrics={"last_close": 51.0, "previous_close": 50.0, "return_5d": 1.0, "return_20d": 2.0},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+        earnings=None,
+    )
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[nvda, quiet],
+        market_context=MarketContext(benchmark_returns={"spy_20d": 5.0}),
+        premarket=PremarketSnapshot(
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            watchlist_movers=[
+                PremarketMove("NVDA", "NVIDIA", 107.0, 100.0, 7.0, "pre-market"),
+                PremarketMove("QUIET", "Quiet Corp", 51.0, 50.0, 2.0, "pre-market"),
+            ],
+        ),
+    )
+
+    groups = sector_leadership(report)
+    triage = premarket_triage(report)
+
+    assert any(row["label"] == "Semis" for row in groups)
+    assert triage["catalyst_backed"][0]["item"].ticker.symbol == "NVDA"
+    assert triage["unclear"][0]["item"].ticker.symbol == "QUIET"
 
 
 def test_sectors_in_use_collects_distinct_sorted_sectors() -> None:
@@ -1175,7 +1422,22 @@ def _sample_report() -> DailyReport:
                     ticker="NVDA",
                     as_of_date=date(2026, 4, 28),
                     source="yfinance",
-                    metrics={"market_cap": 5_260_000_000_000, "trailing_pe": 44.21, "rsi_14": 62.5},
+                    metrics={
+                        "market_cap": 5_260_000_000_000,
+                        "trailing_pe": 44.21,
+                        "forward_pe": 32.0,
+                        "ttm_eps": 4.2,
+                        "next_fy_eps": 5.1,
+                        "eps_growth_pct": 21.4,
+                        "fy1_eps_revision_30d": 2.2,
+                        "rsi_14": 62.5,
+                        "last_close": 104.0,
+                        "previous_close": 100.0,
+                        "volume_vs_20d": 1.8,
+                        "gap_percent": 3.5,
+                        "atr_20_percent": 2.4,
+                        "move_vs_atr": 1.2,
+                    },
                     retrieved_at=datetime(2026, 4, 28, 7, 0, tzinfo=timezone.utc),
                 ),
                 earnings=None,
@@ -1206,6 +1468,47 @@ def _sample_report() -> DailyReport:
                     label="risk-on",
                     detail="+5.0% over 20 sessions",
                 )
+            ],
+        ),
+        market_context=MarketContext(
+            rates=[
+                RateLevel(name="10Y", last=4.7, prev=4.6, change=8.0, unit="bp"),
+                RateLevel(name="DXY", last=104.5, prev=104.0, change=0.48, unit="%"),
+                RateLevel(name="WTI", last=82.0, prev=80.0, change=2.5, unit="%"),
+            ],
+            retrieved_at=datetime(2026, 4, 28, 7, 0, tzinfo=timezone.utc),
+        ),
+        premarket=PremarketSnapshot(
+            retrieved_at=datetime(2026, 4, 28, 11, 0, tzinfo=timezone.utc),
+            benchmarks=[
+                PremarketMove(
+                    symbol="QQQ",
+                    name="QQQ premarket",
+                    last=450.0,
+                    previous_close=445.0,
+                    change_pct=1.12,
+                    source="pre-market",
+                ),
+            ],
+            watchlist_movers=[
+                PremarketMove(
+                    symbol="NVDA",
+                    name="NVIDIA Corporation",
+                    last=107.0,
+                    previous_close=100.0,
+                    change_pct=7.0,
+                    source="pre-market",
+                ),
+            ],
+            gap_movers=[
+                PremarketMove(
+                    symbol="NVDA",
+                    name="NVIDIA Corporation",
+                    last=107.0,
+                    previous_close=100.0,
+                    change_pct=7.0,
+                    source="pre-market",
+                ),
             ],
         ),
     )

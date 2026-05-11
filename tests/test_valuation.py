@@ -1,6 +1,15 @@
 from datetime import date, datetime, timezone
 
-from stock_daily_research.valuation import coerce_date, compute_rsi, format_metric_value, normalize_yfinance_metrics
+import pandas as pd
+
+from stock_daily_research.valuation import (
+    coerce_date,
+    compute_move_quality_metrics,
+    compute_rsi,
+    fetch_yfinance_eps_metrics,
+    format_metric_value,
+    normalize_yfinance_metrics,
+)
 
 
 def test_normalize_yfinance_metrics_maps_known_fields() -> None:
@@ -10,6 +19,8 @@ def test_normalize_yfinance_metrics_maps_known_fields() -> None:
             "enterpriseValue": 1_450_000_000_000,
             "trailingPE": 44.2,
             "forwardPE": 26.6,
+            "trailingEps": 8.1,
+            "forwardEps": 9.4,
             "pegRatio": 0.77,
             "priceToSalesTrailing12Months": 24.5,
             "priceToBook": 33.4,
@@ -19,6 +30,8 @@ def test_normalize_yfinance_metrics_maps_known_fields() -> None:
     )
 
     assert metrics["market_cap"] == 1_500_000_000_000
+    assert metrics["ttm_eps"] == 8.1
+    assert metrics["forward_eps"] == 9.4
     assert metrics["peg_ratio"] == 0.77
     assert metrics["ev_to_ebitda"] == 36.0
 
@@ -67,3 +80,69 @@ def test_compute_rsi_buckets_recent_closes() -> None:
     assert compute_rsi(falling, 14) == 0.0
     assert compute_rsi(mixed, 14) is not None
     assert compute_rsi([100, 101], 14) is None
+
+
+def test_compute_move_quality_metrics_volume_gap_and_atr() -> None:
+    rows = []
+    for idx in range(25):
+        close = 100.0 + idx
+        rows.append({
+            "Open": close - 0.5,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": 1_000_000,
+        })
+    rows[-1]["Open"] = rows[-2]["Close"] * 1.03
+    rows[-1]["Close"] = rows[-2]["Close"] * 1.04
+    rows[-1]["High"] = rows[-1]["Close"] + 1.0
+    rows[-1]["Low"] = rows[-1]["Open"] - 1.0
+    rows[-1]["Volume"] = 2_000_000
+    hist = pd.DataFrame(rows)
+
+    metrics = compute_move_quality_metrics(hist)
+
+    assert metrics["volume_vs_20d"] == 2.0
+    assert metrics["gap_percent"] == 3.0
+    assert metrics["atr_20_percent"] is not None
+    assert metrics["move_vs_atr"] is not None
+
+
+def test_fetch_yfinance_eps_metrics_extracts_estimates_and_revisions() -> None:
+    class FakeAnalysis:
+        eps_trend = pd.DataFrame(
+            [{"current": 11.0, "30daysAgo": 10.0}],
+            index=pd.Index(["+1y"], name="period"),
+        )
+        eps_revisions = pd.DataFrame(
+            [{"upLast30days": 12, "downLast30days": 3}],
+            index=pd.Index(["+1y"], name="period"),
+        )
+
+    class FakeTicker:
+        _analysis = FakeAnalysis()
+
+        def get_earnings_estimate(self):
+            return pd.DataFrame(
+                [{"avg": 11.0, "growth": 0.22}],
+                index=pd.Index(["+1y"], name="period"),
+            )
+
+    metrics = fetch_yfinance_eps_metrics(FakeTicker(), {"ttm_eps": 9.0, "forward_eps": 10.0})
+
+    assert metrics["next_fy_eps"] == 11.0
+    assert metrics["eps_growth_pct"] == 22.0
+    assert metrics["fy1_eps_revision_30d"] == 10.0
+    assert metrics["fy1_eps_revision_up_30d"] == 12
+    assert metrics["fy1_eps_revision_down_30d"] == 3
+
+
+def test_fetch_yfinance_eps_metrics_falls_back_to_forward_eps_and_growth_calc() -> None:
+    class FakeTicker:
+        def get_earnings_estimate(self):
+            return None
+
+    metrics = fetch_yfinance_eps_metrics(FakeTicker(), {"ttm_eps": 8.0, "forward_eps": 10.0})
+
+    assert metrics["next_fy_eps"] == 10.0
+    assert metrics["eps_growth_pct"] == 25.0
