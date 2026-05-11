@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import datetime
 
 import yaml
 
@@ -11,8 +12,10 @@ from .models import (
     AppSettings,
     EarningsSettings,
     MacroSettings,
+    ManualMacroEvent,
     NewsSettings,
     NotificationSettings,
+    PositionConfig,
     TickerConfig,
     TelegramSettings,
     TrustedXAccount,
@@ -98,6 +101,32 @@ def _load_macro_settings(data: dict[str, Any]) -> MacroSettings:
         enabled=bool(data.get("enabled", True)),
         days_back=_positive_int(data.get("days_back", 1), "macro.days_back"),
         days_ahead=_positive_int(data.get("days_ahead", 14), "macro.days_ahead"),
+        manual_events=[_load_manual_macro_event(idx, item) for idx, item in enumerate(data.get("manual_events", []))],
+    )
+
+
+def _load_manual_macro_event(index: int, data: dict[str, Any]) -> ManualMacroEvent:
+    name = data.get("name")
+    category = data.get("category", "macro")
+    event_datetime = data.get("event_datetime")
+    if not name:
+        raise ValueError(f"macro.manual_events[{index}].name is required")
+    if not event_datetime:
+        raise ValueError(f"macro.manual_events[{index}].event_datetime is required")
+    try:
+        dt = datetime.fromisoformat(str(event_datetime).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"macro.manual_events[{index}].event_datetime must be ISO datetime") from exc
+    if dt.tzinfo is None:
+        raise ValueError(f"macro.manual_events[{index}].event_datetime must include timezone")
+    return ManualMacroEvent(
+        name=str(name),
+        category=str(category),
+        event_datetime=dt,
+        source=str(data.get("source", "manual")),
+        source_url=str(data.get("source_url", "")),
+        importance=str(data.get("importance", "high")),
+        notes=data.get("notes"),
     )
 
 
@@ -125,7 +154,27 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
         keywords=[str(value) for value in data.get("keywords", [])],
         trusted_news_domains=[str(value).lower() for value in data.get("trusted_news_domains", [])],
         trusted_x_accounts=[_load_x_account(index, idx, account) for idx, account in enumerate(data.get("trusted_x_accounts", []))],
+        position=_load_position(data.get("position", {})),
     )
+
+
+def _load_position(data: dict[str, Any]) -> PositionConfig:
+    return PositionConfig(
+        status=str(data.get("status", "watchlist")),
+        shares=_optional_float(data.get("shares")),
+        avg_cost=_optional_float(data.get("avg_cost")),
+        portfolio_weight=_optional_float(data.get("portfolio_weight")),
+        position_size=_optional_float(data.get("position_size")),
+    )
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Position field must be numeric, got {value!r}") from exc
 
 
 def _load_x_account(ticker_index: int, account_index: int, data: dict[str, Any]) -> TrustedXAccount:

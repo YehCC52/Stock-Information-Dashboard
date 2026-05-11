@@ -13,6 +13,15 @@ class TrustedXAccount:
 
 
 @dataclass(frozen=True)
+class PositionConfig:
+    status: str = "watchlist"
+    shares: float | None = None
+    avg_cost: float | None = None
+    portfolio_weight: float | None = None
+    position_size: float | None = None
+
+
+@dataclass(frozen=True)
 class TickerConfig:
     symbol: str
     company_name: str
@@ -20,6 +29,7 @@ class TickerConfig:
     keywords: list[str] = field(default_factory=list)
     trusted_news_domains: list[str] = field(default_factory=list)
     trusted_x_accounts: list[TrustedXAccount] = field(default_factory=list)
+    position: PositionConfig = field(default_factory=PositionConfig)
 
     @property
     def search_terms(self) -> list[str]:
@@ -63,6 +73,18 @@ class MacroSettings:
     enabled: bool = True
     days_back: int = 1
     days_ahead: int = 14
+    manual_events: list["ManualMacroEvent"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ManualMacroEvent:
+    name: str
+    category: str
+    event_datetime: datetime
+    source: str = "manual"
+    source_url: str = ""
+    importance: str = "high"
+    notes: str | None = None
 
 
 @dataclass(frozen=True)
@@ -175,6 +197,61 @@ class MarketSentiment:
 
 
 @dataclass(frozen=True)
+class RateLevel:
+    """Single rates / FX point for the macro overlay."""
+    name: str            # "10Y" / "5Y" / "DXY"
+    last: float
+    prev: float
+    change: float        # bp for yields, % for DXY
+    unit: str            # "bp" or "%"
+
+
+@dataclass(frozen=True)
+class BreadthRow:
+    """Pair-wise relative-return comparison (cap-weight vs equal-weight, etc.)."""
+    label: str           # "QQQ vs QQQE"
+    a_symbol: str
+    b_symbol: str
+    a_return: float      # 20-day total return %
+    b_return: float
+    spread: float        # a - b in pct points
+
+
+@dataclass(frozen=True)
+class MarketContext:
+    """Macro overlay: rates direction, market breadth, benchmark returns.
+
+    Computed once per run (one global fetch) — not per-ticker. Powers the
+    "is the tide going up or down" framing alongside MarketSentiment.
+    """
+    rates: list[RateLevel] = field(default_factory=list)
+    breadth: list[BreadthRow] = field(default_factory=list)
+    benchmark_returns: dict[str, float] = field(default_factory=dict)
+    retrieved_at: datetime | None = None
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PremarketMove:
+    symbol: str
+    name: str
+    last: float | None
+    previous_close: float | None
+    change_pct: float | None
+    source: str
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class PremarketSnapshot:
+    retrieved_at: datetime
+    benchmarks: list[PremarketMove] = field(default_factory=list)
+    watchlist_movers: list[PremarketMove] = field(default_factory=list)
+    gap_movers: list[PremarketMove] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class TickerReport:
     ticker: TickerConfig
     articles: list[NewsArticle]
@@ -192,3 +269,5 @@ class DailyReport:
     warnings: list[str] = field(default_factory=list)
     economic_events: list[EconomicEvent] = field(default_factory=list)
     market_sentiment: MarketSentiment | None = None
+    market_context: MarketContext | None = None
+    premarket: PremarketSnapshot | None = None

@@ -10,6 +10,34 @@ Generated at: {{ report.generated_at.isoformat() }}
 {% endfor %}
 {% endif %}
 
+{% if report.premarket %}
+## Overnight / Premarket
+
+{% if report.premarket.benchmarks %}
+### Benchmarks
+{% for move in report.premarket.benchmarks %}
+- {{ move.symbol }} ({{ move.name }}): {{ "%+.2f"|format(move.change_pct) if move.change_pct is not none else "N/A" }}% at {{ move.last|metric_value }} ({{ move.source }})
+{% endfor %}
+{% endif %}
+
+{% if report.premarket.gap_movers %}
+### Watchlist Gaps > +/-2%
+{% for move in report.premarket.gap_movers[:10] %}
+- {{ move.symbol }}: {{ "%+.2f"|format(move.change_pct) }}% at {{ move.last|metric_value }} ({{ move.source }})
+{% endfor %}
+{% endif %}
+
+{% endif %}
+
+## Today's Catalysts
+
+{% set cats = report.ticker_reports %}
+{% for item in report.ticker_reports if item.earnings and item.earnings.earnings_date == report.report_date %}
+- {{ item.ticker.symbol }} earnings today ({{ item.earnings.time_of_day }})
+{% else %}
+No watchlist earnings scheduled for today.
+{% endfor %}
+
 {% if report.market_sentiment %}
 ## Market Sentiment
 

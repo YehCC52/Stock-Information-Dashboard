@@ -7,7 +7,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .models import DailyReport, TickerReport
+from .models import DailyReport, MarketContext, TickerReport
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
@@ -24,10 +24,20 @@ METRIC_LABELS = {
     "sma_20": "SMA 20D",
     "sma_60": "SMA 60D",
     "sma_120": "SMA 120D",
+    "volume_vs_20d": "Volume / 20D",
+    "atr_20": "ATR 20D",
+    "atr_20_percent": "ATR %",
+    "move_vs_atr": "Move / ATR",
+    "gap_percent": "Gap %",
     "market_cap": "Market Cap",
     "enterprise_value": "Enterprise Value",
     "trailing_pe": "Trailing P/E",
     "forward_pe": "Forward P/E",
+    "ttm_eps": "TTM EPS",
+    "forward_eps": "Forward EPS",
+    "next_fy_eps": "Next FY EPS",
+    "eps_growth_pct": "EPS Growth",
+    "fy1_eps_revision_30d": "FY1 EPS Rev 30D",
     "peg_ratio": "PEG Ratio",
     "price_to_sales": "Price/Sales",
     "price_to_book": "Price/Book",
@@ -73,8 +83,18 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["ticker_anchor"] = lambda symbol: f"ticker-{symbol.lower()}"
     env.filters["event_label"] = event_label
     env.filters["news_rationale"] = news_rationale
+    env.globals["news_triage_label"] = lambda item, article: news_triage_label(item, article, report.report_date)
+    from .market_context import market_regime, rates_interpretation
+    env.filters["rates_interpretation"] = rates_interpretation
+    env.filters["market_regime"] = lambda rpt: market_regime(
+        rpt.market_context,
+        rpt.market_sentiment.score if rpt.market_sentiment else None,
+    )
     env.filters["post_earnings"] = lambda item: post_earnings_status(item, report.report_date)
-    env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date)
+    benchmarks = {}
+    if report.market_context and report.market_context.benchmark_returns:
+        benchmarks = report.market_context.benchmark_returns
+    env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks)
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
     env.filters["metric_raw"] = metric_raw
@@ -85,8 +105,12 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["daily_change"] = daily_change_pct
     env.filters["from_52w_high"] = from_52w_high_pct
     env.filters["from_52w_low"] = from_52w_low_pct
+    env.filters["premarket_change"] = lambda item: premarket_change_pct(report, item.ticker.symbol)
+    env.filters["position_view"] = position_view
+    env.filters["eps_revision_class"] = eps_revision_class
     env.filters["format_pct"] = format_pct
     env.filters["change_class"] = change_class
+    env.filters["format_ratio"] = format_ratio
     env.filters["rsi_class"] = rsi_class
     env.filters["rsi_label"] = rsi_label
     template = env.get_template("daily_report.html.j2")
@@ -97,6 +121,12 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         earnings_soon=earnings_soon(report),
         important_news=important_news(report),
         hero=hero_items(report),
+        todays_catalysts=todays_catalysts(report),
+        post_earnings_items=post_earnings_items(report),
+        macro_risk=macro_risk_meter(report.market_context),
+        todays_focus=todays_focus(report),
+        sector_leadership=sector_leadership(report),
+        premarket_triage=premarket_triage(report),
         priority_items=priority_items(report),
         rule_alerts=rule_alerts(report),
         valuation_rows=sorted(report.ticker_reports, key=lambda item: item.ticker.symbol),
@@ -106,9 +136,16 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         valuation_keys=[
             "last_close",
             "rsi_14",
+            "volume_vs_20d",
+            "gap_percent",
+            "atr_20_percent",
             "market_cap",
             "trailing_pe",
             "forward_pe",
+            "ttm_eps",
+            "next_fy_eps",
+            "eps_growth_pct",
+            "fy1_eps_revision_30d",
             "peg_ratio",
             "price_to_sales",
             "price_to_book",
@@ -150,11 +187,13 @@ def build_summary(report: DailyReport) -> dict[str, int]:
         1 for item in report.ticker_reports
         if (rsi := rsi_value(item)) is not None and rsi <= 30
     )
+    premarket_gap_count = len(report.premarket.gap_movers) if report.premarket else 0
     return {
         "ticker_count": ticker_count,
         "tickers_with_news": tickers_with_news,
         "tickers_with_warnings": tickers_with_warnings,
         "earnings_soon_count": earnings_soon_count,
+        "premarket_gap_count": premarket_gap_count,
         "hot_count": hot_count,
         "global_warning_count": len(report.warnings),
         "economic_event_count": len(report.economic_events),
@@ -264,10 +303,17 @@ def _news_editorial_score(pair: tuple[TickerReport, object], anchor: date) -> fl
 
     delta = earnings_delta(item, anchor)
     if delta is not None:
-        if 0 <= delta <= 1:
-            score += 14
+        if delta == 0:
+            score += 26
+        elif delta == 1:
+            score += 20
         elif 0 <= delta <= 7:
             score += 8
+        elif -2 <= delta < 0:
+            score += 14
+
+    if event_type in ("macro", "market_reaction"):
+        score += 8
 
     source_key = f"{getattr(article, 'domain', '')} {getattr(article, 'source', '')}".lower()
     if any(source in source_key for source in ("reuters", "bloomberg", "wsj", "wall street journal", "financial times", "ft.com", "cnbc")):
@@ -279,6 +325,21 @@ def _news_editorial_score(pair: tuple[TickerReport, object], anchor: date) -> fl
         if age_days >= 0:
             score += max(0, 3 - age_days)
     return score
+
+
+def news_triage_label(item: TickerReport, article: object, anchor: date) -> str:
+    """Explain why a news item is near the top of the morning queue."""
+    delta = earnings_delta(item, anchor)
+    event_type = str(getattr(article, "event_type", "other"))
+    if delta == 0:
+        return "today catalyst"
+    if delta == 1:
+        return "tomorrow catalyst"
+    if delta is not None and -2 <= delta < 0:
+        return "post-earnings"
+    if event_type in ("macro", "market_reaction"):
+        return "macro-linked"
+    return "watchlist"
 
 
 def date_or_na(value: object) -> str:
@@ -387,6 +448,36 @@ def earnings_action(item: TickerReport, anchor: date) -> str | None:
     return None
 
 
+def relative_strength(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, float]:
+    """Return ticker's 20D return spread vs SPY and QQQ.
+
+    benchmarks maps "spy_20d" / "qqq_20d" → return %. Returns
+    {"vs_spy": spread, "vs_qqq": spread} for whichever is available.
+    """
+    if not item.valuation:
+        return {}
+    ticker_return = _as_float(item.valuation.metrics.get("return_20d"))
+    if ticker_return is None:
+        return {}
+    out: dict[str, float] = {}
+    for bench_label, bench_key in (("vs_spy", "spy_20d"), ("vs_qqq", "qqq_20d")):
+        bench_return = benchmarks.get(bench_key)
+        if isinstance(bench_return, (int, float)):
+            out[bench_label] = round(ticker_return - bench_return, 2)
+    return out
+
+
+def format_relative_strength(rs: dict[str, float]) -> list[str]:
+    """Compact phrases like '+2.3% vs SPY 20D'."""
+    parts: list[str] = []
+    for key, label in (("vs_spy", "vs SPY 20D"), ("vs_qqq", "vs QQQ 20D")):
+        if key in rs:
+            value = rs[key]
+            sign = "+" if value >= 0 else ""
+            parts.append(f"{sign}{value:.1f}% {label}")
+    return parts
+
+
 def post_earnings_status(item: TickerReport, anchor: date) -> dict[str, object] | None:
     """If the ticker reported earnings within the last N days, return a small
     banner descriptor so the card can prompt the user to log a review.
@@ -402,6 +493,174 @@ def post_earnings_status(item: TickerReport, anchor: date) -> dict[str, object] 
     if 0 < delta <= 7:
         return {"days_ago": delta, "earnings_date": item.earnings.earnings_date}
     return None
+
+
+def post_earnings_items(report: DailyReport, days: int = 7) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for item in report.ticker_reports:
+        status = post_earnings_status(item, report.report_date)
+        if not status:
+            continue
+        reaction = daily_change_pct(item)
+        rows.append({
+            "item": item,
+            "days_ago": status["days_ago"],
+            "earnings_date": status["earnings_date"],
+            "reaction": reaction,
+        })
+    return sorted(rows, key=lambda row: (int(row["days_ago"]), row["item"].ticker.symbol))
+
+
+def premarket_change_pct(report: DailyReport, symbol: str) -> float | None:
+    if not report.premarket:
+        return None
+    for move in report.premarket.watchlist_movers:
+        if move.symbol == symbol:
+            return move.change_pct
+    return None
+
+
+def _ticker_map(report: DailyReport) -> dict[str, TickerReport]:
+    return {item.ticker.symbol: item for item in report.ticker_reports}
+
+
+def todays_catalysts(report: DailyReport) -> dict[str, list[object]]:
+    catalysts: dict[str, list[object]] = {
+        "before_open": [],
+        "after_close": [],
+        "during_market": [],
+        "unknown": [],
+        "macro": [],
+        "post_earnings": [],
+    }
+    for item in report.ticker_reports:
+        if not item.earnings or item.earnings.earnings_date != report.report_date:
+            continue
+        bucket = item.earnings.time_of_day
+        if bucket not in ("before_market", "after_market", "during_market"):
+            bucket = "unknown"
+        key = {
+            "before_market": "before_open",
+            "after_market": "after_close",
+            "during_market": "during_market",
+            "unknown": "unknown",
+        }[bucket]
+        catalysts[key].append(item)
+
+    catalysts["macro"] = [
+        event for event in report.economic_events
+        if event.event_datetime.date() == report.report_date
+    ]
+    catalysts["post_earnings"] = post_earnings_items(report)
+    return catalysts
+
+
+def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
+    """Condense the morning dashboard into direct action buckets."""
+    review_candidates: list[tuple[float, TickerReport, list[str]]] = []
+    do_not_chase: list[tuple[float, TickerReport, list[str]]] = []
+    pullback: list[tuple[float, TickerReport, list[str]]] = []
+
+    alert_ranks = {str(alert["symbol"]): float(alert.get("rank", 0)) for alert in rule_alerts(report)}
+    gaps = {m.symbol: abs(m.change_pct or 0.0) for m in report.premarket.gap_movers} if report.premarket else {}
+
+    for item in report.ticker_reports:
+        symbol = item.ticker.symbol
+        reasons: list[str] = []
+        score = alert_ranks.get(symbol, 0.0)
+
+        delta = earnings_delta(item, report.report_date)
+        if delta == 0:
+            reasons.append("earnings today")
+            score += 8
+        elif delta == 1:
+            reasons.append("earnings tomorrow")
+            score += 5
+        elif delta is not None and -2 <= delta < 0:
+            reasons.append("post-earnings review")
+            score += 6
+
+        pmove = premarket_change_pct(report, symbol)
+        if pmove is not None and abs(pmove) >= 2.0:
+            reasons.append(f"premarket {format_pct(pmove)}")
+            score += min(abs(pmove), 8)
+
+        top_count = top_news_count(item)
+        if top_count:
+            reasons.append(f"{top_count} top headline{'s' if top_count != 1 else ''}")
+            score += top_count * 3
+
+        if item.ticker.position.status == "holding":
+            reasons.append("holding")
+            score += 3
+
+        if score > 0:
+            review_candidates.append((score, item, reasons))
+
+        overextended = valuation_risk_label(item) in ("High", "Extreme")
+        rsi = rsi_value(item)
+        q = quality_of_move(item)
+        if (pmove is not None and pmove >= 2.0) or (daily_change_pct(item) or 0) >= 3.0:
+            chase_reasons = []
+            if pmove is not None and pmove >= 2.0:
+                chase_reasons.append(f"premarket {format_pct(pmove)}")
+            if rsi is not None and rsi >= 70:
+                chase_reasons.append(f"RSI {rsi:.0f}")
+            if overextended:
+                chase_reasons.append(f"{valuation_risk_label(item)} valuation")
+            if q:
+                chase_reasons.extend(q[:1])
+            if len(chase_reasons) >= 2:
+                do_not_chase.append((len(chase_reasons) + abs(pmove or 0), item, chase_reasons))
+
+        from_high = from_52w_high_pct(item)
+        if from_high is not None and -12.0 <= from_high <= -3.0:
+            pb_reasons = [f"{abs(from_high):.1f}% below 52w high"]
+            if item.articles:
+                pb_reasons.append(f"{len(item.articles)} headline{'s' if len(item.articles) != 1 else ''}")
+            if valuation_risk_label(item) in ("None", "Elevated"):
+                pb_reasons.append("less stretched")
+            pullback.append((100 + from_high + len(item.articles), item, pb_reasons))
+        elif symbol in gaps and (pmove := premarket_change_pct(report, symbol)) is not None and pmove < -2.0:
+            pullback.append((abs(pmove), item, [f"premarket pullback {format_pct(pmove)}"]))
+
+    def pack(rows: list[tuple[float, TickerReport, list[str]]]) -> list[dict[str, object]]:
+        return [
+            {"item": item, "score": score, "reasons": reasons[:3]}
+            for score, item, reasons in sorted(rows, key=lambda row: (-row[0], row[1].ticker.symbol))[:3]
+        ]
+
+    return {
+        "review_first": pack(review_candidates),
+        "do_not_chase": pack(do_not_chase),
+        "watch_pullback": pack(pullback),
+    }
+
+
+def position_view(item: TickerReport) -> dict[str, object]:
+    pos = item.ticker.position
+    last = _as_float(item.valuation.metrics.get("last_close")) if item.valuation else None
+    prev = _as_float(item.valuation.metrics.get("previous_close")) if item.valuation else None
+    shares = pos.shares
+    avg_cost = pos.avg_cost
+    position_size = pos.position_size
+    if position_size is None and shares is not None and last is not None:
+        position_size = shares * last
+    pl_pct = None
+    if avg_cost is not None and avg_cost > 0 and last is not None:
+        pl_pct = (last - avg_cost) / avg_cost * 100.0
+    book_impact = None
+    if pos.portfolio_weight is not None and prev is not None and last is not None and prev:
+        book_impact = pos.portfolio_weight * ((last - prev) / prev)
+    return {
+        "status": pos.status,
+        "shares": shares,
+        "avg_cost": avg_cost,
+        "portfolio_weight": pos.portfolio_weight,
+        "position_size": position_size,
+        "pl_pct": pl_pct,
+        "book_impact": book_impact,
+    }
 
 
 def daily_change_pct(item: TickerReport) -> float | None:
@@ -427,6 +686,57 @@ def format_pct(value: object, *, sign: bool = True) -> str:
     return fmt.format(value)
 
 
+def format_ratio(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "N/A"
+    if value != value:
+        return "N/A"
+    return f"{value:.2f}x"
+
+
+def eps_revision_class(value: object) -> str:
+    if not isinstance(value, (int, float)) or value != value:
+        return "flat"
+    if value > 0.5:
+        return "pos"
+    if value < -0.5:
+        return "neg"
+    return "flat"
+
+
+def eps_power_summary(item: TickerReport) -> str:
+    if not item.valuation:
+        return ""
+    metrics = item.valuation.metrics
+    growth = _as_float(metrics.get("eps_growth_pct"))
+    revision = _as_float(metrics.get("fy1_eps_revision_30d"))
+    ttm_eps = _as_float(metrics.get("ttm_eps"))
+    next_fy_eps = _as_float(metrics.get("next_fy_eps"))
+
+    parts: list[str] = []
+    if ttm_eps is not None and ttm_eps <= 0:
+        parts.append("EPS negative / unstable")
+    elif growth is not None:
+        if growth >= 5:
+            parts.append(f"EPS: FY1 +{growth:.0f}%")
+        elif growth <= -5:
+            parts.append(f"EPS: FY1 {growth:.0f}%")
+        else:
+            parts.append("EPS: flat")
+    elif next_fy_eps is not None:
+        parts.append(f"Next FY EPS {next_fy_eps:.2f}")
+
+    if revision is not None:
+        if revision > 0.5:
+            parts.append("revisions up")
+        elif revision < -0.5:
+            parts.append("revisions down")
+        else:
+            parts.append("flat revisions")
+
+    return " | ".join(parts)
+
+
 def change_class(value: object, *, threshold: float = 0.0) -> str:
     """CSS class for a percentage value: pos / neg / flat."""
     if not isinstance(value, (int, float)) or value != value:
@@ -449,6 +759,37 @@ def from_52w_high_pct(item: TickerReport) -> float | None:
     if last != last or high != high or high == 0:
         return None
     return (last - high) / high * 100.0
+
+
+def quality_of_move(item: TickerReport) -> list[str]:
+    """Compact quality signals for whether a daily move has confirmation."""
+    if not item.valuation:
+        return []
+    metrics = item.valuation.metrics
+    parts: list[str] = []
+
+    change = daily_change_pct(item)
+    volume_x = _as_float(metrics.get("volume_vs_20d"))
+    if change is not None and volume_x is not None:
+        parts.append(f"{format_pct(change)} on {volume_x:.1f}x volume")
+    elif change is not None:
+        parts.append(f"{format_pct(change)} today")
+    elif volume_x is not None:
+        parts.append(f"{volume_x:.1f}x volume")
+
+    gap = _as_float(metrics.get("gap_percent"))
+    if gap is not None and abs(gap) >= 1.0:
+        direction = "up" if gap > 0 else "down"
+        parts.append(f"gap {direction} {abs(gap):.1f}%")
+
+    move_vs_atr = _as_float(metrics.get("move_vs_atr"))
+    if move_vs_atr is not None:
+        if move_vs_atr >= 1.0:
+            parts.append(f"move > 20D ATR ({move_vs_atr:.1f}x)")
+        elif move_vs_atr >= 0.7:
+            parts.append(f"move {move_vs_atr:.1f}x ATR")
+
+    return parts
 
 
 def sectors_in_use(report: DailyReport) -> list[str]:
@@ -498,6 +839,168 @@ def overextended_tickers(report: DailyReport) -> list[dict[str, object]]:
             out.append({"item": tr, "score": len(flags), "reasons": flags})
 
     return sorted(out, key=lambda entry: entry["score"], reverse=True)
+
+
+def macro_risk_meter(context: MarketContext | None) -> list[dict[str, str]]:
+    if context is None:
+        return []
+
+    rates = context.rates
+    yields = [r for r in rates if r.unit == "bp"]
+    dxy = next((r for r in rates if r.name == "DXY"), None)
+    wti = next((r for r in rates if r.name == "WTI"), None)
+    rows: list[dict[str, str]] = []
+
+    if yields:
+        avg_bp = sum(r.change for r in yields) / len(yields)
+        rows.append({
+            "name": "Rates pressure",
+            "level": _risk_level(avg_bp, medium=2.0, high=5.0),
+            "detail": f"{avg_bp:+.1f}bp avg yield move",
+        })
+
+    if dxy is not None:
+        rows.append({
+            "name": "Dollar pressure",
+            "level": _risk_level(dxy.change, medium=0.25, high=0.50),
+            "detail": f"DXY {dxy.change:+.2f}%",
+        })
+
+    if wti is not None:
+        rows.append({
+            "name": "Oil inflation pressure",
+            "level": _risk_level(wti.change, medium=1.0, high=2.0),
+            "detail": f"WTI {wti.change:+.2f}%",
+        })
+
+    return rows
+
+
+SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Semis", ("semiconductor", "semi", "chip", "gpu", "soxx", "nvda", "amd", "avgo", "tsm", "asml", "arm")),
+    ("Mega-cap software", ("software", "cloud", "azure", "copilot", "msft", "crm", "adbe", "orcl")),
+    ("Memory", ("memory", "dram", "nand", "hbm", "ssd", "mu", "wdc", "stx")),
+    ("EV", ("ev", "electric vehicle", "autonomous", "tesla", "tsla", "rivn", "nio")),
+    ("Internet / ads", ("advertising", "ads", "search", "social", "internet", "googl", "meta", "amzn")),
+    ("AI infra", ("ai", "data center", "server", "networking", "accelerator", "gpu")),
+)
+
+
+def sector_leadership(report: DailyReport) -> list[dict[str, object]]:
+    spy_20d = None
+    if report.market_context and report.market_context.benchmark_returns:
+        spy_20d = report.market_context.benchmark_returns.get("spy_20d")
+    rows: list[dict[str, object]] = []
+    assigned: set[str] = set()
+    for label, terms in SECTOR_GROUPS:
+        members = [
+            item for item in report.ticker_reports
+            if _matches_sector_group(item, terms)
+        ]
+        if not members:
+            continue
+        assigned.update(item.ticker.symbol for item in members)
+        one_day = _avg_metric(members, daily_change_pct)
+        ret_5d = _avg_metric(members, lambda item: _metric_float(item, "return_5d"))
+        ret_20d = _avg_metric(members, lambda item: _metric_float(item, "return_20d"))
+        rel_spy = ret_20d - spy_20d if ret_20d is not None and isinstance(spy_20d, (int, float)) else None
+        rows.append({
+            "label": label,
+            "members": members,
+            "symbols": ", ".join(item.ticker.symbol for item in members[:6]),
+            "one_day": one_day,
+            "ret_5d": ret_5d,
+            "ret_20d": ret_20d,
+            "rel_spy": rel_spy,
+        })
+
+    other = [item for item in report.ticker_reports if item.ticker.symbol not in assigned]
+    if other:
+        ret_20d = _avg_metric(other, lambda item: _metric_float(item, "return_20d"))
+        rel_spy = ret_20d - spy_20d if ret_20d is not None and isinstance(spy_20d, (int, float)) else None
+        rows.append({
+            "label": "Other watchlist",
+            "members": other,
+            "symbols": ", ".join(item.ticker.symbol for item in other[:6]),
+            "one_day": _avg_metric(other, daily_change_pct),
+            "ret_5d": _avg_metric(other, lambda item: _metric_float(item, "return_5d")),
+            "ret_20d": ret_20d,
+            "rel_spy": rel_spy,
+        })
+
+    return sorted(rows, key=lambda row: (row["one_day"] is None, -(row["one_day"] or -999)))
+
+
+def premarket_triage(report: DailyReport) -> dict[str, list[dict[str, object]]]:
+    if not report.premarket:
+        return {"catalyst_backed": [], "unclear": []}
+    by_symbol = _ticker_map(report)
+    catalyst_backed: list[dict[str, object]] = []
+    unclear: list[dict[str, object]] = []
+    for move in report.premarket.watchlist_movers:
+        item = by_symbol.get(move.symbol)
+        if item is None:
+            continue
+        headline_count = len(item.articles)
+        delta = earnings_delta(item, report.report_date)
+        move_vs_atr = _metric_float(item, "move_vs_atr")
+        volume_x = _metric_float(item, "volume_vs_20d")
+        reasons: list[str] = []
+        if headline_count:
+            reasons.append(f"{headline_count} headline{'s' if headline_count != 1 else ''}")
+        if delta is not None and -1 <= delta <= 1:
+            reasons.append("earnings window")
+        if move_vs_atr is not None and move_vs_atr >= 1.0:
+            reasons.append(f"> ATR ({move_vs_atr:.1f}x)")
+        if volume_x is not None and volume_x >= 1.5:
+            reasons.append(f"{volume_x:.1f}x volume")
+        row = {"move": move, "item": item, "reasons": reasons}
+        if headline_count or (delta is not None and -1 <= delta <= 1) or len(reasons) >= 2:
+            catalyst_backed.append(row)
+        else:
+            unclear.append(row)
+
+    return {
+        "catalyst_backed": catalyst_backed[:8],
+        "unclear": unclear[:8],
+    }
+
+
+def _matches_sector_group(item: TickerReport, terms: tuple[str, ...]) -> bool:
+    text = " ".join([
+        item.ticker.symbol,
+        item.ticker.company_name,
+        *item.ticker.aliases,
+        *item.ticker.keywords,
+        str(item.valuation.metrics.get("sector", "")) if item.valuation else "",
+        str(item.valuation.metrics.get("industry", "")) if item.valuation else "",
+    ]).lower()
+    return any(term in text for term in terms)
+
+
+def _metric_float(item: TickerReport, key: str) -> float | None:
+    if not item.valuation:
+        return None
+    return _as_float(item.valuation.metrics.get(key))
+
+
+def _avg_metric(items: list[TickerReport], getter: object) -> float | None:
+    values = []
+    for item in items:
+        value = getter(item)  # type: ignore[operator]
+        if value is not None:
+            values.append(value)
+    if not values:
+        return None
+    return round(sum(values) / len(values), 2)
+
+
+def _risk_level(value: float, *, medium: float, high: float) -> str:
+    if value >= high:
+        return "high"
+    if value >= medium:
+        return "medium"
+    return "low"
 
 
 # Within this percent of 20D SMA (from above) - "Near 20D support".
@@ -775,6 +1278,7 @@ def rule_alerts(report: DailyReport) -> list[dict[str, object]]:
         top_news_count = sum(1 for article in tr.articles if article.importance_score >= 1.0)
         high_pe = _highest_pe(tr)
         rsi = rsi_value(tr)
+        eps_revision = _metric_float(tr, "fy1_eps_revision_30d")
         signals: list[str] = []
         details: list[str] = []
         rank = 0
@@ -802,6 +1306,12 @@ def rule_alerts(report: DailyReport) -> list[dict[str, object]]:
             signal = "extreme valuation" if value >= 200 else "stretched valuation"
             alert_tone = "danger" if value >= 200 else "warn"
             add(signal, f"{METRIC_LABELS[label]} {value:.0f}.", signal_tone=alert_tone, signal_rank=4 if value >= 200 else 3)
+
+        if eps_revision is not None:
+            if eps_revision < -0.5:
+                add("EPS revisions down", f"FY1 EPS revision {eps_revision:.1f}% over 30D.", signal_tone="danger" if high_pe else "warn", signal_rank=3)
+            elif eps_revision > 1.0 and high_pe is not None and high_pe[1] >= 100:
+                add("high multiple but EPS revisions up", f"FY1 EPS revision +{eps_revision:.1f}% over 30D.", signal_rank=2)
 
         if earnings_soon_flag and not tr.articles:
             add("no trusted news", f"{days_until(tr.earnings.earnings_date, report.report_date)}; verify company and source updates.", signal_rank=2)
@@ -966,10 +1476,11 @@ def _stretched_valuation_tickers(report: DailyReport) -> list[TickerReport]:
     return [tr for _, tr in stretched]
 
 
-def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
+def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, float] | None = None) -> dict[str, list[str]]:
     """Auto-derived signals for a ticker card. Pure data summarization, no sentiment."""
     setup: list[str] = []
     risk: list[str] = []
+    quality: list[str] = []
 
     if item.earnings and item.earnings.earnings_date:
         delta = (item.earnings.earnings_date - anchor).days
@@ -990,6 +1501,10 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
         setup.append(f"{count} X signal{'s' if count != 1 else ''}")
 
     if item.valuation:
+        quality = quality_of_move(item)
+        eps_power = eps_power_summary(item)
+        if eps_power:
+            setup.append(eps_power)
         rsi = rsi_value(item)
         if rsi is not None:
             if rsi >= 70:
@@ -1017,6 +1532,9 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
             if isinstance(value, (int, float)) and value == value and value >= 100:
                 risk.append(f"{METRIC_LABELS[key]} {value:.0f}")
                 break
+        revision = _as_float(item.valuation.metrics.get("fy1_eps_revision_30d"))
+        if revision is not None and revision < -0.5:
+            risk.append(f"FY1 EPS revisions {revision:.1f}% 30D")
         ev_ebitda = item.valuation.metrics.get("ev_to_ebitda")
         if isinstance(ev_ebitda, (int, float)) and ev_ebitda == ev_ebitda and ev_ebitda < 0:
             risk.append("Negative EV/EBITDA")
@@ -1029,11 +1547,29 @@ def ticker_insights(item: TickerReport, anchor: date) -> dict[str, list[str]]:
     watch = list(item.ticker.keywords[:3]) if item.ticker.keywords else []
     action = earnings_action(item, anchor)
 
+    rs_phrases: list[str] = []
+    rs_tone = ""
+    if benchmarks:
+        rs = relative_strength(item, benchmarks)
+        rs_phrases = format_relative_strength(rs)
+        if rs:
+            both_pos = all(v >= 0 for v in rs.values())
+            both_neg = all(v <= 0 for v in rs.values())
+            if both_pos:
+                rs_tone = "up"
+            elif both_neg:
+                rs_tone = "down"
+            else:
+                rs_tone = "mixed"
+
     return {
         "setup": setup,
+        "quality": quality,
         "trend": trend,
         "trend_tone": trend_tone(trend),
         "trend_title": format_ma_distances(item) if trend else "",
+        "rs": rs_phrases,
+        "rs_tone": rs_tone,
         "risk": risk,
         "watch": watch,
         "action": action,

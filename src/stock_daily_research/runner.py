@@ -14,10 +14,12 @@ from dotenv import load_dotenv
 
 from .config import load_config
 from .macro import OfficialMacroCalendarProvider
+from .market_context import fetch_market_context
 from .market_sentiment import fetch_market_sentiment
 from .models import DailyReport, TickerConfig, TickerReport, XSignal
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
+from .premarket import fetch_overnight_premarket
 from .report import write_report
 from .storage import init_db, load_latest_valuation_snapshot, save_report
 from .valuation import fetch_yfinance_earnings_date, fetch_yfinance_valuation
@@ -56,12 +58,24 @@ def run_daily(
         global_warnings.append("Macro calendar fetching skipped by --no-macro.")
 
     market_sentiment = None
+    market_context = None
+    premarket = None
     if fetch_valuation:
         try:
             market_sentiment = fetch_market_sentiment()
             global_warnings.extend(market_sentiment.warnings)
         except Exception as exc:
             global_warnings.append(f"Market sentiment fetch failed: {exc}")
+        try:
+            market_context = fetch_market_context()
+            global_warnings.extend(market_context.warnings)
+        except Exception as exc:
+            global_warnings.append(f"Market context fetch failed: {exc}")
+        try:
+            premarket = fetch_overnight_premarket(config.tickers, max_workers=max(1, max_workers))
+            global_warnings.extend(premarket.warnings)
+        except Exception as exc:
+            global_warnings.append(f"Premarket snapshot fetch failed: {exc}")
     else:
         global_warnings.append("Market sentiment skipped because valuation fetching is disabled.")
 
@@ -98,6 +112,7 @@ def run_daily(
             timezone_name=config.settings.report_timezone,
             days_back=config.settings.macro.days_back,
             days_ahead=config.settings.macro.days_ahead,
+            manual_events=config.settings.macro.manual_events,
         )
         economic_events = macro_result.events
         global_warnings.extend(macro_result.warnings)
@@ -114,6 +129,8 @@ def run_daily(
             warnings=list(global_warnings),
             economic_events=economic_events,
             market_sentiment=market_sentiment,
+            market_context=market_context,
+            premarket=premarket,
         )
         save_report(conn, preliminary_report)
 
@@ -130,6 +147,8 @@ def run_daily(
         warnings=global_warnings,
         economic_events=economic_events,
         market_sentiment=market_sentiment,
+        market_context=market_context,
+        premarket=premarket,
     )
     write_report(report, output_dir)
     return report

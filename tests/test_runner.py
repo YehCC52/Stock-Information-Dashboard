@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from stock_daily_research.models import DailyReport, MarketSentiment, TickerConfig, TickerReport, ValuationSnapshot
+from stock_daily_research.models import DailyReport, MarketSentiment, PremarketSnapshot, TickerConfig, TickerReport, ValuationSnapshot
 from stock_daily_research.runner import run_daily
 from stock_daily_research.storage import init_db, save_report
 
@@ -25,6 +25,12 @@ def _sentiment() -> MarketSentiment:
         score=50,
         label="Neutral",
         source="test",
+        retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+
+
+def _premarket() -> PremarketSnapshot:
+    return PremarketSnapshot(
         retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
     )
 
@@ -77,6 +83,7 @@ def test_run_daily_records_valuation_failure_as_warning(tmp_path: Path, monkeypa
     monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", boom_valuation)
     monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", boom_earnings)
     monkeypatch.setattr("stock_daily_research.runner.fetch_market_sentiment", _sentiment)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_overnight_premarket", lambda *_args, **_kwargs: _premarket())
 
     report = run_daily(
         config_path=config_path,
@@ -131,6 +138,7 @@ def test_run_daily_uses_last_good_valuation_when_current_fetch_is_empty(tmp_path
     monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", empty_valuation)
     monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", lambda _ticker: None)
     monkeypatch.setattr("stock_daily_research.runner.fetch_market_sentiment", _sentiment)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_overnight_premarket", lambda *_args, **_kwargs: _premarket())
 
     report = run_daily(
         config_path=config_path,

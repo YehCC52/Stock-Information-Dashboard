@@ -10,10 +10,12 @@ This project is built for personal research workflow only. It is not investment 
 - Trusted news collection from Google News RSS, filtered by allowed domains
 - Manual trusted X/Twitter signal input from `data/x_posts.yaml`
 - Yahoo Finance style valuation snapshots via `yfinance`
+- EPS power fields: TTM EPS, next FY EPS, EPS growth, and FY1 EPS revision trend when available
 - Last-known-good valuation fallback from SQLite
 - Earnings date tracking
 - Official macro calendar highlights for FOMC and Employment Situation
 - Interactive HTML dashboard with search, filters, pins, notes, tags, checklist status, compare mode, exports, and work modes
+- Morning workflow blocks: Today's Focus, overnight / premarket movers, catalyst list, post-earnings scoreboard, sector leadership, thesis state, and position view
 - RSI 14 technical indicator and rule-based alerts
 - Free Fear & Greed style market sentiment proxy using SPY, QQQ, VIX, and HYG/LQD
 - Optional Telegram daily summary
@@ -54,6 +56,8 @@ Important settings:
 - `settings.macro.enabled`: enable official macro calendar collection
 - `settings.macro.days_back`: include recent macro events from the past N days
 - `settings.macro.days_ahead`: include upcoming macro events for the next N days
+- `settings.macro.manual_events`: optional manually maintained CPI, auction, Fed speech, or other critical fallback events
+- `tickers[].position`: optional lightweight book context (`status`, `shares`, `avg_cost`, `portfolio_weight`, `position_size`)
 - `tickers[].trusted_news_domains`: domains allowed for news collection
 - `tickers[].trusted_x_accounts`: trusted accounts for manual X signals
 
@@ -64,6 +68,22 @@ macro:
   enabled: true
   days_back: 1
   days_ahead: 14
+  manual_events:
+    - name: CPI Release
+      category: inflation
+      event_datetime: "2026-05-12T20:30:00+08:00"
+      source: manual
+      notes: Manually maintained fallback event
+```
+
+Position example:
+
+```yaml
+position:
+  status: holding
+  shares: 10
+  avg_cost: 120.00
+  portfolio_weight: 6.5
 ```
 
 ## Run
