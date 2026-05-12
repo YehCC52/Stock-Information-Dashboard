@@ -128,6 +128,30 @@ def test_fetch_yfinance_eps_metrics_extracts_estimates_and_revisions() -> None:
                 index=pd.Index(["+1y"], name="period"),
             )
 
+        @property
+        def revenue_estimate(self):
+            return pd.DataFrame(
+                [
+                    {"avg": 22_000_000_000, "growth": 0.08},
+                    {"avg": 100_000_000_000, "growth": 0.15},
+                ],
+                index=pd.Index(["+1q", "+1y"], name="period"),
+            )
+
+        def get_earnings_history(self):
+            return pd.DataFrame(
+                [
+                    {
+                        "quarter": "2026-04-27",
+                        "epsActual": 1.12,
+                        "epsEstimate": 1.00,
+                        "surprisePercent": 12.0,
+                        "reportedRevenue": 112_000_000_000,
+                        "revenueEstimate": 110_000_000_000,
+                    }
+                ]
+            )
+
     metrics = fetch_yfinance_eps_metrics(FakeTicker(), {"ttm_eps": 9.0, "forward_eps": 10.0})
 
     assert metrics["next_fy_eps"] == 11.0
@@ -135,6 +159,12 @@ def test_fetch_yfinance_eps_metrics_extracts_estimates_and_revisions() -> None:
     assert metrics["fy1_eps_revision_30d"] == 10.0
     assert metrics["fy1_eps_revision_up_30d"] == 12
     assert metrics["fy1_eps_revision_down_30d"] == 3
+    assert metrics["next_q_revenue"] == 22_000_000_000
+    assert metrics["next_q_revenue_growth_pct"] == 8.0
+    assert metrics["next_fy_revenue"] == 100_000_000_000
+    assert metrics["revenue_growth_pct"] == 15.0
+    assert metrics["latest_eps_surprise_pct"] == 12.0
+    assert metrics["latest_revenue_surprise_pct"] == 1.82
 
 
 def test_fetch_yfinance_eps_metrics_falls_back_to_forward_eps_and_growth_calc() -> None:

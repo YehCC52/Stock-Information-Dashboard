@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from stock_daily_research.models import DailyReport, MarketSentiment, PremarketSnapshot, TickerConfig, TickerReport, ValuationSnapshot
+from stock_daily_research.models import DailyReport, MarketContext, MarketSentiment, PremarketSnapshot, TickerConfig, TickerReport, ValuationSnapshot
 from stock_daily_research.runner import run_daily
 from stock_daily_research.storage import init_db, save_report
 
@@ -33,6 +33,10 @@ def _premarket() -> PremarketSnapshot:
     return PremarketSnapshot(
         retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
     )
+
+
+def _market_context() -> MarketContext:
+    return MarketContext(retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc))
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -155,6 +159,62 @@ def test_run_daily_uses_last_good_valuation_when_current_fetch_is_empty(tmp_path
     assert ticker_report.valuation.as_of_date == date(2026, 4, 27)
     assert ticker_report.valuation.metrics["market_cap"] == 123_000_000
     assert any("Valuation fallback used" in warning for warning in ticker_report.warnings)
+
+
+def test_run_daily_derives_revenue_revisions_from_valuation_history(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_config(tmp_path)
+    db_path = tmp_path / "stock.sqlite3"
+    previous = ValuationSnapshot(
+        ticker="NVDA",
+        as_of_date=date(2026, 3, 20),
+        source="yfinance",
+        metrics={"next_fy_revenue": 100.0, "next_q_revenue": 50.0},
+        retrieved_at=datetime(2026, 3, 20, 8, 0, tzinfo=timezone.utc),
+    )
+    previous_report = DailyReport(
+        report_date=date(2026, 3, 20),
+        generated_at=datetime(2026, 3, 20, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[],
+                x_signals=[],
+                valuation=previous,
+                earnings=None,
+            )
+        ],
+    )
+    with init_db(db_path) as conn:
+        save_report(conn, previous_report)
+
+    def current_valuation(_ticker):
+        return ValuationSnapshot(
+            ticker="NVDA",
+            as_of_date=date(2026, 4, 28),
+            source="yfinance",
+            metrics={"next_fy_revenue": 110.0, "next_q_revenue": 55.0},
+            retrieved_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", current_valuation)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", lambda _ticker: None)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_market_sentiment", _sentiment)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_market_context", _market_context)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_overnight_premarket", lambda *_args, **_kwargs: _premarket())
+
+    report = run_daily(
+        config_path=config_path,
+        report_date=date(2026, 4, 28),
+        output_dir=tmp_path / "reports",
+        db_path=db_path,
+        fetch_news=False,
+        fetch_valuation=True,
+        fetch_macro=False,
+    )
+
+    metrics = report.ticker_reports[0].valuation.metrics
+    assert metrics["fy1_revenue_revision_30d"] == 10.0
+    assert metrics["next_q_revenue_revision_30d"] == 10.0
 
 
 def test_run_daily_records_skipped_fetches_as_global_warnings(tmp_path: Path) -> None:

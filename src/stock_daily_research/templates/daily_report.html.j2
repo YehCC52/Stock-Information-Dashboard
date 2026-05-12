@@ -302,7 +302,10 @@
       margin-bottom: 18px;
     }
     .hero-card {
-      display: block;
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
       padding: 14px 16px;
       border-radius: 10px;
       border: 1px solid var(--border);
@@ -312,15 +315,37 @@
       position: relative;
       transition: transform 80ms ease, box-shadow 80ms ease;
     }
-    .hero-card:hover { transform: translateY(-1px); text-decoration: none; }
+    .hero-card:hover { transform: translateY(-1px); text-decoration: none; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.10); }
     .hero-card.imminent { border-color: var(--danger); background: var(--danger-bg); }
     .hero-card.soon { border-color: var(--warning); background: var(--warning-bg); }
     .hero-card.info { border-color: var(--info); background: var(--info-bg); }
-    .hero-card .hero-label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .hero-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: color-mix(in srgb, currentColor 12%, transparent);
+      color: var(--muted);
+    }
+    .hero-card.imminent .hero-icon { color: var(--danger); }
+    .hero-card.soon .hero-icon { color: var(--warning); }
+    .hero-card.info .hero-icon { color: var(--info); }
+    .hero-body { display: flex; flex-direction: column; min-width: 0; }
+    .hero-card .hero-label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; }
     .hero-card.imminent .hero-label { color: var(--danger); }
     .hero-card.soon .hero-label { color: var(--warning); }
     .hero-card.info .hero-label { color: var(--info); }
-    .hero-card .hero-headline { display: block; font-size: 17px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
+    .hero-card .hero-headline {
+      display: block;
+      font-size: 19px;
+      font-weight: 800;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
     .hero-card .hero-sub { display: block; color: var(--muted); font-size: 12px; }
 
     /* Header focus line */
@@ -347,7 +372,31 @@
     .stat.alert .stat-value { color: var(--warning); }
     .stat.alert.danger .stat-value { color: var(--danger); }
 
-    .section { padding: 16px; margin-bottom: 18px; }
+    .section { padding: 16px; margin-bottom: 18px; position: relative; }
+    .section::before {
+      content: "";
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: 0;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: transparent;
+    }
+    .section-primary {
+      background: color-mix(in srgb, var(--surface) 88%, var(--info-bg));
+      border-color: color-mix(in srgb, var(--info) 28%, var(--border));
+    }
+    .section-primary::before { background: var(--info); }
+    .section-secondary {
+      background: color-mix(in srgb, var(--surface) 94%, var(--surface-soft));
+    }
+    .section-secondary::before { background: color-mix(in srgb, var(--muted) 45%, transparent); }
+    .section-tertiary {
+      box-shadow: none;
+      background: var(--surface);
+      border-color: var(--border-soft);
+    }
     .section-header {
       display: flex;
       align-items: center;
@@ -412,6 +461,8 @@
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
     }
+    .morning-tile .value.change-info { color: var(--info); }
+    .morning-tile .value.change-warn { color: var(--warning); }
     .morning-tile .sub, .catalyst-card .sub {
       display: block;
       color: var(--muted);
@@ -468,21 +519,72 @@
       border-radius: 8px;
       background: var(--surface-alt);
       padding: 10px 12px;
+      position: relative;
+      overflow: hidden;
     }
+    .focus-column.review { border-color: color-mix(in srgb, var(--info) 30%, var(--border)); }
+    .focus-column.chase { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+    .focus-column.pullback { border-color: color-mix(in srgb, var(--good) 30%, var(--border)); }
+    .focus-column::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: var(--border);
+    }
+    .focus-column.review::before { background: var(--info); }
+    .focus-column.chase::before { background: var(--danger); }
+    .focus-column.pullback::before { background: var(--good); }
     .focus-column h3 {
+      display: flex;
+      align-items: center;
+      gap: 7px;
       margin-bottom: 8px;
       color: var(--muted);
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
     }
+    .focus-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      color: var(--surface);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+    .focus-column.review .focus-icon { background: var(--info); }
+    .focus-column.chase .focus-icon { background: var(--danger); }
+    .focus-column.pullback .focus-icon { background: var(--good); }
     .focus-list { list-style: none; margin: 0; padding: 0; }
     .focus-list li {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      column-gap: 8px;
       padding: 8px 0;
       border-bottom: 1px solid var(--border-soft);
       font-size: 13px;
     }
     .focus-list li:last-child { border-bottom: none; }
+    .focus-rank {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      grid-row: span 2;
+    }
     .focus-list a { font-weight: 800; color: var(--text); }
     .focus-reason { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
     .heatmap-table .symbols { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -501,6 +603,28 @@
     }
     .position-chip .label { display: block; color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
     .position-chip .value { display: block; font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-secondary {
+      margin-top: 8px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .card-secondary > summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 0 0;
+    }
+    .card-secondary > summary::-webkit-details-marker { display: none; }
+    .card-secondary > summary::after {
+      content: "Show";
+      color: var(--link);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .card-secondary[open] > summary::after { content: "Hide"; }
     .mode-bar {
       display: flex;
       flex-wrap: wrap;
@@ -742,42 +866,107 @@
     .news-list { margin: 0; padding: 0; list-style: none; }
     .news-item {
       display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 12px;
-      padding: 10px 12px;
+      grid-template-columns: 60px 1fr;
+      grid-template-rows: auto auto;
+      gap: 4px 12px;
+      padding: 12px 14px;
       border-left: 3px solid transparent;
       border-bottom: 1px solid var(--border-soft);
-      align-items: baseline;
       margin: 0 -12px;
     }
     .news-item:last-child { border-bottom: none; }
-    .news-item.tier-top { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 50%, transparent); }
-    .news-item.tier-primary { border-left-color: var(--warning); }
-    .news-item.editor-pick .symbol::after {
-      content: "Pick";
+    .news-item .symbol {
+      grid-row: 1 / span 2;
+      grid-column: 1;
       display: inline-flex;
-      margin-left: 6px;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--text);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      height: 22px;
+      align-self: start;
+      margin-top: 2px;
+    }
+    .news-item .title {
+      grid-row: 1;
+      grid-column: 2;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .news-item .title a { color: var(--text); }
+    .news-item .meta {
+      grid-row: 2;
+      grid-column: 2;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .news-item .news-why {
+      grid-row: 2;
+      grid-column: 2;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text);
+      font-style: normal;
+      margin: 0;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--info-bg) 60%, transparent);
+    }
+    .news-item .news-why .why-label {
+      font-weight: 700;
+      color: var(--info);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 9px;
+    }
+    /* If we have a Why row, put meta after it. They share row 2 so keep them in a flex column. */
+    .news-item.has-why .meta { grid-row: 3; }
+    /* Top tier — strongest visual */
+    .news-item.tier-top {
+      border-left-color: var(--danger);
+      border-left-width: 4px;
+      background: color-mix(in srgb, var(--danger-bg) 45%, transparent);
+    }
+    .news-item.tier-top .title { font-weight: 700; font-size: 15px; }
+    .news-item.tier-top .symbol { background: var(--danger-bg); color: var(--danger); }
+    /* Primary — medium */
+    .news-item.tier-primary { border-left-color: var(--warning); }
+    .news-item.tier-primary .symbol { background: var(--warning-bg); color: var(--warning); }
+    /* Editor pick — discreet badge after the title (top tier only) */
+    .news-item.editor-pick .title::after {
+      content: "Editor pick";
+      display: inline-flex;
+      margin-left: 8px;
       padding: 1px 6px;
       border-radius: 999px;
       color: var(--info);
       background: var(--info-bg);
       font-size: 9px;
       font-weight: 800;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       vertical-align: middle;
     }
-    .news-item.tier-minor .title a { color: var(--muted); }
-    .news-item.tier-minor .symbol { opacity: 0.7; }
-    .news-item .symbol { font-weight: 800; font-size: 13px; min-width: 56px; }
-    .news-item .title { font-size: 14px; line-height: 1.35; }
-    .news-item .title a { color: var(--text); }
-    .news-item .news-why {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 3px;
-      font-style: italic;
+    /* Minor — clearly downweight */
+    .news-item.tier-minor {
+      opacity: 0.55;
+      padding-top: 8px;
+      padding-bottom: 8px;
     }
+    .news-item.tier-minor:hover { opacity: 1; }
+    .news-item.tier-minor .title { font-size: 13px; }
+    .news-item.tier-minor .title a { color: var(--muted); }
+    .news-item.tier-minor .news-why { display: none; }
     .news-item .news-why .why-label {
       font-style: normal;
       font-weight: 700;
@@ -972,6 +1161,50 @@
       margin-left: auto;
       cursor: help;
     }
+
+    /* My Book Today — portfolio impact summary */
+    .my-book-section {
+      border: 1px solid color-mix(in srgb, var(--info) 40%, var(--border));
+      background: color-mix(in srgb, var(--info-bg) 20%, var(--surface));
+    }
+    .my-book-section h2 { color: var(--info); }
+    .my-book-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .my-book-card {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .my-book-card.winners { border-left: 3px solid var(--good); }
+    .my-book-card.losers { border-left: 3px solid var(--danger); }
+    .my-book-card.events { border-left: 3px solid var(--warning); }
+    .my-book-card.risks { border-left: 3px solid var(--info); }
+    .mb-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .mb-list { list-style: none; margin: 0; padding: 0; }
+    .mb-list li {
+      display: grid;
+      grid-template-columns: 56px auto 1fr;
+      gap: 8px;
+      align-items: baseline;
+      padding: 3px 0;
+      font-size: 12px;
+    }
+    .mb-list li a { font-weight: 800; color: var(--text); }
+    .mb-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .mb-detail { color: var(--muted); font-size: 11px; }
+    .mb-empty { color: var(--muted); font-size: 11px; font-style: italic; }
 
     /* Overextended list (top-of-dashboard danger panel) */
     .overextended-section {
@@ -1320,9 +1553,9 @@
           <input id="quick-search" class="search-box" type="search" placeholder="Search ticker or company" autocomplete="off">
           <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="Show only pinned tickers; everything else is hidden">Watchlist only</button>
           <button id="export-watchlist" type="button" class="tool-button" title="TXT: ticker, state, earnings timing, tag">Export watchlist</button>
-          <button id="export-notes" type="button" class="tool-button" title="JSON: notes and revisit dates saved in this browser">Export notes</button>
+          <button id="export-research" type="button" class="tool-button" title="JSON: current research state for CLI import back into SQLite">Export research</button>
           <button id="export-earnings" type="button" class="tool-button" title="JSON: ticker, company, earnings timing">Export earnings</button>
-          <div id="export-status" class="export-status" aria-live="polite">Exports: watchlist TXT | notes JSON | earnings JSON</div>
+          <div id="export-status" class="export-status" aria-live="polite">Exports: watchlist TXT | research JSON | earnings JSON</div>
         </div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
@@ -1342,6 +1575,10 @@
       {% if hero %}<a href="#hero">Today</a>{% endif %}
       <a href="#summary">Summary</a>
       <a href="#todays-focus">Focus</a>
+      <a href="#research-queue">Research</a>
+      {% if book_today %}<a href="#book-today">My Book</a>{% endif %}
+      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">My Book ({{ portfolio.holdings|length }})</a>{% endif %}
+      {% if book_impact %}<a href="#book-impact">Book Impact</a>{% endif %}
       {% if report.premarket %}<a href="#premarket">Premarket</a>{% endif %}
       <a href="#today-catalysts">Catalysts</a>
       {% if sector_leadership %}<a href="#sector-leadership">Sectors</a>{% endif %}
@@ -1355,6 +1592,7 @@
       <a href="#macro">Macro ({{ report.economic_events|length }})</a>
       <a href="#earnings">Earnings ({{ earnings_soon|length }})</a>
       <a href="#news">News ({{ important_news|length }})</a>
+      <a href="#changes">Changes</a>
       <a href="#valuation">Valuation</a>
       <a href="#tickers">Tickers ({{ report.ticker_reports|length }})</a>
     </nav>
@@ -1363,10 +1601,29 @@
       {% if hero %}
       <div id="hero" class="command-hero">
         {% for item in hero %}
-        <a class="hero-card {{ item.tone }}" href="{{ item.anchor }}">
-          <span class="hero-label">{{ item.label }}</span>
-          <span class="hero-headline">{{ item.headline }}</span>
-          <span class="hero-sub">{{ item.subtitle }}</span>
+        <a class="hero-card {{ item.tone }} hero-kind-{{ item.kind }}" href="{{ item.anchor }}">
+          <span class="hero-icon" aria-hidden="true">
+            {% if item.kind == "earnings" %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+            {% elif item.kind == "macro" or item.kind == "regime" %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+            {% elif item.kind == "premarket" %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12 12 8 16 12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>
+            {% elif item.kind == "risk" %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            {% elif item.kind == "focus" %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            {% elif item.kind == "valuation" %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/></svg>
+            {% else %}
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="12" y1="16" x2="12" y2="17"/></svg>
+            {% endif %}
+          </span>
+          <div class="hero-body">
+            <span class="hero-label">{{ item.label }}</span>
+            <span class="hero-headline">{{ item.headline }}</span>
+            <span class="hero-sub">{{ item.subtitle }}</span>
+          </div>
         </a>
         {% endfor %}
       </div>
@@ -1384,7 +1641,7 @@
           <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">Earnings <=7d</span></div>
           <div class="stat {% if summary.economic_event_count %}alert{% endif %}" title="Tracked macro events"><span class="stat-value">{{ summary.economic_event_count }}</span><span class="stat-label">Macro</span></div>
           <div class="stat"><span class="stat-value">{{ summary.ticker_count }}</span><span class="stat-label">Tickers</span></div>
-          <div class="stat" title="Checklist-based review status in this browser"><span class="stat-value" id="reviewed-count">0 / {{ summary.ticker_count }}</span><span class="stat-label">Reviewed</span></div>
+          <div class="stat" title="Research review status loaded from SQLite-backed state"><span class="stat-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="stat-label">Reviewed</span></div>
           {% if report.market_sentiment %}
           <div class="stat {% if report.market_sentiment.score <= 24 or report.market_sentiment.score >= 76 %}alert danger{% elif report.market_sentiment.score <= 44 or report.market_sentiment.score >= 56 %}alert{% endif %}" title="Free yfinance proxy, not a proprietary index"><span class="stat-value">{{ report.market_sentiment.score }}</span><span class="stat-label">{{ report.market_sentiment.label }}</span></div>
           {% endif %}
@@ -1411,37 +1668,37 @@
       </aside>
     </section>
 
-    <section id="todays-focus" class="section">
+    <section id="todays-focus" class="section section-primary">
       <div class="section-header">
         <h2>Today's Focus</h2>
       </div>
       <div class="focus-grid">
-        <div class="focus-column">
-          <h3>Review first</h3>
+        <div class="focus-column review">
+          <h3><span class="focus-icon">R</span>Review first</h3>
           {% if todays_focus.review_first %}
           <ul class="focus-list">
             {% for row in todays_focus.review_first %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">No urgent review queue.</div>{% endif %}
         </div>
-        <div class="focus-column">
-          <h3>Do not chase</h3>
+        <div class="focus-column chase">
+          <h3><span class="focus-icon">!</span>Do not chase</h3>
           {% if todays_focus.do_not_chase %}
           <ul class="focus-list">
             {% for row in todays_focus.do_not_chase %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">No obvious chase-risk names.</div>{% endif %}
         </div>
-        <div class="focus-column">
-          <h3>Watch for pullback</h3>
+        <div class="focus-column pullback">
+          <h3><span class="focus-icon">P</span>Watch for pullback</h3>
           {% if todays_focus.watch_pullback %}
           <ul class="focus-list">
             {% for row in todays_focus.watch_pullback %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">No clean pullback watch.</div>{% endif %}
@@ -1449,8 +1706,121 @@
       </div>
     </section>
 
+    <section id="research-queue" class="section section-primary">
+      <div class="section-header">
+        <h2>Research Queue</h2>
+      </div>
+      <div class="focus-grid">
+        <div class="focus-column review">
+          <h3><span class="focus-icon">Q</span>Review queue</h3>
+          {% if history.review_queue %}
+          <ul class="focus-list">
+            {% for row in history.review_queue %}
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="section-empty">No research queue right now.</div>{% endif %}
+        </div>
+        <div class="focus-column chase">
+          <h3><span class="focus-icon">T</span>Recent thesis changes</h3>
+          {% if history.recent_thesis_changes %}
+          <ul class="focus-list">
+            {% for row in history.recent_thesis_changes %}
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="section-empty">No recent thesis-state changes.</div>{% endif %}
+        </div>
+        <div class="focus-column pullback">
+          <h3><span class="focus-icon">E</span>Post-earnings due</h3>
+          {% if history.post_earnings_due %}
+          <ul class="focus-list">
+            {% for row in history.post_earnings_due %}
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="section-empty">No post-earnings review due.</div>{% endif %}
+        </div>
+      </div>
+      <div class="focus-grid" style="margin-top: 10px;">
+        <div class="focus-column review">
+          <h3><span class="focus-icon">D</span>Research drift</h3>
+          {% if history.research_drift %}
+          <ul class="focus-list">
+            {% for row in history.research_drift %}
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="section-empty">No stale active thesis flagged.</div>{% endif %}
+        </div>
+        <div class="focus-column chase">
+          <h3><span class="focus-icon">H</span>Archive</h3>
+          {% if history.archive_dates %}
+          <ul class="focus-list">
+            {% for report_date in history.archive_dates[:6] %}
+            <li><span class="focus-rank">{{ loop.index }}</span><span><span class="focus-reason">{{ report_date }}</span></span></li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="section-empty">No archive runs saved yet.</div>{% endif %}
+        </div>
+        <div class="focus-column pullback">
+          <h3><span class="focus-icon">R</span>Research memory</h3>
+          <div class="section-empty">{{ history.history_days }}d history window loaded from SQLite.</div>
+        </div>
+      </div>
+    </section>
+
+    {% if book_today %}
+    <section id="book-today" class="section section-primary">
+      <div class="section-header">
+        <h2>My Book Today</h2>
+      </div>
+      <div class="morning-grid">
+        {% for row in book_today %}
+        <a class="morning-tile" href="#{{ row.item.ticker.symbol|ticker_anchor }}">
+          <span class="label">{{ row.label }}</span>
+          <span class="value change-{{ row.tone }}">{{ row.value }}</span>
+          <span class="sub">{{ row.item.ticker.symbol }} | {{ row.detail }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if book_impact %}
+    <section id="book-impact" class="section section-secondary">
+      <div class="section-header">
+        <h2>My Book Impact Today <span class="count">({{ book_impact|length }})</span></h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th class="num">Move</th>
+              <th class="num">Weight</th>
+              <th class="num">Book impact</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in book_impact %}
+            <tr>
+              <td class="symbol-cell"><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a></td>
+              <td class="num change change-{{ row.move|change_class }}" title="{{ row.move_source }}">{{ row.move|format_pct }}</td>
+              <td class="num">{{ row.weight|format_pct(sign=False) }}</td>
+              <td class="num change change-{{ row.impact|change_class }}">{{ row.impact|format_pct }}</td>
+              <td>{{ row.action }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
     {% if report.premarket %}
-    <section id="premarket" class="section">
+    <section id="premarket" class="section section-primary">
       <div class="section-header">
         <h2>Overnight / Premarket <span class="count">({{ report.premarket.retrieved_at.strftime("%H:%M UTC") }})</span></h2>
       </div>
@@ -1496,7 +1866,7 @@
           {% if premarket_triage.catalyst_backed %}
           <ul class="mover-list">
             {% for row in premarket_triage.catalyst_backed %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.reasons|join(', ') }}</span></li>
+            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.confidence }} | {{ row.reasons|join(', ') }}</span></li>
             {% endfor %}
           </ul>
           {% else %}<span class="sub">No mover with clear catalyst support.</span>{% endif %}
@@ -1506,7 +1876,7 @@
           {% if premarket_triage.unclear %}
           <ul class="mover-list">
             {% for row in premarket_triage.unclear %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }}</span></li>
+            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.confidence }} | {{ row.source_tier }}</span></li>
             {% endfor %}
           </ul>
           {% else %}<span class="sub">No unexplained high-priority movers.</span>{% endif %}
@@ -1516,7 +1886,7 @@
     </section>
     {% endif %}
 
-    <section id="today-catalysts" class="section">
+    <section id="today-catalysts" class="section section-primary">
       <div class="section-header">
         <h2>Today's Catalysts</h2>
       </div>
@@ -1561,7 +1931,7 @@
     </section>
 
     {% if post_earnings_items %}
-    <section id="post-earnings-scoreboard" class="section">
+    <section id="post-earnings-scoreboard" class="section section-secondary">
       <div class="section-header">
         <h2>Post-Earnings Scoreboard <span class="count">({{ post_earnings_items|length }})</span></h2>
       </div>
@@ -1576,6 +1946,8 @@
               <th>Revenue</th>
               <th class="num">Revenue surprise</th>
               <th>Guidance</th>
+              <th class="num">FY1 EPS rev</th>
+              <th class="num">FY1 revenue rev</th>
               <th class="num">Price reaction</th>
               <th>Review</th>
             </tr>
@@ -1583,16 +1955,19 @@
           <tbody>
             {% for row in post_earnings_items %}
             {% set item = row.item %}
+            {% set pe_default = item|post_earnings_defaults %}
             <tr data-pe-score-row="{{ item.ticker.symbol }}">
               <td class="symbol-cell"><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a></td>
               <td class="num">{{ row.days_ago }}d ago</td>
-              <td data-pe-score-field="eps">N/A</td>
-              <td class="num change" data-pe-score-field="eps_surprise">N/A</td>
-              <td data-pe-score-field="rev">N/A</td>
-              <td class="num change" data-pe-score-field="rev_surprise">N/A</td>
-              <td data-pe-score-field="guide">N/A</td>
+              <td data-pe-score-field="eps" data-default="{{ pe_default.eps or '' }}">{{ pe_default.eps or 'N/A' }}</td>
+              <td class="num change change-{{ pe_default.eps_surprise|change_class }}" data-pe-score-field="eps_surprise" data-default="{% if pe_default.eps_surprise is not none %}{{ pe_default.eps_surprise }}{% endif %}">{{ pe_default.eps_surprise|format_pct }}</td>
+              <td data-pe-score-field="rev" data-default="{{ pe_default.rev or '' }}">{{ pe_default.rev or 'N/A' }}</td>
+              <td class="num change change-{{ pe_default.rev_surprise|change_class }}" data-pe-score-field="rev_surprise" data-default="{% if pe_default.rev_surprise is not none %}{{ pe_default.rev_surprise }}{% endif %}">{{ pe_default.rev_surprise|format_pct }}</td>
+              <td data-pe-score-field="guide" data-default="{{ pe_default.guide or '' }}">{{ pe_default.guide or 'N/A' }}</td>
+              <td class="num change change-{{ pe_default.fy1_eps_revision_after|change_class }}" data-pe-score-field="fy1_eps_revision_after" data-default="{% if pe_default.fy1_eps_revision_after is not none %}{{ pe_default.fy1_eps_revision_after }}{% endif %}">{{ pe_default.fy1_eps_revision_after|format_pct }}</td>
+              <td class="num change change-{{ pe_default.fy1_revenue_revision_after|change_class }}" data-pe-score-field="fy1_revenue_revision_after" data-default="{% if pe_default.fy1_revenue_revision_after is not none %}{{ pe_default.fy1_revenue_revision_after }}{% endif %}">{{ pe_default.fy1_revenue_revision_after|format_pct }}</td>
               <td class="num change change-{{ row.reaction|change_class }}">{{ row.reaction|format_pct }}</td>
-              <td><span class="scoreboard-status" data-pe-score-field="review">Not reviewed</span></td>
+              <td><span class="scoreboard-status{% if pe_default.conclusion or pe_default.next_step %} partial{% endif %}" data-pe-score-field="review">{% if pe_default.conclusion or pe_default.next_step %}Reviewed{% else %}Not reviewed{% endif %}</span></td>
             </tr>
             {% endfor %}
           </tbody>
@@ -1601,8 +1976,75 @@
     </section>
     {% endif %}
 
+    {% if portfolio and portfolio.holdings %}
+    <section id="my-book" class="section my-book-section">
+      <div class="section-header">
+        <h2>My Book Today <span class="count">({{ portfolio.holdings|length }} holdings)</span></h2>
+        <span class="regime-pill" style="background:var(--info-bg);color:var(--info);" title="Sum of (daily % × weight) across holdings">
+          Net impact {{ portfolio.total_impact_pct|format_pct }}
+        </span>
+      </div>
+
+      <div class="my-book-grid">
+        <div class="my-book-card winners">
+          <div class="mb-label">Largest positive impact</div>
+          {% if portfolio.winners %}
+          <ul class="mb-list">
+            {% for r in portfolio.winners %}
+            <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
+              <span class="mb-pct change-pos">+{{ "%.2f"|format(r.book_impact) }}%</span>
+              <span class="mb-detail">{{ "%.2f"|format(r.change_pct) }}% × {{ r.weight }}%w</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="mb-empty">No positive contributors today.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card losers">
+          <div class="mb-label">Largest negative impact</div>
+          {% if portfolio.losers %}
+          <ul class="mb-list">
+            {% for r in portfolio.losers %}
+            <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
+              <span class="mb-pct change-neg">{{ "%.2f"|format(r.book_impact) }}%</span>
+              <span class="mb-detail">{{ "%.2f"|format(r.change_pct) }}% × {{ r.weight }}%w</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="mb-empty">No negative contributors today.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card events">
+          <div class="mb-label">Event ≤ 3d</div>
+          {% if portfolio.event_soon %}
+          <ul class="mb-list">
+            {% for r in portfolio.event_soon %}
+            <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
+              <span class="mb-detail">earnings {% if r.earnings_days == 0 %}today{% elif r.earnings_days == 1 %}tomorrow{% else %}in {{ r.earnings_days }}d{% endif %} · {{ r.weight }}%w</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="mb-empty">No imminent events.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card risks">
+          <div class="mb-label">Thesis risk</div>
+          {% if portfolio.thesis_risk %}
+          <ul class="mb-list">
+            {% for r in portfolio.thesis_risk %}
+            <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
+              <span class="mb-detail">{{ r.weight }}%w {% if r.thesis_risk %}· flagged{% endif %}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="mb-empty">No thesis flags.</div>{% endif %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
     {% if overextended %}
-    <section id="overextended" class="section overextended-section">
+    <section id="overextended" class="section section-secondary overextended-section">
       <div class="section-header">
         <h2>Overextended <span class="count">({{ overextended|length }})</span></h2>
       </div>
@@ -1620,7 +2062,7 @@
     {% endif %}
 
     {% if report.market_sentiment %}
-    <section id="market-sentiment" class="section">
+    <section id="market-sentiment" class="section section-secondary">
       <div class="section-header">
         <h2>Market Sentiment <span class="count">({{ report.market_sentiment.source }})</span></h2>
       </div>
@@ -1646,7 +2088,7 @@
     {% if report.market_context and (report.market_context.rates or report.market_context.breadth) %}
     <section class="macro-overlay">
       {% if report.market_context.rates %}
-      <div id="rates" class="section">
+      <div id="rates" class="section section-primary">
         <div class="section-header">
           <h2>Rates, Dollar &amp; Energy</h2>
           {% set regime = report|market_regime %}
@@ -1680,7 +2122,7 @@
       {% endif %}
 
       {% if report.market_context.breadth %}
-      <div id="breadth" class="section">
+      <div id="breadth" class="section section-primary">
         <div class="section-header">
           <h2>Breadth (20D)</h2>
         </div>
@@ -1701,7 +2143,7 @@
     {% endif %}
 
     {% if sector_leadership %}
-    <section id="sector-leadership" class="section">
+    <section id="sector-leadership" class="section section-secondary">
       <div class="section-header">
         <h2>Sector Leadership <span class="count">({{ sector_leadership|length }} groups)</span></h2>
       </div>
@@ -1734,17 +2176,38 @@
     </section>
     {% endif %}
 
-    <section id="changes" class="section">
+    <section id="changes" class="section section-tertiary">
       <div class="section-header">
-        <h2>Since Last Report</h2>
+        <h2>What Changed Since Last Run</h2>
       </div>
       <div id="changes-body" class="change-list">
-        <div class="section-empty">Open another dated report in this browser to compare dashboard snapshots.</div>
+        {% if history.changes_since_last_run %}
+          {% for row in history.changes_since_last_run %}
+          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title }}</strong><span>{{ row.detail }}</span></a>
+          {% endfor %}
+        {% else %}
+        <div class="section-empty">No material changes versus the previous saved run.</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section id="changes-30d" class="section section-tertiary">
+      <div class="section-header">
+        <h2>What Changed in 30d</h2>
+      </div>
+      <div class="change-list">
+        {% if history.changes_30d %}
+          {% for row in history.changes_30d %}
+          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title }}</strong><span>{{ row.detail }}</span></a>
+          {% endfor %}
+        {% else %}
+        <div class="section-empty">Not enough saved history yet for 30d comparisons.</div>
+        {% endif %}
       </div>
     </section>
 
     {% if rule_alerts %}
-    <section id="rule-alerts" class="section">
+    <section id="rule-alerts" class="section section-primary">
       <div class="section-header">
         <h2>Rule Alerts <span class="count">({{ rule_alerts|length }} tickers)</span></h2>
         {% if rule_alerts|length > 6 %}<button id="toggle-alerts" type="button" class="tool-button">Show all</button>{% endif %}
@@ -1762,7 +2225,7 @@
     {% endif %}
 
     {% if report.warnings %}
-    <section id="global-warnings" class="section">
+    <section id="global-warnings" class="section section-secondary">
       <h2>Global Warnings <span class="count">({{ report.warnings|length }})</span></h2>
       <ul class="warning-list">
         {% for warning in report.warnings %}<li>{{ warning }}</li>{% endfor %}
@@ -1770,7 +2233,7 @@
     </section>
     {% endif %}
 
-    <section id="macro" class="section">
+    <section id="macro" class="section section-secondary">
       <h2>Macro Calendar <span class="count">(next events)</span></h2>
       {% if report.economic_events %}
       <div class="macro-row">
@@ -1788,7 +2251,7 @@
       {% endif %}
     </section>
 
-    <section id="earnings" class="section">
+    <section id="earnings" class="section section-tertiary">
       <h2>Earnings Soon <span class="count">(next 7 days)</span></h2>
       {% if earnings_soon %}
       <div class="earnings-row">
@@ -1809,7 +2272,7 @@
       {% endif %}
     </section>
 
-    <section id="news" class="section">
+    <section id="news" class="section section-tertiary">
       <div class="section-header">
         <h2>Important News <span class="count">({{ important_news[:5]|length }} picks / {{ important_news|length }} total)</span></h2>
         {% if important_news|length > 5 %}<button id="toggle-news" type="button" class="tool-button">Show backlog</button>{% endif %}
@@ -1818,14 +2281,16 @@
       <ul class="news-list">
         {% for item, article, tier in important_news %}
         {% set rationale = article|news_rationale %}
-        <li class="news-item tier-{{ tier }} {% if loop.index <= 5 %}editor-pick{% else %}news-extra is-hidden{% endif %}">
+        <li class="news-item tier-{{ tier }}{% if rationale %} has-why{% endif %} {% if loop.index <= 5 %}editor-pick{% else %}news-extra is-hidden{% endif %}">
           <a class="symbol" href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a>
           <div class="title">
             <a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a>
-            {% if rationale %}<div class="news-why"><span class="why-label">Why:</span> {{ rationale }}</div>{% endif %}
           </div>
+          {% if rationale %}<div class="news-why"><span class="why-label">Why</span>{{ rationale }}</div>{% endif %}
           <div class="meta">
             <span class="badge info">{{ news_triage_label(item, article) }}</span>
+            {% set reliability = article|source_reliability %}
+            <span class="badge">{{ reliability.label }}</span>
             <span class="badge event-badge event-{{ article.event_type }}">{{ article.event_type|event_label }}</span>
             <span>{{ article.source }}</span>
           </div>
@@ -1837,7 +2302,7 @@
       {% endif %}
     </section>
 
-    <section id="valuation" class="section">
+    <section id="valuation" class="section section-tertiary">
       <div class="section-header">
         <h2>Valuation Snapshot <span class="count">({{ report.ticker_reports|length }} tickers)</span></h2>
         <button id="toggle-valuation" type="button" class="tool-button" aria-expanded="true">Collapse</button>
@@ -1877,7 +2342,7 @@
               <td class="symbol-cell"><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a></td>
               {% for key in valuation_keys %}
               {% set raw = item.valuation.metrics.get(key) if item.valuation else None %}
-              <td class="num {% if key in ('trailing_pe', 'forward_pe', 'ev_to_ebitda') %}pe-{{ raw|pe_class }}{% endif %}{% if key == 'rsi_14' %} rsi-{{ raw|rsi_class }}{% endif %}{% if key == 'gap_percent' %} change change-{{ raw|change_class }}{% endif %}{% if key == 'fy1_eps_revision_30d' %} change change-{{ raw|eps_revision_class }}{% endif %}{% if key == 'eps_growth_pct' %} change change-{{ raw|change_class }}{% endif %}"{% if key == 'rsi_14' %} title="{{ raw|rsi_label }}"{% endif %}>{% if not item.valuation %}N/A{% elif key == 'volume_vs_20d' %}{{ raw|format_ratio }}{% elif key in ('gap_percent', 'fy1_eps_revision_30d') %}{{ raw|format_pct }}{% elif key in ('atr_20_percent', 'eps_growth_pct') %}{{ raw|format_pct(sign=False) }}{% else %}{{ raw|metric_value }}{% endif %}</td>
+              <td class="num {% if key in ('trailing_pe', 'forward_pe', 'ev_to_ebitda') %}pe-{{ raw|pe_class }}{% endif %}{% if key == 'rsi_14' %} rsi-{{ raw|rsi_class }}{% endif %}{% if key == 'gap_percent' %} change change-{{ raw|change_class }}{% endif %}{% if key in ('fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %} change change-{{ raw|eps_revision_class }}{% endif %}{% if key in ('eps_growth_pct', 'revenue_growth_pct') %} change change-{{ raw|change_class }}{% endif %}"{% if key == 'rsi_14' %} title="{{ raw|rsi_label }}"{% endif %}>{% if not item.valuation %}N/A{% elif key == 'volume_vs_20d' %}{{ raw|format_ratio }}{% elif key in ('gap_percent', 'fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %}{{ raw|format_pct }}{% elif key in ('atr_20_percent', 'eps_growth_pct', 'revenue_growth_pct') %}{{ raw|format_pct(sign=False) }}{% else %}{{ raw|metric_value }}{% endif %}</td>
               {% if key == "last_close" %}
               <td class="num change change-{{ chg|change_class }}">{{ chg|format_pct }}</td>
               {% endif %}
@@ -1898,7 +2363,7 @@
       </div>
     </section>
 
-    <section id="tickers" class="section">
+    <section id="tickers" class="section section-primary">
       <div class="section-header">
         <h2>Ticker Cards <span class="count" id="ticker-count">({{ report.ticker_reports|length }})</span></h2>
         <button id="toggle-quiet" type="button" class="tool-button">Show Quiet</button>
@@ -1965,18 +2430,27 @@
         {% for item in ticker_cards %}
         {% set state = item|card_state %}
         {% set insights = item|ticker_insights %}
+        {% set research = item|research_state %}
+        {% set history_points = item|history_points %}
+        {% set history_current = history_points[0] if history_points else None %}
         {% set delta = item|earnings_delta %}
         {% set sector = item.valuation.metrics.get("sector") if item.valuation else None %}
         {% set dchg = item|daily_change %}
         {% set fhigh = item|from_52w_high %}
         {% set pmchg = item|premarket_change %}
         {% set pos = item|position_view %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}">
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
               <div class="ticker-name">{{ item.ticker.company_name }}</div>
               {% if sector %}<div class="ticker-sector">{{ sector }}</div>{% endif %}
+              {% if research.thesis_state or research.last_reviewed_at %}
+              <div class="ticker-sector">
+                {% if research.thesis_state %}Thesis: {{ research.thesis_state }}{% endif %}
+                {% if research.last_reviewed_at %}{% if research.thesis_state %} | {% endif %}Last reviewed {{ research.last_reviewed_at.date().isoformat() }}{% endif %}
+              </div>
+              {% endif %}
               {% if item.earnings and item.earnings.earnings_date %}<div class="countdown" data-countdown="{{ item.earnings.earnings_date.isoformat() }}" data-time-of-day="{{ item.earnings.time_of_day }}"></div>{% endif %}
             </div>
             <div class="ticker-actions">
@@ -1987,7 +2461,7 @@
               {% elif state == "warn" %}<span class="badge warn">Warn</span>
               {% elif state == "warm" %}<span class="badge good">Warm</span>
               {% else %}<span class="badge">Quiet</span>{% endif %}
-              <span class="badge review-status not-reviewed" data-review-status="{{ item.ticker.symbol }}">Not reviewed</span>
+              <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
             </div>
           </div>
 
@@ -2011,35 +2485,80 @@
             </div>
           </div>
 
-          <div class="position-row">
-            <div class="position-chip">
-              <span class="label">Position</span>
-              <span class="value">{{ pos.status }}</span>
+          <details class="card-secondary position-details">
+            <summary>Position &amp; book</summary>
+            <div class="position-row">
+              <div class="position-chip">
+                <span class="label">Position</span>
+                <span class="value">{{ pos.status }}</span>
+              </div>
+              <div class="position-chip">
+                <span class="label">Weight / Impact</span>
+                <span class="value">{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight|format_pct(sign=False) }}{% else %}N/A{% endif %}{% if pos.book_impact is not none %} / {{ pos.book_impact|format_pct }}{% endif %}</span>
+              </div>
+              <div class="position-chip">
+                <span class="label">Avg cost</span>
+                <span class="value">{{ pos.avg_cost|metric_value }}</span>
+              </div>
+              <div class="position-chip">
+                <span class="label">P/L</span>
+                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}</span>
+              </div>
             </div>
-            <div class="position-chip">
-              <span class="label">Weight / Impact</span>
-              <span class="value">{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight|format_pct(sign=False) }}{% else %}N/A{% endif %}{% if pos.book_impact is not none %} / {{ pos.book_impact|format_pct }}{% endif %}</span>
-            </div>
-            <div class="position-chip">
-              <span class="label">Avg cost</span>
-              <span class="value">{{ pos.avg_cost|metric_value }}</span>
-            </div>
-            <div class="position-chip">
-              <span class="label">P/L</span>
-              <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}</span>
-            </div>
-          </div>
+          </details>
 
-          {% if insights.setup or insights.quality or insights.trend or insights.risk or insights.watch or insights.action %}
+          {% if insights.action or insights.setup or insights.trend or insights.risk %}
           <div class="insights">
             {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
             {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
-            {% if insights.quality %}<div class="insight-row"><span class="insight-label">Quality</span><span class="insight-text">{{ insights.quality|join(' | ') }}</span></div>{% endif %}
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
             {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">Strength</span><span class="insight-text">{{ insights.rs|join(' · ') }}</span></div>{% endif %}
             {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">Risk</span><span class="insight-text">{{ insights.risk|join(' | ') }}</span></div>{% endif %}
-            {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">Watch</span><span class="insight-text">{{ insights.watch|join(' | ') }}</span></div>{% endif %}
           </div>
+          {% endif %}
+
+          {% if insights.quality or insights.watch %}
+          <details class="card-secondary card-extras">
+            <summary>Quality &amp; watch</summary>
+            <div class="insights">
+              {% if insights.quality %}<div class="insight-row"><span class="insight-label">Quality</span><span class="insight-text">{{ insights.quality|join(' | ') }}</span></div>{% endif %}
+              {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">Watch</span><span class="insight-text">{{ insights.watch|join(' | ') }}</span></div>{% endif %}
+            </div>
+          </details>
+          {% endif %}
+
+          {% if history_points %}
+          <details class="card-secondary">
+            <summary>Research timeline</summary>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Thesis</th>
+                    <th>Review</th>
+                    <th class="num">Top news</th>
+                    <th>Valuation</th>
+                    <th class="num">Earnings</th>
+                    <th class="num">Warn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for point in history_points[:6] %}
+                  <tr>
+                    <td>{{ point.report_date.isoformat() }}</td>
+                    <td>{{ point.thesis_state or 'unmarked' }}</td>
+                    <td>{{ point.review_status }}</td>
+                    <td class="num">{{ point.top_news_count }}</td>
+                    <td>{{ point.valuation_risk }}</td>
+                    <td class="num">{% if point.earnings_days is not none %}{{ point.earnings_days }}d{% else %}N/A{% endif %}</td>
+                    <td class="num">{{ point.warning_count }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
           {% endif %}
 
           {% if item.warnings %}
@@ -2089,6 +2608,14 @@
                 <label class="pe-label" for="rev-surprise-{{ item.ticker.symbol }}">Revenue surprise %</label>
                 <input id="rev-surprise-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="rev_surprise" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="+2.1">
               </div>
+              <div class="pe-row">
+                <label class="pe-label" for="fy1-eps-rev-after-{{ item.ticker.symbol }}">FY1 EPS revision after %</label>
+                <input id="fy1-eps-rev-after-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="fy1_eps_revision_after" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="+3.0">
+              </div>
+              <div class="pe-row">
+                <label class="pe-label" for="fy1-rev-rev-after-{{ item.ticker.symbol }}">FY1 revenue revision after %</label>
+                <input id="fy1-rev-rev-after-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="fy1_revenue_revision_after" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="-1.0">
+              </div>
               <textarea class="pe-text" data-pe-field="conclusion" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Conclusion: thesis intact / cracked / pivoting"></textarea>
               <textarea class="pe-text" data-pe-field="next_step" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Next step: hold / add / trim / re-evaluate at $X"></textarea>
             </div>
@@ -2117,10 +2644,23 @@
                 <label class="control-label" for="thesis-{{ item.ticker.symbol }}">Thesis</label>
                 <select id="thesis-{{ item.ticker.symbol }}" class="tag-select" data-thesis="{{ item.ticker.symbol }}">
                   <option value="">Unmarked</option>
-                  <option value="intact">Intact</option>
-                  <option value="improving">Improving</option>
+                  <option value="watching">Watching</option>
+                  <option value="building">Building</option>
+                  <option value="active">Active</option>
                   <option value="weakening">Weakening</option>
                   <option value="broken">Broken</option>
+                </select>
+              </div>
+              <div class="tag-row">
+                <label class="control-label" for="thesis-trigger-{{ item.ticker.symbol }}">Trigger</label>
+                <select id="thesis-trigger-{{ item.ticker.symbol }}" class="tag-select" data-thesis-trigger="{{ item.ticker.symbol }}">
+                  <option value="">None</option>
+                  <option value="valuation">Valuation</option>
+                  <option value="guidance">Guidance</option>
+                  <option value="regulation">Regulation</option>
+                  <option value="competitive pressure">Competitive pressure</option>
+                  <option value="macro">Macro</option>
+                  <option value="execution">Execution</option>
                 </select>
               </div>
               <textarea class="note-input" rows="2" data-note="{{ item.ticker.symbol }}" placeholder="Notes: thesis, risk, what to watch"></textarea>
@@ -2206,6 +2746,7 @@
       var grid = document.getElementById("ticker-grid");
       if (!grid) return;
 
+      var initialResearch = {{ research_payload|tojson }};
       var cards = Array.prototype.slice.call(grid.querySelectorAll(".ticker-card"));
       var search = document.getElementById("quick-search");
       var focusFilter = document.getElementById("focus-filter");
@@ -2223,11 +2764,34 @@
       var currentMode = "overview";
       var reportDate = "{{ report.report_date.isoformat() }}";
       var showQuiet = false;
-      var pinned = readJson("stock-daily-pins", []);
-      var tags = readJson("stock-daily-tags", {});
-      var thesis = readJson("stock-daily-thesis", {});
-      var notes = readJson("stock-daily-notes", {});
-      var checklist = readJson("stock-daily-checklist", {});
+      var tickerState = initialResearch.tickers || {};
+      var pinned = readJson("stock-daily-draft-pins", Object.keys(tickerState).filter(function (sym) { return !!tickerState[sym].pinned; }));
+      var tags = readJson("stock-daily-draft-tags", mapState("tag"));
+      var thesis = readJson("stock-daily-draft-thesis", mapState("thesis_state"));
+      var thesisTriggers = readJson("stock-daily-draft-thesis-triggers", mapState("thesis_trigger"));
+      var notes = readJson("stock-daily-draft-notes", mapNotes());
+      var checklist = readJson("stock-daily-draft-checklist", mapState("checklist"));
+
+      function mapState(key) {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          var value = tickerState[sym] && tickerState[sym][key];
+          if (Array.isArray(value)) out[sym] = value.slice();
+          else if (value) out[sym] = value;
+        });
+        return out;
+      }
+
+      function mapNotes() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          out[sym] = {
+            note: tickerState[sym].note || "",
+            revisit: tickerState[sym].revisit_date || ""
+          };
+        });
+        return out;
+      }
 
       function readJson(key, fallback) {
         try {
@@ -2244,6 +2808,10 @@
         if (value === "" || value == null) return null;
         var n = Number(value);
         return Number.isFinite(n) ? n : null;
+      }
+
+      function attrValue(card, datasetKey, attrName) {
+        return card.dataset[datasetKey] || card.getAttribute(attrName) || "";
       }
 
       function formattedNumber(value, suffix) {
@@ -2282,6 +2850,9 @@
       }
       function thesisState(card) {
         return thesis[symbol(card)] || "Unmarked";
+      }
+      function thesisTrigger(card) {
+        return thesisTriggers[symbol(card)] || "None";
       }
       function isExtremeRisk(value) {
         return value === "Extreme" || value === "High";
@@ -2412,7 +2983,7 @@
           btn.addEventListener("click", function () {
             var s = symbol(card);
             pinned = isPinned(card) ? pinned.filter(function (x) { return x !== s; }) : pinned.concat([s]);
-            writeJson("stock-daily-pins", pinned);
+            writeJson("stock-daily-draft-pins", pinned);
             paint();
             persistAndRenderChanges();
             applyFilters();
@@ -2428,6 +2999,7 @@
           var tagSelect = card.querySelector("[data-tag]");
           var tagBadge = card.querySelector("[data-tag-badge]");
           var thesisSelect = card.querySelector("[data-thesis]");
+          var triggerSelect = card.querySelector("[data-thesis-trigger]");
           var noteInput = card.querySelector("[data-note]");
           var revisitInput = card.querySelector("[data-revisit]");
           var details = card.querySelector(".user-tools-details");
@@ -2444,7 +3016,7 @@
             tagSelect.addEventListener("change", function () {
               if (tagSelect.value) tags[s] = tagSelect.value;
               else delete tags[s];
-              writeJson("stock-daily-tags", tags);
+              writeJson("stock-daily-draft-tags", tags);
               paintTag(tagSelect, tagBadge);
               persistAndRenderChanges();
               renderCompare();
@@ -2459,7 +3031,22 @@
               if (thesisSelect.value) thesis[s] = thesisSelect.value;
               else delete thesis[s];
               card.dataset.thesisState = thesisSelect.value || "";
-              writeJson("stock-daily-thesis", thesis);
+              writeJson("stock-daily-draft-thesis", thesis);
+              enhanceFocusFromLocalState();
+              persistAndRenderChanges();
+              renderCompare();
+            });
+          }
+
+          if (triggerSelect) {
+            triggerSelect.value = thesisTriggers[s] || "";
+            card.dataset.thesisTrigger = triggerSelect.value || "";
+            triggerSelect.addEventListener("change", function () {
+              if (triggerSelect.value) thesisTriggers[s] = triggerSelect.value;
+              else delete thesisTriggers[s];
+              card.dataset.thesisTrigger = triggerSelect.value || "";
+              writeJson("stock-daily-draft-thesis-triggers", thesisTriggers);
+              enhanceFocusFromLocalState();
               persistAndRenderChanges();
               renderCompare();
             });
@@ -2469,7 +3056,7 @@
             noteInput.value = noteState.note || "";
             noteInput.addEventListener("input", function () {
               notes[s] = Object.assign({}, notes[s], { note: noteInput.value });
-              writeJson("stock-daily-notes", notes);
+              writeJson("stock-daily-draft-notes", notes);
               paintNotePreview(card);
               persistAndRenderChanges();
               renderCompare();
@@ -2480,7 +3067,7 @@
             revisitInput.value = noteState.revisit || "";
             revisitInput.addEventListener("change", function () {
               notes[s] = Object.assign({}, notes[s], { revisit: revisitInput.value });
-              writeJson("stock-daily-notes", notes);
+              writeJson("stock-daily-draft-notes", notes);
               renderRevisitDueToday();
               persistAndRenderChanges();
             });
@@ -2492,7 +3079,7 @@
               var values = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
               if (values.length) checklist[s] = values;
               else delete checklist[s];
-              writeJson("stock-daily-checklist", checklist);
+              writeJson("stock-daily-draft-checklist", checklist);
               paintReviewStatus(card);
               updateReviewSummary();
               persistAndRenderChanges();
@@ -2591,13 +3178,10 @@
       }
 
       function reviewStatusFor(sym) {
-        var rec = notes[sym] || {};
-        var checks = rec.checklist || {};
-        var keys = ["earnings", "guidance", "valuation", "news", "thesis"];
-        var done = keys.filter(function (k) { return checks[k]; }).length;
-        if (done === 0) return "—";
-        if (done === keys.length) return "✓ done";
-        return done + "/" + keys.length;
+        var values = checklist[sym] || [];
+        if (!values.length) return "—";
+        if (values.length >= 4) return "Reviewed";
+        return values.length + "/5";
       }
 
       function formattedPct(value) {
@@ -2636,14 +3220,18 @@
             "<td>" + escapeHtml(reviewStatusFor(sym)) + "</td>" +
             "<td>" + escapeHtml(tagFor(card)) + "</td>" +
             "<td>" + escapeHtml(thesisState(card)) + "</td>" +
+            "<td>" + escapeHtml(thesisTrigger(card)) + "</td>" +
             "<td>" + escapeHtml(revisitFor(sym)) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.premarketChange) + "\">" + formattedPct(card.dataset.premarketChange) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.gapPct) + "\">" + formattedPct(card.dataset.gapPct) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.volumeX, "x") + "</td>" +
             "<td class=\"num\">" + formattedPct(card.dataset.atrPct) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.epsGrowth) + "\">" + formattedPct(card.dataset.epsGrowth) + "</td>" +
-            "<td class=\"num change-" + signClass(card.dataset.epsRev30d) + "\">" + formattedPct(card.dataset.epsRev30d) + "</td>" +
+            "<td class=\"num change-" + signClass(attrValue(card, "epsRev30d", "data-eps-rev-30d")) + "\">" + formattedPct(attrValue(card, "epsRev30d", "data-eps-rev-30d")) + "</td>" +
+            "<td class=\"num change-" + signClass(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")) + "\">" + formattedPct(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")) + "</td>" +
+            "<td class=\"num change-" + signClass(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")) + "\">" + formattedPct(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")) + "</td>" +
             "<td>" + escapeHtml(card.dataset.positionStatus || "watchlist") + "</td>" +
+            "<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>" +
             "<td>" + escapeHtml(topWatch(card)) + "</td>" +
             "<td>" + escapeHtml(valuationRisk(card)) + "</td>" +
@@ -2655,8 +3243,8 @@
         panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
           "<th>Ticker</th><th>State</th><th>Trend</th><th class=\"num\">Daily %</th><th class=\"num\">From High</th>" +
-          "<th>Next earnings</th><th>Review</th><th>User tag</th><th>Thesis</th><th>Revisit</th>" +
-          "<th class=\"num\">Premarket</th><th class=\"num\">Gap</th><th class=\"num\">Vol/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS growth</th><th class=\"num\">EPS rev 30D</th><th>Position</th><th class=\"num\">Book impact</th>" +
+          "<th>Next earnings</th><th>Review</th><th>User tag</th><th>Thesis</th><th>Trigger</th><th>Revisit</th>" +
+          "<th class=\"num\">Premarket</th><th class=\"num\">Gap</th><th class=\"num\">Vol/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS growth</th><th class=\"num\">EPS rev 30D</th><th class=\"num\">FY1 rev rev</th><th class=\"num\">NextQ rev rev</th><th>Position</th><th class=\"num\">Weight</th><th class=\"num\">Book impact</th>" +
           "<th>Top watch</th><th>Valuation risk</th><th class=\"num\">RSI 14</th><th class=\"num\">Top news</th>" +
           "<th class=\"num\">Market Cap</th><th class=\"num\">Forward P/E</th>" +
           "</tr></thead><tbody>" +
@@ -2798,17 +3386,13 @@
 
           if (doneBtn) {
             doneBtn.addEventListener("click", function () {
-              var rec = notes[sym] || {};
-              rec.checklist = rec.checklist || {};
-              ["earnings", "guidance", "valuation", "news", "thesis"].forEach(function (k) {
-                rec.checklist[k] = true;
-              });
-              notes[sym] = rec;
-              writeJson("stock-daily-notes", notes);
+              checklist[sym] = ["earnings", "guidance", "valuation", "news", "thesis"];
+              writeJson("stock-daily-draft-checklist", checklist);
               // Reflect in checkboxes if Manage is open
               card.querySelectorAll("[data-checklist] input").forEach(function (cb) {
                 cb.checked = true;
               });
+              paintReviewStatus(card);
               updateReviewSummary();
               applyFilters();
             });
@@ -2822,7 +3406,7 @@
               var iso = current.toISOString().slice(0, 10);
               rec.revisit = iso;
               notes[sym] = rec;
-              writeJson("stock-daily-notes", notes);
+              writeJson("stock-daily-draft-notes", notes);
               var input = card.querySelector("[data-revisit]");
               if (input) input.value = iso;
               renderRevisitDueToday();
@@ -2833,9 +3417,13 @@
       }
 
       function setupPostEarnings() {
-        var STORAGE_KEY = "stock-daily-post-earnings";
-        var state;
-        try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch (e) { state = {}; }
+        var STORAGE_KEY = "stock-daily-draft-post-earnings";
+        var state = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          state[sym] = Object.assign({}, (tickerState[sym] && tickerState[sym].post_earnings_review) || {});
+        });
+        try { state = Object.assign(state, JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")); } catch (e) {}
+        window.postEarningsState = state;
         function persist() {
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
         }
@@ -2853,22 +3441,27 @@
           var rec = state[sym] || {};
           ["eps", "rev", "guide"].forEach(function (field) {
             var cell = row.querySelector("[data-pe-score-field=\"" + field + "\"]");
-            if (cell) cell.textContent = rec[field] || "N/A";
+            if (cell) cell.textContent = rec[field] || cell.dataset.default || "N/A";
           });
-          ["eps_surprise", "rev_surprise"].forEach(function (field) {
+          ["eps_surprise", "rev_surprise", "fy1_eps_revision_after", "fy1_revenue_revision_after"].forEach(function (field) {
             var cell = row.querySelector("[data-pe-score-field=\"" + field + "\"]");
             if (!cell) return;
             var value = numberOrNull(rec[field]);
+            if (value == null) value = numberOrNull(cell.dataset.default);
             cell.textContent = value == null ? "N/A" : formattedPct(value);
             cell.classList.remove("change-pos", "change-neg", "change-flat");
             cell.classList.add("change-" + signClass(value));
           });
           var review = row.querySelector("[data-pe-score-field=\"review\"]");
           if (review) {
-            var done = ["eps", "rev", "guide"].filter(function (field) { return !!rec[field]; }).length;
-            review.textContent = done >= 3 ? "Reviewed" : done > 0 ? "Partial" : "Not reviewed";
+            var fields = ["eps", "rev", "guide", "eps_surprise", "rev_surprise", "fy1_eps_revision_after", "fy1_revenue_revision_after"];
+            var done = fields.filter(function (field) {
+              var cell = row.querySelector("[data-pe-score-field=\"" + field + "\"]");
+              return !!rec[field] || !!(cell && cell.dataset.default);
+            }).length;
+            review.textContent = done >= 5 ? "Reviewed" : done > 0 ? done + "/7" : "Not reviewed";
             review.classList.remove("done", "partial");
-            if (done >= 3) review.classList.add("done");
+            if (done >= 5) review.classList.add("done");
             else if (done > 0) review.classList.add("partial");
           }
         }
@@ -2932,6 +3525,23 @@
         });
       }
 
+      function enhanceFocusFromLocalState() {
+        var reviewList = document.querySelector("#research-queue .focus-column:first-child .focus-list");
+        if (!reviewList) return;
+        cards.forEach(function (card) {
+          var state = thesisState(card);
+          if (state !== "weakening" && state !== "broken") return;
+          var sym = symbol(card);
+          if (reviewList.querySelector("[data-local-focus=\"" + sym + "\"]")) return;
+          var li = document.createElement("li");
+          li.setAttribute("data-local-focus", sym);
+          var trigger = thesisTrigger(card);
+          var reason = "thesis " + state + (trigger !== "None" ? " | trigger: " + trigger : "");
+          li.innerHTML = "<span class=\"focus-rank\">!</span><span><a href=\"#" + card.id + "\">" + escapeHtml(sym) + "</a><span class=\"focus-reason\">" + escapeHtml(reason) + "</span></span>";
+          reviewList.insertBefore(li, reviewList.firstChild);
+        });
+      }
+
       function setupWatchlistMode() {
         var btn = document.getElementById("watchlist-mode-toggle");
         if (!btn) return;
@@ -2973,6 +3583,7 @@
           topNews: (card.dataset.topNewsSignatures || "").split("|").filter(Boolean),
           tag: tags[s] || "",
           thesis: thesis[s] || "",
+          thesisTrigger: thesisTriggers[s] || "",
           note: (noteState.note || "").trim(),
           revisit: noteState.revisit || "",
           review: reviewState(card),
@@ -2995,14 +3606,7 @@
       }
 
       function persistAndRenderChanges() {
-        var key = "stock-daily-report-snapshots";
-        var snapshots = readJson(key, {});
-        var prev = previousSnapshot(snapshots);
-        var current = currentSnapshot();
-        renderChanges(prev, current);
-        snapshots[reportDate] = current;
-        Object.keys(snapshots).sort().slice(0, -10).forEach(function (dateKey) { delete snapshots[dateKey]; });
-        writeJson(key, snapshots);
+        return;
       }
 
       function renderChanges(prev, current) {
@@ -3040,6 +3644,9 @@
           }
           if (now.thesis && now.thesis !== before.thesis) {
             changes.push(changeCard(s, "Thesis state changed", now.thesis + "."));
+          }
+          if (now.thesisTrigger && now.thesisTrigger !== before.thesisTrigger) {
+            changes.push(changeCard(s, "Thesis trigger changed", now.thesisTrigger + "."));
           }
           if (now.note && now.note !== before.note) {
             changes.push(changeCard(s, "New note", (now.note.length > 80 ? now.note.slice(0, 77) + "..." : now.note) + "."));
@@ -3081,9 +3688,34 @@
         download("watchlist-{{ report.report_date.isoformat() }}.txt", lines.join("\n"), "text/plain;charset=utf-8", "Exported watchlist TXT: " + lines.length + " tickers - fields ticker/state/earnings/review/tag");
       }
 
-      function exportNotes() {
-        var noteCount = Object.keys(notes).filter(function (key) { return notes[key] && (notes[key].note || notes[key].revisit); }).length;
-        download("notes-{{ report.report_date.isoformat() }}.json", JSON.stringify(notes, null, 2), "application/json;charset=utf-8", "Exported notes JSON: " + noteCount + " saved ticker notes/revisit dates");
+      function exportResearchState() {
+        var payload = {
+          version: 1,
+          exported_at: new Date().toISOString(),
+          tickers: {}
+        };
+        cards.forEach(function (card) {
+          var sym = symbol(card);
+          var base = tickerState[sym] || {};
+          payload.tickers[sym] = {
+            tag: tags[sym] || "",
+            thesis_state: thesis[sym] || "",
+            thesis_trigger: thesisTriggers[sym] || "",
+            note: (notes[sym] && notes[sym].note) || "",
+            checklist: checklist[sym] || [],
+            revisit_date: (notes[sym] && notes[sym].revisit) || "",
+            pinned: isPinned(card),
+            review_status: reviewState(card),
+            last_reviewed_at: base.last_reviewed_at || "",
+            post_earnings_review: (window.postEarningsState && window.postEarningsState[sym]) || {}
+          };
+        });
+        download(
+          "research-state-{{ report.report_date.isoformat() }}.json",
+          JSON.stringify(payload, null, 2),
+          "application/json;charset=utf-8",
+          "Exported research JSON: import it with --import-research-state"
+        );
       }
 
       function exportEarnings() {
@@ -3105,12 +3737,15 @@
             recent_top_news_count: Number(card.dataset.topNewsCount || 0),
             user_tag: tagFor(card),
             thesis_state: thesisState(card),
+            thesis_trigger: thesisTrigger(card),
             premarket_change: numberOrNull(card.dataset.premarketChange),
             gap_percent: numberOrNull(card.dataset.gapPct),
             volume_vs_20d: numberOrNull(card.dataset.volumeX),
             atr_percent: numberOrNull(card.dataset.atrPct),
             eps_growth: numberOrNull(card.dataset.epsGrowth),
-            fy1_eps_revision_30d: numberOrNull(card.dataset.epsRev30d),
+            fy1_eps_revision_30d: numberOrNull(attrValue(card, "epsRev30d", "data-eps-rev-30d")),
+            fy1_revenue_revision_30d: numberOrNull(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")),
+            next_q_revenue_revision_30d: numberOrNull(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")),
             position_status: card.dataset.positionStatus || "watchlist",
             portfolio_weight: numberOrNull(card.dataset.positionWeight),
             book_impact: numberOrNull(card.dataset.bookImpact),
@@ -3120,6 +3755,87 @@
             rsi_14: numberOrNull(card.dataset.rsi),
             watch: card.dataset.watch || "",
             headlines: Number(card.dataset.newsCount || 0),
+          };
+        });
+        download("compare-{{ report.report_date.isoformat() }}.json", JSON.stringify(rows, null, 2), "application/json;charset=utf-8", "Exported compare JSON: " + rows.length + " selected tickers");
+      }
+
+      function lastReviewedText(value) {
+        if (!value) return "";
+        var text = String(value);
+        return text.length >= 10 ? text.slice(0, 10) : text;
+      }
+
+      function renderCompare() {
+        var panel = document.getElementById("compare-panel");
+        if (!panel) return;
+        var selected = selectedCompare();
+        if (!selected.length) {
+          panel.classList.add("is-hidden");
+          panel.innerHTML = "";
+          return;
+        }
+        panel.classList.remove("is-hidden");
+        var rows = selected.map(function (card) {
+          var sym = symbol(card);
+          var revisions = [
+            "EPS " + formattedPct(attrValue(card, "epsRev30d", "data-eps-rev-30d")),
+            "FY1 rev " + formattedPct(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")),
+            "NextQ rev " + formattedPct(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d"))
+          ].join(" / ");
+          return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
+            "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
+            "<td>" + escapeHtml(thesisState(card)) + "</td>" +
+            "<td>" + escapeHtml(thesisTrigger(card)) + "</td>" +
+            "<td>" + escapeHtml(reviewStatusFor(sym)) + "</td>" +
+            "<td>" + escapeHtml(lastReviewedText(card.dataset.lastReviewedAt)) + "</td>" +
+            "<td>" + earningsText(card.dataset.earningsDays) + "</td>" +
+            "<td class=\"num\">" + formattedPct(card.dataset.newsBurst, false) + "</td>" +
+            "<td class=\"num\">" + (card.dataset.topNewsCount || "0") + "</td>" +
+            "<td>" + escapeHtml(valuationRisk(card)) + "</td>" +
+            "<td>" + escapeHtml(revisions) + "</td>" +
+            "<td class=\"num\">" + formattedNumber(card.dataset.attentionScore) + "</td>" +
+            "<td class=\"num change-" + signClass(card.dataset.premarketChange) + "\">" + formattedPct(card.dataset.premarketChange) + "</td>" +
+            "<td>" + escapeHtml(card.dataset.positionStatus || "watchlist") + "</td>" +
+            "<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
+            "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>" +
+            "<td>" + escapeHtml(tagFor(card)) + "</td>" +
+            "<td>" + escapeHtml(revisitFor(sym)) + "</td></tr>";
+        }).join("");
+        panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
+          "<div class=\"compare-table-wrap\"><table><thead><tr>" +
+          "<th>Ticker</th><th>State</th><th>Thesis</th><th>Trigger</th><th>Review</th><th>Last reviewed</th>" +
+          "<th>Next earnings</th><th class=\"num\">News burst</th><th class=\"num\">Top news</th><th>Valuation risk</th><th>30D revisions</th>" +
+          "<th class=\"num\">Attention</th><th class=\"num\">Premarket</th><th>Position</th><th class=\"num\">Weight</th><th class=\"num\">Book impact</th><th>User tag</th><th>Revisit</th>" +
+          "</tr></thead><tbody>" +
+          rows + "</tbody></table></div>";
+        var exportBtn = document.getElementById("export-compare");
+        if (exportBtn) exportBtn.addEventListener("click", exportCompare);
+      }
+
+      function exportCompare() {
+        var rows = selectedCompare().map(function (card) {
+          return {
+            ticker: symbol(card),
+            state: card.dataset.state || "",
+            thesis_state: thesisState(card),
+            thesis_trigger: thesisTrigger(card),
+            review_status: reviewStatusFor(symbol(card)),
+            last_reviewed_at: card.dataset.lastReviewedAt || "",
+            next_earnings: earningsText(card.dataset.earningsDays),
+            news_burst_score: numberOrNull(card.dataset.newsBurst),
+            recent_top_news_count: Number(card.dataset.topNewsCount || 0),
+            valuation_risk: valuationRisk(card),
+            attention_score: numberOrNull(card.dataset.attentionScore),
+            fy1_eps_revision_30d: numberOrNull(attrValue(card, "epsRev30d", "data-eps-rev-30d")),
+            fy1_revenue_revision_30d: numberOrNull(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")),
+            next_q_revenue_revision_30d: numberOrNull(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")),
+            premarket_change: numberOrNull(card.dataset.premarketChange),
+            position_status: card.dataset.positionStatus || "watchlist",
+            portfolio_weight: numberOrNull(card.dataset.positionWeight),
+            book_impact: numberOrNull(card.dataset.bookImpact),
+            user_tag: tagFor(card),
+            revisit_date: revisitFor(symbol(card)),
           };
         });
         download("compare-{{ report.report_date.isoformat() }}.json", JSON.stringify(rows, null, 2), "application/json;charset=utf-8", "Exported compare JSON: " + rows.length + " selected tickers");
@@ -3135,10 +3851,10 @@
         });
       }
       var exportWatchlistBtn = document.getElementById("export-watchlist");
-      var exportNotesBtn = document.getElementById("export-notes");
+      var exportResearchBtn = document.getElementById("export-research");
       var exportEarningsBtn = document.getElementById("export-earnings");
       if (exportWatchlistBtn) exportWatchlistBtn.addEventListener("click", exportWatchlist);
-      if (exportNotesBtn) exportNotesBtn.addEventListener("click", exportNotes);
+      if (exportResearchBtn) exportResearchBtn.addEventListener("click", exportResearchState);
       if (exportEarningsBtn) exportEarningsBtn.addEventListener("click", exportEarnings);
 
       setupPins();
@@ -3151,8 +3867,8 @@
       setupQuickActions();
       setupPostEarnings();
       setupWatchlistMode();
+      enhanceFocusFromLocalState();
       renderRevisitDueToday();
-      persistAndRenderChanges();
       applyFilters();
     })();
   </script>

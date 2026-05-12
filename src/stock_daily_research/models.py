@@ -252,6 +252,57 @@ class PremarketSnapshot:
 
 
 @dataclass(frozen=True)
+class TickerResearchState:
+    ticker: str
+    tag: str = ""
+    thesis_state: str = ""
+    thesis_trigger: str = ""
+    note: str = ""
+    checklist: list[str] = field(default_factory=list)
+    revisit_date: date | None = None
+    pinned: bool = False
+    review_status: str = "not-reviewed"
+    last_reviewed_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PostEarningsReview:
+    ticker: str
+    earnings_date: date | None = None
+    eps: str = ""
+    revenue: str = ""
+    guide: str = ""
+    eps_surprise_pct: float | None = None
+    revenue_surprise_pct: float | None = None
+    fy1_eps_revision_after: float | None = None
+    fy1_revenue_revision_after: float | None = None
+    conclusion: str = ""
+    next_step: str = ""
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class TickerHistoryPoint:
+    report_date: date
+    generated_at: datetime
+    ticker: str
+    thesis_state: str = ""
+    review_status: str = "not-reviewed"
+    last_reviewed_at: datetime | None = None
+    news_count: int = 0
+    top_news_count: int = 0
+    valuation_risk: str = "None"
+    rsi: float | None = None
+    daily_change_pct: float | None = None
+    premarket_change_pct: float | None = None
+    earnings_days: int | None = None
+    warning_count: int = 0
+    attention_score: float = 0.0
+    news_burst_score: float = 0.0
+
+
+@dataclass(frozen=True)
 class TickerReport:
     ticker: TickerConfig
     articles: list[NewsArticle]
@@ -271,3 +322,7 @@ class DailyReport:
     market_sentiment: MarketSentiment | None = None
     market_context: MarketContext | None = None
     premarket: PremarketSnapshot | None = None
+    research_states: dict[str, TickerResearchState] = field(default_factory=dict)
+    post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
+    ticker_history: dict[str, list[TickerHistoryPoint]] = field(default_factory=dict)
+    history_overview: dict[str, Any] = field(default_factory=dict)
