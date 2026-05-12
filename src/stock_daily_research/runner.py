@@ -21,7 +21,18 @@ from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
 from .report import write_report
-from .storage import init_db, load_latest_valuation_snapshot, save_report
+from .storage import (
+    export_research_state_file,
+    import_research_state_file,
+    init_db,
+    load_latest_valuation_snapshot,
+    load_post_earnings_reviews,
+    load_report_dates,
+    load_ticker_history,
+    load_ticker_research_states,
+    save_report,
+    save_report_run,
+)
 from .valuation import fetch_yfinance_earnings_date, fetch_yfinance_valuation
 from .x_signals import load_manual_x_signals
 
@@ -40,12 +51,16 @@ def run_daily(
     notify_telegram: bool = False,
     max_workers: int = DEFAULT_FETCH_WORKERS,
     progress: bool = True,
+    import_research_state_path: str | Path | None = None,
+    export_research_state_path: str | Path | None = None,
+    history_days: int = 30,
 ) -> DailyReport:
     load_dotenv()
     config = load_config(config_path)
     zone = ZoneInfo(config.settings.report_timezone)
     generated_at = datetime.now(zone)
     actual_report_date = report_date or generated_at.date()
+    ticker_symbols = [ticker.symbol for ticker in config.tickers]
 
     global_warnings: list[str] = []
     if config.settings.x_signals.mode != "manual":
@@ -88,37 +103,42 @@ def run_daily(
         if telegram_notifier is None:
             global_warnings.append("Telegram notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing.")
 
-    news_provider = GoogleNewsRssProvider()
-    manual_x_signals = load_manual_x_signals(config.settings.x_signals.manual_file, config.tickers)
-    signals_by_ticker: dict[str, list[XSignal]] = defaultdict(list)
-    for signal in manual_x_signals:
-        signals_by_ticker[signal.ticker].append(signal)
-
-    ticker_reports = _fetch_all_tickers(
-        config.tickers,
-        news_provider=news_provider,
-        signals_by_ticker=signals_by_ticker,
-        fetch_news=fetch_news,
-        fetch_valuation=fetch_valuation,
-        lookback_days=config.settings.news.lookback_days,
-        max_articles=config.settings.news.max_articles_per_ticker,
-        max_workers=max(1, max_workers),
-        progress=progress,
-    )
-    economic_events = []
-    if fetch_macro and config.settings.macro.enabled:
-        macro_result = OfficialMacroCalendarProvider().fetch(
-            report_date=actual_report_date,
-            timezone_name=config.settings.report_timezone,
-            days_back=config.settings.macro.days_back,
-            days_ahead=config.settings.macro.days_ahead,
-            manual_events=config.settings.macro.manual_events,
-            cache_path=Path(db_path).parent / "macro_events_cache.json",
-        )
-        economic_events = macro_result.events
-        global_warnings.extend(macro_result.warnings)
-
     with closing(init_db(db_path)) as conn:
+        if import_research_state_path:
+            import_research_state_file(conn, import_research_state_path)
+        research_states = load_ticker_research_states(conn, ticker_symbols)
+        post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
+
+        news_provider = GoogleNewsRssProvider()
+        manual_x_signals = load_manual_x_signals(config.settings.x_signals.manual_file, config.tickers)
+        signals_by_ticker: dict[str, list[XSignal]] = defaultdict(list)
+        for signal in manual_x_signals:
+            signals_by_ticker[signal.ticker].append(signal)
+
+        ticker_reports = _fetch_all_tickers(
+            config.tickers,
+            news_provider=news_provider,
+            signals_by_ticker=signals_by_ticker,
+            fetch_news=fetch_news,
+            fetch_valuation=fetch_valuation,
+            lookback_days=config.settings.news.lookback_days,
+            max_articles=config.settings.news.max_articles_per_ticker,
+            max_workers=max(1, max_workers),
+            progress=progress,
+        )
+        economic_events = []
+        if fetch_macro and config.settings.macro.enabled:
+            macro_result = OfficialMacroCalendarProvider().fetch(
+                report_date=actual_report_date,
+                timezone_name=config.settings.report_timezone,
+                days_back=config.settings.macro.days_back,
+                days_ahead=config.settings.macro.days_ahead,
+                manual_events=config.settings.macro.manual_events,
+                cache_path=Path(db_path).parent / "macro_events_cache.json",
+            )
+            economic_events = macro_result.events
+            global_warnings.extend(macro_result.warnings)
+
         if fetch_valuation:
             ticker_reports = _apply_valuation_fallbacks(conn, ticker_reports, actual_report_date)
             ticker_reports = _apply_estimate_revision_history(conn, ticker_reports, actual_report_date)
@@ -133,8 +153,23 @@ def run_daily(
             market_sentiment=market_sentiment,
             market_context=market_context,
             premarket=premarket,
+            research_states=research_states,
+            post_earnings_reviews=post_earnings_reviews,
         )
         save_report(conn, preliminary_report)
+        save_report_run(conn, preliminary_report, html_path=report_path)
+        ticker_history = load_ticker_history(
+            conn,
+            ticker_symbols,
+            report_date=actual_report_date,
+            history_days=max(7, history_days),
+        )
+        history_overview = {
+            "history_days": max(7, history_days),
+            "archive_dates": load_report_dates(conn, limit=max(history_days, 30)),
+        }
+        if export_research_state_path:
+            export_research_state_file(conn, export_research_state_path)
 
     if telegram_notifier:
         try:
@@ -151,6 +186,10 @@ def run_daily(
         market_sentiment=market_sentiment,
         market_context=market_context,
         premarket=premarket,
+        research_states=research_states,
+        post_earnings_reviews=post_earnings_reviews,
+        ticker_history=ticker_history,
+        history_overview=history_overview,
     )
     write_report(report, output_dir)
     return report

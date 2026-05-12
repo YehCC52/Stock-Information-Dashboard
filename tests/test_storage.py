@@ -6,11 +6,24 @@ from stock_daily_research.models import (
     DailyReport,
     EarningsDate,
     NewsArticle,
+    PostEarningsReview,
     TickerConfig,
+    TickerHistoryPoint,
+    TickerResearchState,
     TickerReport,
     ValuationSnapshot,
 )
-from stock_daily_research.storage import init_db, load_latest_valuation_snapshot, save_report
+from stock_daily_research.storage import (
+    export_research_state_payload,
+    import_research_state_payload,
+    init_db,
+    load_latest_valuation_snapshot,
+    load_ticker_history,
+    load_ticker_research_states,
+    load_post_earnings_reviews,
+    save_report,
+    save_report_run,
+)
 
 
 def _make_article(ticker: str, url: str = "https://example.com/a") -> NewsArticle:
@@ -173,3 +186,115 @@ def test_load_latest_valuation_snapshot_returns_good_values(tmp_path: Path) -> N
     assert loaded.as_of_date == date(2026, 4, 27)
     assert loaded.metrics["market_cap"] == 100_000_000
     assert loaded.metrics["trailing_pe"] == 25.5
+
+
+def test_research_state_export_import_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+        ],
+        research_states={
+            "NVDA": TickerResearchState(
+                ticker="NVDA",
+                tag="High conviction",
+                thesis_state="active",
+                thesis_trigger="guidance",
+                note="Demand still broadening.",
+                checklist=["earnings", "valuation", "news", "thesis"],
+                revisit_date=date(2026, 5, 1),
+                pinned=True,
+                review_status="reviewed",
+                last_reviewed_at=datetime(2026, 4, 28, 7, 30, tzinfo=timezone.utc),
+            )
+        },
+        post_earnings_reviews={
+            "NVDA": PostEarningsReview(
+                ticker="NVDA",
+                earnings_date=date(2026, 4, 27),
+                eps="beat",
+                revenue="beat",
+                guide="up",
+                eps_surprise_pct=8.2,
+                revenue_surprise_pct=3.1,
+                conclusion="Thesis intact.",
+                next_step="Watch valuation reaction.",
+            )
+        },
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, report)
+        payload = export_research_state_payload(conn)
+
+    with init_db(tmp_path / "import.sqlite3") as conn:
+        import_research_state_payload(conn, payload)
+        state = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+        review = load_post_earnings_reviews(conn, ["NVDA"])["NVDA"]
+
+    assert payload["tickers"]["NVDA"]["thesis_state"] == "active"
+    assert state.tag == "High conviction"
+    assert state.checklist == ["earnings", "news", "thesis", "valuation"]
+    assert state.pinned is True
+    assert review.guide == "up"
+    assert review.conclusion == "Thesis intact."
+
+
+def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    ticker = TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation")
+    valuation_old = _make_valuation(as_of=date(2026, 4, 27))
+    valuation_new = ValuationSnapshot(
+        ticker="NVDA",
+        as_of_date=date(2026, 4, 28),
+        source="yfinance",
+        metrics={
+            "market_cap": 100_000_000,
+            "trailing_pe": 120.0,
+            "rsi_14": 73.0,
+            "last_close": 110.0,
+            "previous_close": 100.0,
+        },
+        retrieved_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+    )
+    old_report = DailyReport(
+        report_date=date(2026, 4, 27),
+        generated_at=datetime(2026, 4, 27, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(ticker=ticker, articles=[], x_signals=[], valuation=valuation_old, earnings=None)
+        ],
+        research_states={"NVDA": TickerResearchState(ticker="NVDA", thesis_state="building", review_status="in-progress")},
+    )
+    article = _make_article("NVDA")
+    new_report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(ticker=ticker, articles=[article], x_signals=[], valuation=valuation_new, earnings=_make_earnings())
+        ],
+        research_states={"NVDA": TickerResearchState(ticker="NVDA", thesis_state="active", review_status="reviewed")},
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, old_report)
+        save_report_run(conn, old_report)
+        save_report(conn, new_report)
+        save_report_run(conn, new_report)
+        history = load_ticker_history(conn, ["NVDA"], report_date=date(2026, 4, 28), history_days=30)["NVDA"]
+
+    assert len(history) == 2
+    assert history[0].report_date == date(2026, 4, 28)
+    assert history[0].thesis_state == "active"
+    assert history[0].top_news_count == 1
+    assert history[0].valuation_risk == "High"
+    assert history[0].daily_change_pct == 10.0
+    assert history[0].earnings_days == 23
+    assert history[1].thesis_state == "building"

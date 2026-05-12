@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from .runner import run_daily
+from .storage import export_research_state_file, import_research_state_file, init_db
 
 
 def main() -> None:
@@ -19,10 +20,18 @@ def main() -> None:
     parser.add_argument("--no-valuation", action="store_true", help="Skip yfinance valuation and earnings fetching.")
     parser.add_argument("--no-macro", action="store_true", help="Skip official macro calendar fetching.")
     parser.add_argument("--notify-telegram", action="store_true", help="Send a Telegram summary after generating the report.")
+    parser.add_argument("--import-research-state", default=None, help="Import research state JSON into SQLite before generating the report.")
+    parser.add_argument("--export-research-state", default=None, help="Export research state JSON from SQLite and exit.")
+    parser.add_argument("--history-days", type=int, default=30, help="Days of report history to render in research sections.")
     args = parser.parse_args()
 
     if args.init_config:
         init_config(Path(args.config))
+        return
+
+    if args.export_research_state:
+        export_path = export_research_state_cli(args.db, args.export_research_state)
+        print(f"Exported research state to {export_path}")
         return
 
     report_date = date.fromisoformat(args.date) if args.date else None
@@ -35,6 +44,8 @@ def main() -> None:
         fetch_valuation=not args.no_valuation,
         fetch_macro=not args.no_macro,
         notify_telegram=args.notify_telegram,
+        import_research_state_path=args.import_research_state,
+        history_days=max(7, int(args.history_days)),
     )
     print(f"Generated report for {report.report_date.isoformat()} in {args.output_dir}")
 
@@ -51,3 +62,13 @@ def init_config(config_path: Path) -> None:
         )
     shutil.copyfile(example, config_path)
     print(f"Created {config_path} from {example}")
+
+
+def export_research_state_cli(db_path: str | Path, output_path: str | Path) -> Path:
+    with init_db(db_path) as conn:
+        return export_research_state_file(conn, output_path)
+
+
+def import_research_state_cli(db_path: str | Path, input_path: str | Path) -> None:
+    with init_db(db_path) as conn:
+        import_research_state_file(conn, input_path)

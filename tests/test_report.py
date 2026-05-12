@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date, datetime, timezone
 
 from stock_daily_research.models import (
@@ -8,11 +9,14 @@ from stock_daily_research.models import (
     MarketSentiment,
     MarketSentimentComponent,
     NewsArticle,
+    PostEarningsReview,
     PositionConfig,
     PremarketMove,
     PremarketSnapshot,
     RateLevel,
     TickerConfig,
+    TickerHistoryPoint,
+    TickerResearchState,
     TickerReport,
     ValuationSnapshot,
 )
@@ -239,12 +243,12 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert 'data-note-preview="NVDA"' in output
     assert 'data-valuation-risk=' in output
     assert 'data-top-news-count=' in output
-    assert 'stock-daily-notes' in output
+    assert 'stock-daily-draft-notes' in output
     assert 'data-checklist="NVDA"' in output
     assert 'data-thesis="NVDA"' in output
     assert 'data-thesis-trigger="NVDA"' in output
-    assert "stock-daily-thesis" in output
-    assert "stock-daily-thesis-triggers" in output
+    assert "stock-daily-draft-thesis" in output
+    assert "stock-daily-draft-thesis-triggers" in output
     assert "data-premarket-change=" in output
     assert "data-volume-x=" in output
     assert "data-position-weight=" in output
@@ -254,11 +258,91 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert "thesis_trigger" in output
     assert "FY1 rev rev" in output
     assert "NextQ rev rev" in output
-    assert "stock-daily-post-earnings" in output
+    assert "stock-daily-draft-post-earnings" in output
     assert "Manage" in output
     assert "Next earnings" in output
     assert "Valuation risk" in output
     assert "Exports: watchlist TXT" in output
+    assert "Research Queue" in output
+    assert "What Changed in 30d" in output
+
+
+def test_render_html_report_seeds_sqlite_backed_research_state_and_history() -> None:
+    base = _sample_report()
+    report = replace(
+        base,
+        research_states={
+            "NVDA": TickerResearchState(
+                ticker="NVDA",
+                tag="High conviction",
+                thesis_state="active",
+                thesis_trigger="guidance",
+                note="Datacenter demand still broadening.",
+                checklist=["earnings", "valuation", "news", "thesis"],
+                revisit_date=date(2026, 4, 30),
+                pinned=True,
+                review_status="reviewed",
+                last_reviewed_at=datetime(2026, 4, 28, 6, 0, tzinfo=timezone.utc),
+            )
+        },
+        post_earnings_reviews={
+            "NVDA": PostEarningsReview(
+                ticker="NVDA",
+                earnings_date=date(2026, 4, 27),
+                eps="beat",
+                revenue="beat",
+                guide="up",
+                conclusion="Thesis intact.",
+                next_step="Watch valuation reaction.",
+            )
+        },
+        ticker_history={
+            "NVDA": [
+                TickerHistoryPoint(
+                    report_date=date(2026, 4, 28),
+                    generated_at=datetime(2026, 4, 28, 7, 0, tzinfo=timezone.utc),
+                    ticker="NVDA",
+                    thesis_state="active",
+                    review_status="reviewed",
+                    news_count=1,
+                    top_news_count=1,
+                    valuation_risk="Elevated",
+                    warning_count=1,
+                    attention_score=14.0,
+                    news_burst_score=1.5,
+                ),
+                TickerHistoryPoint(
+                    report_date=date(2026, 4, 27),
+                    generated_at=datetime(2026, 4, 27, 7, 0, tzinfo=timezone.utc),
+                    ticker="NVDA",
+                    thesis_state="building",
+                    review_status="in-progress",
+                    news_count=0,
+                    top_news_count=0,
+                    valuation_risk="None",
+                    warning_count=0,
+                    attention_score=4.0,
+                    news_burst_score=0.0,
+                ),
+            ]
+        },
+        history_overview={
+            "history_days": 45,
+            "archive_dates": ["2026-04-28", "2026-04-27"],
+        },
+    )
+
+    output = render_html_report(report)
+
+    assert "Research timeline" in output
+    assert "Review queue" in output
+    assert "Recent thesis changes" in output
+    assert "Archive" in output
+    assert '"thesis_state": "active"' in output
+    assert '"history_days": 45' in output
+    assert "Thesis state changed" in output
+    assert "Research memory" in output
+    assert "Reviewed" in output
 
 
 def test_render_html_report_marks_imminent_earnings() -> None:
@@ -535,6 +619,69 @@ def test_news_rationale_maps_event_types() -> None:
     assert news_rationale(FakeArticle("regulation")) == "Regulatory overhang"
     # Unknown event_type → empty
     assert news_rationale(FakeArticle("unknown_thing")) == ""
+
+
+def test_portfolio_impact_summary_ranks_holdings() -> None:
+    from stock_daily_research.report import portfolio_impact_summary
+    from stock_daily_research.models import PositionConfig
+
+    def holding(symbol, weight, last, prev):
+        return TickerReport(
+            ticker=TickerConfig(
+                symbol=symbol, company_name=f"{symbol} Inc",
+                position=PositionConfig(status="holding", portfolio_weight=weight),
+            ),
+            articles=[], x_signals=[], earnings=None,
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=date(2026, 5, 12), source="yfinance",
+                metrics={"last_close": last, "previous_close": prev},
+                retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+            ),
+        )
+
+    def watchlist(symbol):
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=symbol),
+            articles=[], x_signals=[], earnings=None, valuation=None,
+        )
+
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[
+            holding("NVDA", 20.0, 110.0, 100.0),
+            holding("MSFT", 15.0, 95.0, 100.0),
+            holding("AAPL", 10.0, 101.0, 100.0),
+            watchlist("AMZN"),
+        ],
+    )
+
+    summary = portfolio_impact_summary(report)
+
+    assert len(summary["holdings"]) == 3
+    assert [r["symbol"] for r in summary["holdings"]] == ["NVDA", "MSFT", "AAPL"]
+    assert summary["winners"][0]["symbol"] == "NVDA"
+    assert summary["losers"][0]["symbol"] == "MSFT"
+    assert abs(summary["total_impact_pct"] - 1.35) < 0.01
+
+
+def test_portfolio_impact_summary_empty_when_no_holdings() -> None:
+    from stock_daily_research.report import portfolio_impact_summary
+
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVDA"),
+                articles=[], x_signals=[], earnings=None, valuation=None,
+            ),
+        ],
+    )
+    summary = portfolio_impact_summary(report)
+    assert summary["holdings"] == []
+    assert summary["winners"] == []
+    assert summary["losers"] == []
 
 
 def test_overextended_tickers_requires_two_of_three_flags() -> None:
