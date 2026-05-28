@@ -103,6 +103,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     if report.market_context and report.market_context.benchmark_returns:
         benchmarks = report.market_context.benchmark_returns
     env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks)
+    env.filters["right_side_score"] = lambda item: right_side_score(item, benchmarks)
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
     env.filters["metric_raw"] = metric_raw
@@ -581,6 +582,171 @@ def format_relative_strength(rs: dict[str, float]) -> list[str]:
             sign = "+" if value >= 0 else ""
             parts.append(f"{sign}{value:.1f}% {label}")
     return parts
+
+
+# Right-side trading status labels — used by both the badge and the insights row.
+RIGHT_SIDE_STATUSES = (
+    "Breakout confirmed",
+    "Pullback buy zone",
+    "Extended, do not chase",
+    "Mixed / neutral",
+    "Thesis weakening",
+    "Avoid",
+)
+
+
+def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = None) -> dict[str, object] | None:
+    """Composite 0–100 right-side trading score with a status label.
+
+    Combines trend (SMA stack) + relative strength + volume confirmation +
+    earnings momentum + RSI cool-down + valuation overhang + distance from
+    52-week high into a single score, then maps to one of:
+      Avoid (<25) / Thesis weakening / Extended, do not chase /
+      Breakout confirmed (>=75) / Pullback buy zone / Mixed / neutral.
+
+    Returns None when there's no valuation snapshot (nothing to score).
+    """
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    last = _as_float(metrics.get("last_close"))
+    if last is None:
+        return None
+
+    benchmarks = benchmarks or {}
+
+    score = 50
+    reasons: list[tuple[int, str]] = []
+
+    # Trend contribution from SMA stack
+    sma20 = _as_float(metrics.get("sma_20"))
+    sma60 = _as_float(metrics.get("sma_60"))
+    sma120 = _as_float(metrics.get("sma_120"))
+    sma_count = sum(1 for s in (sma20, sma60, sma120) if s is not None)
+    above_count = sum(
+        1
+        for s in (sma20, sma60, sma120)
+        if s is not None and last > s
+    )
+    if sma_count >= 3:
+        if above_count == 3:
+            score += 10
+            reasons.append((10, "above 20D/60D/120D"))
+        elif above_count == 2:
+            score += 5
+            reasons.append((5, f"above {above_count} of 3 MAs"))
+        elif above_count == 0:
+            score -= 10
+            reasons.append((-10, "below 20D/60D/120D"))
+
+    # Relative strength vs SPY/QQQ
+    rs = relative_strength(item, benchmarks)
+    if rs:
+        avg_spread = sum(rs.values()) / len(rs)
+        if avg_spread > 5:
+            score += 10
+            reasons.append((10, f"RS leadership ({avg_spread:+.1f}pp avg)"))
+        elif avg_spread > 0:
+            score += 5
+            reasons.append((5, f"RS positive ({avg_spread:+.1f}pp avg)"))
+        elif avg_spread < -5:
+            score -= 5
+            reasons.append((-5, f"RS lagging ({avg_spread:+.1f}pp avg)"))
+
+    # Volume confirmation
+    vol = _as_float(metrics.get("volume_vs_20d"))
+    if vol is not None:
+        if vol > 1.5:
+            score += 5
+            reasons.append((5, f"volume {vol:.1f}× 20D"))
+        elif vol < 0.5:
+            score -= 5
+            reasons.append((-5, f"volume {vol:.1f}× 20D"))
+
+    # Earnings momentum (FY1 EPS revision over last 30 days)
+    eps_rev = _as_float(metrics.get("fy1_eps_revision_30d"))
+    earnings_negative = False
+    if eps_rev is not None:
+        if eps_rev > 2:
+            score += 10
+            reasons.append((10, f"EPS rev {eps_rev:+.1f}% 30D"))
+        elif eps_rev > 0:
+            score += 5
+            reasons.append((5, f"EPS rev {eps_rev:+.1f}% 30D"))
+        elif eps_rev < -2:
+            score -= 5
+            earnings_negative = True
+            reasons.append((-5, f"EPS rev {eps_rev:+.1f}% 30D"))
+
+    # RSI cool-down penalty
+    rsi = _as_float(metrics.get("rsi_14"))
+    if rsi is not None:
+        if rsi >= 75:
+            score -= 10
+            reasons.append((-10, f"RSI {rsi:.0f}"))
+        elif rsi >= 70:
+            score -= 5
+            reasons.append((-5, f"RSI {rsi:.0f}"))
+
+    # Valuation overhang
+    risk_tier = valuation_risk_label(item)
+    if risk_tier == "Extreme":
+        score -= 10
+        reasons.append((-10, "Extreme P/E"))
+    elif risk_tier == "High":
+        score -= 5
+        reasons.append((-5, "High P/E"))
+
+    # Stretched into 52-week high
+    from_high = from_52w_high_pct(item)
+    if from_high is not None and from_high >= -2:
+        score -= 5
+        reasons.append((-5, "right at 52w high"))
+
+    score = max(0, min(100, score))
+
+    # Status label — priority order so the loudest signal wins
+    near_52w_high = from_high is not None and from_high >= -2
+    trend_up = sma_count >= 3 and above_count == 3
+    rsi_overbought = rsi is not None and rsi >= 70
+
+    if score < 25:
+        status = "Avoid"
+        tone = "down"
+    elif score < 40 and earnings_negative:
+        status = "Thesis weakening"
+        tone = "down"
+    elif trend_up and near_52w_high and rsi_overbought:
+        status = "Extended, do not chase"
+        tone = "extended"
+    elif score >= 75:
+        status = "Breakout confirmed"
+        tone = "up"
+    elif 55 <= score < 75:
+        status = "Pullback buy zone"
+        tone = "up"
+    else:
+        status = "Mixed / neutral"
+        tone = "mixed"
+
+    reasons.sort(key=lambda pair: abs(pair[0]), reverse=True)
+    formatted_reasons = [
+        f"{'+' if pts > 0 else ''}{pts} {label}" for pts, label in reasons
+    ]
+    slug = (
+        status.lower()
+        .replace(" / ", "-")
+        .replace(", ", " ")
+        .replace(" ", "-")
+    )
+
+    return {
+        "score": int(score),
+        "status": status,
+        "tone": tone,
+        "slug": slug,
+        "reasons": formatted_reasons,
+    }
 
 
 def post_earnings_status(item: TickerReport, anchor: date) -> dict[str, object] | None:
@@ -2303,6 +2469,8 @@ def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, f
             else:
                 rs_tone = "mixed"
 
+    score_info = right_side_score(item, benchmarks)
+
     return {
         "setup": setup,
         "quality": quality,
@@ -2314,6 +2482,7 @@ def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, f
         "risk": risk,
         "watch": watch,
         "action": action,
+        "score": score_info,
     }
 
 
