@@ -1315,6 +1315,26 @@
     .insight-row.rs.trend-down .insight-label { color: var(--danger); }
     .insight-row.rs.trend-down .insight-text { color: var(--danger); }
     .insight-row.rs.trend-mixed .insight-label { color: var(--warning); }
+    /* Right-side trading score */
+    .insight-row.score { cursor: help; }
+    .insight-row.score .insight-label { color: var(--info); font-weight: 800; }
+    .insight-row.score .insight-text { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .insight-row.score.score-up .insight-label { color: var(--good); }
+    .insight-row.score.score-up .insight-text { color: var(--good); }
+    .insight-row.score.score-down .insight-label { color: var(--danger); }
+    .insight-row.score.score-down .insight-text { color: var(--danger); }
+    .insight-row.score.score-mixed .insight-label { color: var(--warning); }
+    .insight-row.score.score-extended .insight-label { color: var(--warning); }
+    .insight-row.score.score-extended .insight-text { color: var(--warning); }
+    .badge.score-badge { font-weight: 700; }
+    .badge.score-badge.score-up { background: var(--good-bg); color: var(--good); }
+    .badge.score-badge.score-down { background: var(--danger-bg); color: var(--danger); }
+    .badge.score-badge.score-mixed { background: var(--warning-bg); color: var(--warning); opacity: 0.75; }
+    .badge.score-badge.score-extended { background: var(--warning-bg); color: var(--warning); }
+    .compare-table-wrap td.score-up { color: var(--good); font-weight: 700; }
+    .compare-table-wrap td.score-down { color: var(--danger); font-weight: 700; }
+    .compare-table-wrap td.score-mixed { color: var(--warning); }
+    .compare-table-wrap td.score-extended { color: var(--warning); font-weight: 700; }
     .insight-row.setup .insight-label { color: var(--good); }
     .insight-row.trend .insight-label { color: var(--muted); }
     .insight-row.trend.trend-up .insight-label { color: var(--good); }
@@ -2394,6 +2414,16 @@
           <option value="warn">Warn</option>
           <option value="quiet">Quiet</option>
         </select>
+        <label class="control-label" for="score-filter">Score</label>
+        <select id="score-filter" class="control-select">
+          <option value="all">Any score</option>
+          <option value="breakout-confirmed">Breakout confirmed</option>
+          <option value="pullback-buy-zone">Pullback buy zone</option>
+          <option value="extended-do-not-chase">Extended, do not chase</option>
+          <option value="mixed-neutral">Mixed / neutral</option>
+          <option value="thesis-weakening">Thesis weakening</option>
+          <option value="avoid">Avoid</option>
+        </select>
         <label class="control-label" for="earnings-filter">Earnings</label>
         <select id="earnings-filter" class="control-select">
           <option value="all">Any date</option>
@@ -2439,7 +2469,7 @@
         {% set fhigh = item|from_52w_high %}
         {% set pmchg = item|premarket_change %}
         {% set pos = item|position_view %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}">
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
@@ -2461,6 +2491,7 @@
               {% elif state == "warn" %}<span class="badge warn">Warn</span>
               {% elif state == "warm" %}<span class="badge good">Warm</span>
               {% else %}<span class="badge">Quiet</span>{% endif %}
+              {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="Right-side score {{ insights.score.score }}/100">{{ insights.score.status }}</span>{% endif %}
               <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
             </div>
           </div>
@@ -2507,9 +2538,10 @@
             </div>
           </details>
 
-          {% if insights.action or insights.setup or insights.trend or insights.risk %}
+          {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score %}
           <div class="insights">
             {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
+            {% if insights.score %}<div class="insight-row score score-{{ insights.score.tone }}" title="{{ insights.score.reasons|join(' · ') }}"><span class="insight-label">Score</span><span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status }}</span></div>{% endif %}
             {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
             {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">Strength</span><span class="insight-text">{{ insights.rs|join(' · ') }}</span></div>{% endif %}
@@ -2751,6 +2783,7 @@
       var search = document.getElementById("quick-search");
       var focusFilter = document.getElementById("focus-filter");
       var stateFilter = document.getElementById("state-filter");
+      var scoreFilter = document.getElementById("score-filter");
       var earningsFilter = document.getElementById("earnings-filter");
       var rsiFilter = document.getElementById("rsi-filter");
       var topicFilter = document.getElementById("topic-filter");
@@ -2933,6 +2966,7 @@
         var rsi = rsiFilter ? rsiFilter.value : "all";
         var topic = topicFilter ? topicFilter.value : "all";
         var sector = sectorFilter ? sectorFilter.value : "all";
+        var scoreStatus = scoreFilter ? scoreFilter.value : "all";
         var riskOnly = !!(riskFilter && riskFilter.checked);
         var watchlistOnly = document.body.classList.contains("watchlist-mode");
         var visible = 0;
@@ -2942,9 +2976,10 @@
           var stateMatch = state === "all" ? (showQuiet || focus !== "all" || watchlistOnly || card.dataset.state !== "quiet") : card.dataset.state === state;
           var topicMatch = topic === "all" || (" " + (card.dataset.topics || "") + " ").indexOf(" " + topic + " ") >= 0;
           var sectorMatch = sector === "all" || (card.dataset.sector || "") === sector;
+          var scoreMatch = scoreStatus === "all" || (card.dataset.rightSideStatus || "") === scoreStatus;
           var riskMatch = !riskOnly || card.dataset.hasRisk === "1";
           var pinnedMatch = !watchlistOnly || card.classList.contains("is-pinned");
-          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && riskMatch && workModeMatch(card);
+          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && scoreMatch && riskMatch && workModeMatch(card);
           card.classList.toggle("is-hidden", !match);
           syncModeDetails(card, match);
           if (match) visible += 1;
@@ -3211,8 +3246,13 @@
         panel.classList.remove("is-hidden");
         var rows = selected.map(function (card) {
           var sym = symbol(card);
+          var scoreVal = card.dataset.rightSideScore || "";
+          var scoreStatus = (card.dataset.rightSideStatus || "").replace(/-/g, " ");
+          var scoreTone = card.dataset.rightSideTone || "";
+          var scoreCell = scoreVal ? scoreVal + "/100 — " + scoreStatus.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : "—";
           return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
             "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
+            "<td class=\"score-" + escapeHtml(scoreTone) + "\">" + escapeHtml(scoreCell) + "</td>" +
             "<td class=\"trend-" + escapeHtml(card.dataset.trendTone || "") + "\">" + escapeHtml(card.dataset.trend || "—") + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.dailyChange) + "\">" + formattedPct(card.dataset.dailyChange) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.fromHigh) + "\">" + formattedPct(card.dataset.fromHigh) + "</td>" +
@@ -3242,7 +3282,7 @@
         }).join("");
         panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
-          "<th>Ticker</th><th>State</th><th>Trend</th><th class=\"num\">Daily %</th><th class=\"num\">From High</th>" +
+          "<th>Ticker</th><th>State</th><th>Score</th><th>Trend</th><th class=\"num\">Daily %</th><th class=\"num\">From High</th>" +
           "<th>Next earnings</th><th>Review</th><th>User tag</th><th>Thesis</th><th>Trigger</th><th>Revisit</th>" +
           "<th class=\"num\">Premarket</th><th class=\"num\">Gap</th><th class=\"num\">Vol/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS growth</th><th class=\"num\">EPS rev 30D</th><th class=\"num\">FY1 rev rev</th><th class=\"num\">NextQ rev rev</th><th>Position</th><th class=\"num\">Weight</th><th class=\"num\">Book impact</th>" +
           "<th>Top watch</th><th>Valuation risk</th><th class=\"num\">RSI 14</th><th class=\"num\">Top news</th>" +
@@ -3841,7 +3881,7 @@
         download("compare-{{ report.report_date.isoformat() }}.json", JSON.stringify(rows, null, 2), "application/json;charset=utf-8", "Exported compare JSON: " + rows.length + " selected tickers");
       }
 
-      [search, focusFilter, stateFilter, earningsFilter, rsiFilter, topicFilter, sectorFilter, riskFilter].forEach(function (el) {
+      [search, focusFilter, stateFilter, scoreFilter, earningsFilter, rsiFilter, topicFilter, sectorFilter, riskFilter].forEach(function (el) {
         if (!el) return;
         el.addEventListener(el === search ? "input" : "change", applyFilters);
       });

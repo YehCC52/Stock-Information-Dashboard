@@ -752,6 +752,97 @@ def test_relative_strength_computes_spread_vs_benchmarks() -> None:
     assert any("+6.2%" in p for p in phrases)
 
 
+def _score_item(metrics: dict) -> TickerReport:
+    return TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X Inc"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X", as_of_date=date(2026, 5, 12), source="yfinance",
+            metrics=metrics,
+            retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ),
+    )
+
+
+def test_right_side_score_breakout_confirmed() -> None:
+    from stock_daily_research.report import right_side_score
+
+    item = _score_item({
+        "last_close": 120.0,
+        "sma_20": 110.0, "sma_60": 100.0, "sma_120": 90.0,
+        "return_20d": 12.0, "volume_vs_20d": 1.8,
+        "fy1_eps_revision_30d": 3.0, "rsi_14": 60.0,
+        "fifty_two_week_high": 130.0,
+    })
+    result = right_side_score(item, {"spy_20d": 2.0, "qqq_20d": 4.0})
+    assert result is not None
+    assert result["score"] >= 75
+    assert result["status"] == "Breakout confirmed"
+    assert result["tone"] == "up"
+
+
+def test_right_side_score_extended_when_stretched() -> None:
+    from stock_daily_research.report import right_side_score
+
+    item = _score_item({
+        "last_close": 130.0,
+        "sma_20": 120.0, "sma_60": 110.0, "sma_120": 100.0,
+        "return_20d": 8.0, "volume_vs_20d": 1.0,
+        "fy1_eps_revision_30d": 1.0, "rsi_14": 76.0,
+        "fifty_two_week_high": 130.5,
+    })
+    result = right_side_score(item, {"spy_20d": 2.0, "qqq_20d": 4.0})
+    assert result is not None
+    assert result["status"] == "Extended, do not chase"
+    assert result["tone"] == "extended"
+
+
+def test_right_side_score_avoid_when_all_red() -> None:
+    from stock_daily_research.report import right_side_score
+
+    item = _score_item({
+        "last_close": 50.0,
+        "sma_20": 60.0, "sma_60": 70.0, "sma_120": 80.0,
+        "return_20d": -15.0, "volume_vs_20d": 0.4,
+        "fy1_eps_revision_30d": -5.0, "rsi_14": 35.0,
+        "forward_pe": 250.0,
+        "fifty_two_week_high": 100.0,
+    })
+    result = right_side_score(item, {"spy_20d": 2.0, "qqq_20d": 3.0})
+    assert result is not None
+    # Below all MAs (-10), RS lagging (-5), low vol (-5), EPS rev down (-5), Extreme P/E (-10) → score = 15
+    assert result["score"] < 25
+    assert result["status"] == "Avoid"
+
+
+def test_right_side_score_returns_none_without_valuation() -> None:
+    from stock_daily_research.report import right_side_score
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X"),
+        articles=[], x_signals=[], earnings=None, valuation=None,
+    )
+    assert right_side_score(item, {"spy_20d": 1.0}) is None
+
+
+def test_right_side_score_reasons_ordered_by_magnitude() -> None:
+    from stock_daily_research.report import right_side_score
+
+    item = _score_item({
+        "last_close": 105.0,
+        "sma_20": 100.0, "sma_60": 95.0, "sma_120": 90.0,
+        "return_20d": 7.0, "volume_vs_20d": 1.6,
+        "fy1_eps_revision_30d": 3.5, "rsi_14": 72.0,
+        "fifty_two_week_high": 110.0,
+    })
+    result = right_side_score(item, {"spy_20d": 1.0, "qqq_20d": 2.0})
+    assert result is not None
+    # First reason should have the largest absolute magnitude
+    magnitudes = [int(r.split()[0]) for r in result["reasons"]]
+    abs_magnitudes = [abs(m) for m in magnitudes]
+    assert abs_magnitudes == sorted(abs_magnitudes, reverse=True)
+
+
 def test_relative_strength_skips_when_data_missing() -> None:
     from stock_daily_research.report import relative_strength
 
