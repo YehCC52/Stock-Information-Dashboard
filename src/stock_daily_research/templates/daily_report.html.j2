@@ -1205,6 +1205,57 @@
     .mb-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
     .mb-detail { color: var(--muted); font-size: 11px; }
     .mb-empty { color: var(--muted); font-size: 11px; font-style: italic; }
+    .my-book-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 4px 0 10px;
+      font-size: 12px;
+    }
+    .my-book-stats .stat {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 4px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 110px;
+    }
+    .my-book-stats .stat .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+    .my-book-stats .stat .value {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .my-book-card.sectors { border-left: 3px solid var(--info); }
+    .my-book-card.stops { border-left: 3px solid var(--danger); }
+    .sector-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      font-size: 12px;
+      padding: 2px 0;
+    }
+    .sector-row.over-cap { color: var(--danger); font-weight: 700; }
+    .sector-row .tickers { color: var(--muted); font-size: 11px; font-weight: 400; }
+    .stop-row {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 8px;
+      font-size: 12px;
+      padding: 2px 0;
+    }
+    .stop-row.tone-danger { color: var(--danger); font-weight: 700; }
+    .stop-row.tone-warn { color: var(--warning); }
+    .stop-row .detail { font-size: 11px; color: var(--muted); }
+    .position-chip.tone-danger .value { color: var(--danger); font-weight: 700; }
+    .position-chip.tone-warn .value { color: var(--warning); }
+    .position-chip.tone-ok .value { color: var(--good); }
 
     /* Overextended list (top-of-dashboard danger panel) */
     .overextended-section {
@@ -1242,6 +1293,53 @@
     .event-badge.event-ma, .event-badge.event-antitrust, .event-badge.event-lawsuit, .event-badge.event-regulation { color: var(--info); background: var(--info-bg); }
     .event-badge.event-ai, .event-badge.event-product { color: var(--good); background: var(--good-bg); }
     .event-badge.event-analyst_call, .event-badge.event-management, .event-badge.event-macro, .event-badge.event-other { color: var(--muted); background: var(--surface-soft); }
+
+    /* Event clusters — cross-source story grouping */
+    .cluster-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .cluster-item {
+      border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--muted);
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: var(--surface);
+    }
+    .cluster-item.confidence-high { border-left-color: var(--good); }
+    .cluster-item.confidence-medium { border-left-color: var(--warning); }
+    .cluster-item.confidence-low { border-left-color: var(--muted); }
+    .cluster-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .cluster-headline { font-weight: 700; font-size: 13px; color: var(--text); }
+    .cluster-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .cluster-field .cf-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-right: 4px;
+    }
+    .cluster-field a { color: var(--text); font-weight: 700; }
+    .conf-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .conf-tag.conf-high { color: var(--good); background: var(--good-bg); }
+    .conf-tag.conf-medium { color: var(--warning); background: var(--warning-bg); }
+    .conf-tag.conf-low { color: var(--muted); background: var(--surface-soft); }
+    .cluster-action { margin-top: 6px; font-size: 11px; color: var(--muted); font-style: italic; }
 
     /* Ticker grid */
     .ticker-grid {
@@ -1316,7 +1414,40 @@
     .insight-row.rs.trend-down .insight-text { color: var(--danger); }
     .insight-row.rs.trend-mixed .insight-label { color: var(--warning); }
     /* Right-side trading score */
-    .insight-row.score { cursor: help; }
+    details.insight-row.score { display: block; cursor: pointer; padding: 4px 0; }
+    details.insight-row.score > summary {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 8px;
+      align-items: baseline;
+      list-style: none;
+      cursor: pointer;
+    }
+    details.insight-row.score > summary::-webkit-details-marker { display: none; }
+    details.insight-row.score > summary::after {
+      content: "▸";
+      font-size: 9px;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+    details.insight-row.score[open] > summary::after { content: "▾"; }
+    .score-breakdown {
+      list-style: none;
+      margin: 6px 0 0 56px;
+      padding: 6px 10px;
+      background: var(--surface-alt);
+      border-left: 2px solid var(--border);
+      border-radius: 4px;
+    }
+    .score-reason {
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      padding: 1px 0;
+      color: var(--text);
+    }
+    .score-reason.positive { color: var(--good); }
+    .score-reason.negative { color: var(--danger); }
+    .score-empty { font-size: 11px; color: var(--muted); margin-left: 56px; font-style: italic; }
     .insight-row.score .insight-label { color: var(--info); font-weight: 800; }
     .insight-row.score .insight-text { font-weight: 700; font-variant-numeric: tabular-nums; }
     .insight-row.score.score-up .insight-label { color: var(--good); }
@@ -1611,6 +1742,7 @@
       {% if report.market_context and report.market_context.breadth %}<a href="#breadth">Breadth</a>{% endif %}
       <a href="#macro">Macro ({{ report.economic_events|length }})</a>
       <a href="#earnings">Earnings ({{ earnings_soon|length }})</a>
+      {% if news_clusters %}<a href="#news-clusters">Events ({{ news_clusters|length }})</a>{% endif %}
       <a href="#news">News ({{ important_news|length }})</a>
       <a href="#changes">Changes</a>
       <a href="#valuation">Valuation</a>
@@ -2005,6 +2137,31 @@
         </span>
       </div>
 
+      <div class="my-book-stats">
+        <div class="stat" title="Sum of position weights across holdings">
+          <span class="label">Invested weight</span>
+          <span class="value">{{ portfolio.total_weight_pct|format_pct(sign=False) }}</span>
+        </div>
+        {% if portfolio.addable_cash is not none %}
+        <div class="stat" title="Cash available to deploy (from settings.portfolio.addable_cash)">
+          <span class="label">Addable cash</span>
+          <span class="value">${{ "{:,.0f}".format(portfolio.addable_cash) }}</span>
+        </div>
+        {% endif %}
+        {% if portfolio.total_value is not none %}
+        <div class="stat" title="Total portfolio value (from settings.portfolio.total_value)">
+          <span class="label">Book value</span>
+          <span class="value">${{ "{:,.0f}".format(portfolio.total_value) }}</span>
+        </div>
+        {% endif %}
+        {% if portfolio.max_single_weight is not none %}
+        <div class="stat" title="Max single-name weight cap">
+          <span class="label">Single cap</span>
+          <span class="value">{{ portfolio.max_single_weight|format_pct(sign=False) }}</span>
+        </div>
+        {% endif %}
+      </div>
+
       <div class="my-book-grid">
         <div class="my-book-card winners">
           <div class="mb-label">Largest positive impact</div>
@@ -2058,6 +2215,31 @@
             {% endfor %}
           </ul>
           {% else %}<div class="mb-empty">No thesis flags.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card sectors">
+          <div class="mb-label">Sector concentration</div>
+          {% if portfolio.sectors %}
+          {% for bucket in portfolio.sectors %}
+          <div class="sector-row{% if bucket.get('over_cap') %} over-cap{% endif %}" {% if bucket.get('over_cap') %}title="Above {{ bucket.cap }}% cap"{% endif %}>
+            <span>{{ bucket.sector }} <span class="tickers">({{ bucket.tickers|join(', ') }})</span></span>
+            <span>{{ bucket.weight|format_pct(sign=False) }}</span>
+          </div>
+          {% endfor %}
+          {% else %}<div class="mb-empty">No sector data yet.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card stops">
+          <div class="mb-label">Stop distance ≤ 5%</div>
+          {% if portfolio.stop_warnings %}
+          {% for w in portfolio.stop_warnings %}
+          <div class="stop-row tone-{{ w.tone }}">
+            <a href="#{{ w.symbol|ticker_anchor }}">{{ w.symbol }}</a>
+            <span class="detail">last ${{ "%.2f"|format(w.last) }} vs stop ${{ "%.2f"|format(w.stop_loss) }}</span>
+            <span>{{ w.distance_pct|format_pct }}</span>
+          </div>
+          {% endfor %}
+          {% else %}<div class="mb-empty">All holdings comfortably above stops.</div>{% endif %}
         </div>
       </div>
     </section>
@@ -2292,6 +2474,34 @@
       {% endif %}
     </section>
 
+    {% if news_clusters %}
+    <section id="news-clusters" class="section section-tertiary news-clusters-section">
+      <div class="section-header">
+        <h2>Event Clusters <span class="count">({{ news_clusters|length }})</span></h2>
+      </div>
+      <div class="sort-hint">Same story reported by multiple outlets — grouped to cut duplicate headlines.</div>
+      <ul class="cluster-list">
+        {% for c in news_clusters %}
+        <li class="cluster-item confidence-{{ c.confidence }}">
+          <div class="cluster-head">
+            <span class="cluster-headline">{{ c.headline }}</span>
+            <span class="badge event-badge event-{{ c.event_type }}">{{ c.event_type|event_label }}</span>
+          </div>
+          <div class="cluster-meta">
+            <span class="cluster-field"><span class="cf-label">Tickers</span>
+              {% for sym in c.tickers %}<a href="#{{ sym|ticker_anchor }}">{{ sym }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+            </span>
+            <span class="cluster-field"><span class="cf-label">Sources</span>{{ c.sources }} ({{ c.article_count }} articles)</span>
+            <span class="cluster-field"><span class="cf-label">Impact</span>{{ c.impact }}</span>
+            <span class="cluster-field"><span class="cf-label">Confidence</span><span class="conf-tag conf-{{ c.confidence }}">{{ c.confidence }}</span></span>
+          </div>
+          <div class="cluster-action">{{ c.action }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
     <section id="news" class="section section-tertiary">
       <div class="section-header">
         <h2>Important News <span class="count">({{ important_news[:5]|length }} picks / {{ important_news|length }} total)</span></h2>
@@ -2521,7 +2731,7 @@
             <div class="position-row">
               <div class="position-chip">
                 <span class="label">Position</span>
-                <span class="value">{{ pos.status }}</span>
+                <span class="value">{{ pos.status }}{% if pos.sector %} · {{ pos.sector }}{% endif %}</span>
               </div>
               <div class="position-chip">
                 <span class="label">Weight / Impact</span>
@@ -2533,15 +2743,43 @@
               </div>
               <div class="position-chip">
                 <span class="label">P/L</span>
-                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}</span>
+                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}{% if pos.pl_dollar is not none %} ({{ "$%+,.0f"|format(pos.pl_dollar) }}){% endif %}</span>
               </div>
+              {% if pos.stop_loss is not none %}
+              <div class="position-chip tone-{{ pos.stop_distance_tone }}" title="Distance from stop-loss">
+                <span class="label">Stop</span>
+                <span class="value">${{ "%.2f"|format(pos.stop_loss) }}{% if pos.stop_distance_pct is not none %} · {{ pos.stop_distance_pct|format_pct }} away{% endif %}</span>
+              </div>
+              {% endif %}
+              {% if pos.position_size is not none %}
+              <div class="position-chip">
+                <span class="label">Size</span>
+                <span class="value">${{ "{:,.0f}".format(pos.position_size) }}</span>
+              </div>
+              {% endif %}
             </div>
           </details>
 
           {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score %}
           <div class="insights">
             {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
-            {% if insights.score %}<div class="insight-row score score-{{ insights.score.tone }}" title="{{ insights.score.reasons|join(' · ') }}"><span class="insight-label">Score</span><span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status }}</span></div>{% endif %}
+            {% if insights.score %}
+            <details class="insight-row score score-{{ insights.score.tone }}">
+              <summary>
+                <span class="insight-label">Score</span>
+                <span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status }}</span>
+              </summary>
+              {% if insights.score.reasons %}
+              <ul class="score-breakdown">
+                {% for reason in insights.score.reasons %}
+                <li class="score-reason {% if reason.startswith('+') %}positive{% elif reason.startswith('-') %}negative{% endif %}">{{ reason }}</li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <div class="score-empty">No contributing factors recorded.</div>
+              {% endif %}
+            </details>
+            {% endif %}
             {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
             {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">Strength</span><span class="insight-text">{{ insights.rs|join(' · ') }}</span></div>{% endif %}

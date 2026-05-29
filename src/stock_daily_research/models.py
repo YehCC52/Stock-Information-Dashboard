@@ -19,6 +19,16 @@ class PositionConfig:
     avg_cost: float | None = None
     portfolio_weight: float | None = None
     position_size: float | None = None
+    stop_loss: float | None = None
+    sector: str = ""
+
+
+@dataclass(frozen=True)
+class PortfolioSettings:
+    total_value: float | None = None
+    addable_cash: float | None = None
+    max_sector_weight: float | None = None
+    max_single_weight: float | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +117,7 @@ class AppSettings:
     earnings: EarningsSettings = field(default_factory=EarningsSettings)
     macro: MacroSettings = field(default_factory=MacroSettings)
     notifications: NotificationSettings = field(default_factory=NotificationSettings)
+    portfolio: PortfolioSettings = field(default_factory=PortfolioSettings)
 
 
 @dataclass(frozen=True)
@@ -326,3 +337,4 @@ class DailyReport:
     post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
     ticker_history: dict[str, list[TickerHistoryPoint]] = field(default_factory=dict)
     history_overview: dict[str, Any] = field(default_factory=dict)
+    settings: "AppSettings | None" = None

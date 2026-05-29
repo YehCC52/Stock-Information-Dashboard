@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from math import isfinite
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .models import DailyReport, MarketContext, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
+from .models import DailyReport, MarketContext, NewsArticle, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
@@ -135,6 +136,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         research_payload=research_payload(report),
         earnings_soon=earnings_soon(report),
         important_news=important_news(report),
+        news_clusters=event_clusters(report),
         hero=morning_briefing_cards(report),
         todays_catalysts=todays_catalysts(report),
         post_earnings_items=post_earnings_items(report),
@@ -422,6 +424,178 @@ def news_triage_label(item: TickerReport, article: object, anchor: date) -> str:
     if event_type in ("macro", "market_reaction"):
         return "macro-linked"
     return "watchlist"
+
+
+# Words that carry no clustering signal — generic finance / filler vocabulary.
+# Title tokens in this set are ignored when deciding whether two stories cover
+# the same event, so "stock", "shares", "says" don't accidentally bind unrelated
+# articles together.
+_CLUSTER_STOPWORDS: frozenset[str] = frozenset({
+    "the", "a", "an", "and", "or", "but", "for", "to", "of", "in", "on", "at",
+    "by", "with", "from", "as", "is", "are", "be", "was", "were", "will", "would",
+    "could", "should", "may", "might", "has", "have", "had", "its", "it", "this",
+    "that", "these", "those", "new", "more", "up", "down", "over", "after", "before",
+    "amid", "into", "out", "than", "then", "now", "say", "says", "said", "report",
+    "reports", "reported", "stock", "stocks", "share", "shares", "market", "markets",
+    "inc", "corp", "co", "ltd", "plc", "group", "company", "update", "news", "today",
+    "week", "year", "day", "us", "u", "s", "vs", "amp", "how", "why", "what", "who",
+    "you", "your", "we", "our", "his", "her", "their", "they", "he", "she",
+    # Publisher / wire-service names — Google News appends "- Publisher" to every
+    # title, so without these two same-source articles would falsely cluster.
+    "bloomberg", "reuters", "cnbc", "wsj", "ft", "com", "wall", "street",
+    "journal", "financial", "times", "barron", "barrons", "yahoo", "fortune",
+})
+
+# Google News titles end with " - Publisher Name"; strip it so the source
+# attribution never contributes clustering tokens.
+_SOURCE_SUFFIX_RE = re.compile(r"\s+-\s+[^-]+$")
+
+
+def _cluster_tokens(title: str) -> set[str]:
+    """Significant tokens used to decide if two stories cover the same event."""
+    stripped = _SOURCE_SUFFIX_RE.sub("", title)
+    return {
+        token
+        for token in normalize_title(stripped).split()
+        if len(token) >= 3 and token not in _CLUSTER_STOPWORDS
+    }
+
+
+_IMPACT_LABELS: dict[str, str] = {
+    "earnings": "fundamental",
+    "guidance": "fundamental",
+    "regulation": "regulatory overhang",
+    "lawsuit": "regulatory overhang",
+    "deal": "strategic optionality",
+    "ma": "strategic optionality",
+    "ai": "secular / AI",
+    "analyst": "sentiment",
+    "analyst_rating": "sentiment",
+    "product": "product cycle",
+    "market": "macro / beta",
+    "macro": "macro / beta",
+    "market_reaction": "macro / beta",
+}
+
+# Event types that, when corroborated by multiple sources, are worth a closer
+# look rather than passive monitoring.
+_THESIS_RELEVANT_EVENTS: frozenset[str] = frozenset({
+    "earnings", "guidance", "regulation", "lawsuit", "deal", "ma",
+})
+
+
+@dataclass
+class _Cluster:
+    """An in-progress news cluster while grouping cross-source stories."""
+
+    seed: frozenset[str]
+    headline: str
+    members: list[tuple[TickerReport, NewsArticle]]
+
+
+def event_clusters(report: DailyReport, min_sources: int = 2) -> list[dict[str, object]]:
+    """Group cross-source news covering the same event into clusters.
+
+    Two articles join the same cluster when they share at least two significant
+    title tokens (generic finance words excluded). This collapses the common
+    pattern where one story (e.g. "SpaceX–Tesla merger speculation") is reported
+    by Bloomberg, CNBC ×4, etc. into a single card that shows source count,
+    impact tag, and a confidence read instead of N near-duplicate rows.
+
+    Only clusters drawing on at least ``min_sources`` distinct outlets are
+    returned — a single-source story is not an "event cluster".
+    """
+    candidates = sorted(
+        (
+            (item, article)
+            for item in report.ticker_reports
+            for article in item.articles
+        ),
+        key=lambda pair: float(getattr(pair[1], "importance_score", 0.0)),
+        reverse=True,
+    )
+
+    clusters: list[_Cluster] = []
+    for item, article in candidates:
+        tokens = _cluster_tokens(article.title)
+        if len(tokens) < 2:
+            continue
+        match = None
+        # Compare against each cluster's *seed* tokens (frozen at creation), not a
+        # growing union — otherwise clusters snowball and absorb unrelated stories.
+        for cluster in clusters:
+            if len(tokens & cluster.seed) >= 2:
+                match = cluster
+                break
+        if match is None:
+            clusters.append(_Cluster(
+                seed=frozenset(tokens),
+                headline=article.title,
+                members=[(item, article)],
+            ))
+        else:
+            match.members.append((item, article))
+
+    out: list[dict[str, object]] = []
+    for cluster in clusters:
+        members = cluster.members
+        source_counts: dict[str, int] = {}
+        tickers: list[str] = []
+        event_counts: dict[str, int] = {}
+        for item, article in members:
+            source = str(getattr(article, "source", "") or article.domain)
+            source_counts[source] = source_counts.get(source, 0) + 1
+            symbol = item.ticker.symbol
+            if symbol not in tickers:
+                tickers.append(symbol)
+            event_type = str(getattr(article, "event_type", "other"))
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+
+        distinct_sources = len(source_counts)
+        if distinct_sources < min_sources:
+            continue
+
+        # Prefer the most common *classified* event; fall back to "other" only
+        # when nothing was classified.
+        classified = {k: v for k, v in event_counts.items() if k != "other"}
+        if classified:
+            dominant_event = max(classified.items(), key=lambda kv: kv[1])[0]
+        else:
+            dominant_event = "other"
+        impact = _IMPACT_LABELS.get(dominant_event, "sentiment")
+
+        article_count = len(members)
+        if distinct_sources >= 3:
+            confidence = "high"
+        elif distinct_sources == 2:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        if confidence in ("high", "medium") and dominant_event in _THESIS_RELEVANT_EVENTS:
+            action = "review — corroborated, may be thesis-relevant"
+        else:
+            action = "monitor only, not thesis-changing yet"
+
+        sources_label = ", ".join(
+            f"{name} ×{count}" if count > 1 else name
+            for name, count in sorted(source_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        )
+
+        out.append({
+            "headline": cluster.headline,
+            "tickers": tickers,
+            "sources": sources_label,
+            "source_count": distinct_sources,
+            "article_count": article_count,
+            "event_type": dominant_event,
+            "impact": impact,
+            "confidence": confidence,
+            "action": action,
+        })
+
+    out.sort(key=lambda c: (int(c["source_count"]), int(c["article_count"])), reverse=True)
+    return out
 
 
 TIER1_NEWS_DOMAINS = {
@@ -1371,11 +1545,29 @@ def position_view(item: TickerReport) -> dict[str, object]:
     if position_size is None and shares is not None and last is not None:
         position_size = shares * last
     pl_pct = None
+    pl_dollar = None
     if avg_cost is not None and avg_cost > 0 and last is not None:
         pl_pct = (last - avg_cost) / avg_cost * 100.0
+        if shares is not None:
+            pl_dollar = (last - avg_cost) * shares
     book_impact = None
     if pos.portfolio_weight is not None and prev is not None and last is not None and prev:
         book_impact = pos.portfolio_weight * ((last - prev) / prev)
+    stop_distance_pct = None
+    stop_distance_tone = "flat"
+    if pos.stop_loss is not None and pos.stop_loss > 0 and last is not None:
+        stop_distance_pct = (last - pos.stop_loss) / pos.stop_loss * 100.0
+        if stop_distance_pct <= 2.0:
+            stop_distance_tone = "danger"
+        elif stop_distance_pct <= 5.0:
+            stop_distance_tone = "warn"
+        else:
+            stop_distance_tone = "ok"
+    sector = pos.sector
+    if not sector and item.valuation:
+        sector_value = item.valuation.metrics.get("sector")
+        if isinstance(sector_value, str):
+            sector = sector_value
     return {
         "status": pos.status,
         "shares": shares,
@@ -1383,7 +1575,12 @@ def position_view(item: TickerReport) -> dict[str, object]:
         "portfolio_weight": pos.portfolio_weight,
         "position_size": position_size,
         "pl_pct": pl_pct,
+        "pl_dollar": pl_dollar,
         "book_impact": book_impact,
+        "stop_loss": pos.stop_loss,
+        "stop_distance_pct": stop_distance_pct,
+        "stop_distance_tone": stop_distance_tone,
+        "sector": sector,
     }
 
 
@@ -1596,6 +1793,22 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
     thesis_risk = [r for r in rows if r["thesis_risk"]]
 
     total_impact = round(sum(r["book_impact"] or 0 for r in rows), 3)
+    total_weight = round(sum(float(r["weight"]) for r in rows), 2)
+
+    sectors = sector_concentration(report)
+    stop_warnings = stop_distance_warnings(report)
+
+    settings = getattr(report, "settings", None)
+    portfolio_settings = getattr(settings, "portfolio", None) if settings else None
+    addable_cash = getattr(portfolio_settings, "addable_cash", None) if portfolio_settings else None
+    total_value = getattr(portfolio_settings, "total_value", None) if portfolio_settings else None
+    max_single_weight = getattr(portfolio_settings, "max_single_weight", None) if portfolio_settings else None
+
+    over_concentrated: list[dict[str, object]] = []
+    if max_single_weight is not None:
+        over_concentrated = [
+            r for r in rows if isinstance(r["weight"], (int, float)) and r["weight"] > max_single_weight
+        ]
 
     return {
         "holdings": rows,
@@ -1604,7 +1817,78 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
         "event_soon": event_soon,
         "thesis_risk": thesis_risk,
         "total_impact_pct": total_impact,
+        "total_weight_pct": total_weight,
+        "sectors": sectors,
+        "stop_warnings": stop_warnings,
+        "addable_cash": addable_cash,
+        "total_value": total_value,
+        "over_concentrated": over_concentrated,
+        "max_single_weight": max_single_weight,
     }
+
+
+def sector_concentration(report: DailyReport) -> list[dict[str, object]]:
+    """Group holdings by sector and aggregate weight + count.
+
+    Sector source: PositionConfig.sector first, valuation.metrics["sector"] fallback.
+    """
+    buckets: dict[str, dict[str, object]] = {}
+    for tr in report.ticker_reports:
+        pos = tr.ticker.position
+        if not pos or pos.status != "holding":
+            continue
+        weight = pos.portfolio_weight
+        if not isinstance(weight, (int, float)) or weight == 0:
+            continue
+        sector = pos.sector or ""
+        if not sector and tr.valuation:
+            raw = tr.valuation.metrics.get("sector")
+            if isinstance(raw, str):
+                sector = raw
+        sector = (sector or "Unspecified").strip() or "Unspecified"
+        bucket = buckets.setdefault(sector, {"sector": sector, "weight": 0.0, "tickers": []})
+        bucket["weight"] = float(bucket["weight"]) + float(weight)
+        bucket["tickers"].append(tr.ticker.symbol)  # type: ignore[union-attr]
+    out = list(buckets.values())
+    for bucket in out:
+        bucket["weight"] = round(float(bucket["weight"]), 2)
+        bucket["count"] = len(bucket["tickers"])  # type: ignore[arg-type]
+    out.sort(key=lambda b: float(b["weight"]), reverse=True)
+
+    settings = getattr(report, "settings", None)
+    portfolio_settings = getattr(settings, "portfolio", None) if settings else None
+    cap = getattr(portfolio_settings, "max_sector_weight", None) if portfolio_settings else None
+    if cap is not None:
+        for bucket in out:
+            bucket["over_cap"] = float(bucket["weight"]) > float(cap)
+            bucket["cap"] = float(cap)
+    return out
+
+
+def stop_distance_warnings(report: DailyReport) -> list[dict[str, object]]:
+    """Holdings whose last_close is within 5% of stop_loss, sorted by distance."""
+    out: list[dict[str, object]] = []
+    for tr in report.ticker_reports:
+        pos = tr.ticker.position
+        if not pos or pos.status != "holding":
+            continue
+        if pos.stop_loss is None or pos.stop_loss <= 0:
+            continue
+        last = _as_float(tr.valuation.metrics.get("last_close")) if tr.valuation else None
+        if last is None:
+            continue
+        distance_pct = (last - pos.stop_loss) / pos.stop_loss * 100.0
+        if distance_pct > 5.0:
+            continue
+        out.append({
+            "symbol": tr.ticker.symbol,
+            "last": last,
+            "stop_loss": pos.stop_loss,
+            "distance_pct": round(distance_pct, 2),
+            "tone": "danger" if distance_pct <= 2.0 else "warn",
+            "weight": pos.portfolio_weight,
+        })
+    return sorted(out, key=lambda row: float(row["distance_pct"]))
 
 
 def overextended_tickers(report: DailyReport) -> list[dict[str, object]]:
@@ -1732,7 +2016,13 @@ def sector_leadership(report: DailyReport) -> list[dict[str, object]]:
             "rel_spy": rel_spy,
         })
 
-    return sorted(rows, key=lambda row: (row["one_day"] is None, -(row["one_day"] or -999)))
+    return sorted(
+        rows,
+        key=lambda row: (
+            row["one_day"] is None,
+            -(row["one_day"] if row["one_day"] is not None else -999),
+        ),
+    )
 
 
 def premarket_triage(report: DailyReport) -> dict[str, list[dict[str, object]]]:
@@ -1868,7 +2158,7 @@ def ma_signals(item: TickerReport) -> list[str]:
     elif below:
         signals.append(f"Below {' / '.join(below)}")
 
-    if sma20 is not None and last >= sma20 and (last - sma20) / sma20 * 100 <= NEAR_SUPPORT_PCT:
+    if sma20 and last >= sma20 and (last - sma20) / sma20 * 100 <= NEAR_SUPPORT_PCT:
         signals.append("Near 20D support")
 
     if sma5 is not None and sma20 is not None and sma5 < sma20 * 0.99:

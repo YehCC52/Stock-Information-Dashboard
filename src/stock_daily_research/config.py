@@ -15,6 +15,7 @@ from .models import (
     ManualMacroEvent,
     NewsSettings,
     NotificationSettings,
+    PortfolioSettings,
     PositionConfig,
     TickerConfig,
     TelegramSettings,
@@ -43,6 +44,7 @@ def load_config(path: str | Path) -> AppConfig:
         earnings=_load_earnings_settings(settings_data.get("earnings", {})),
         macro=_load_macro_settings(settings_data.get("macro", {})),
         notifications=_load_notification_settings(settings_data.get("notifications", {})),
+        portfolio=_load_portfolio_settings(settings_data.get("portfolio", {})),
     )
 
     tickers = [_load_ticker(index, item) for index, item in enumerate(data.get("tickers", []))]
@@ -165,6 +167,17 @@ def _load_position(data: dict[str, Any]) -> PositionConfig:
         avg_cost=_optional_float(data.get("avg_cost")),
         portfolio_weight=_optional_float(data.get("portfolio_weight")),
         position_size=_optional_float(data.get("position_size")),
+        stop_loss=_optional_float(data.get("stop_loss")),
+        sector=str(data.get("sector", "") or ""),
+    )
+
+
+def _load_portfolio_settings(data: dict[str, Any]) -> PortfolioSettings:
+    return PortfolioSettings(
+        total_value=_optional_float(data.get("total_value")),
+        addable_cash=_optional_float(data.get("addable_cash")),
+        max_sector_weight=_optional_float(data.get("max_sector_weight")),
+        max_single_weight=_optional_float(data.get("max_single_weight")),
     )
 
 
