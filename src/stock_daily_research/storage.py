@@ -156,6 +156,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_earnings_ticker_date_source_expr
 CREATE INDEX IF NOT EXISTS idx_report_runs_report_date ON report_runs(report_date, generated_at);
 CREATE INDEX IF NOT EXISTS idx_notes_history_ticker ON ticker_notes_history(ticker, changed_at);
 CREATE INDEX IF NOT EXISTS idx_summary_ticker_date ON news_daily_summary(ticker, report_date, generated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_summary_date_ticker_unique ON news_daily_summary(report_date, ticker);
 """
 
 
@@ -235,7 +236,43 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "ticker_research_state", "note", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
     _cleanup_earnings_duplicates(conn)
+    _dedupe_news_daily_summary(conn)
     conn.commit()
+
+
+def _dedupe_news_daily_summary(conn: sqlite3.Connection) -> None:
+    """Collapse multiple (report_date, ticker) rows down to the latest snapshot.
+
+    Multiple runs of the pipeline on the same day used to create one
+    `news_daily_summary` row per `report_run_id`, polluting the Research timeline
+    on each ticker card. Keep only the row with the latest `generated_at` per
+    `(report_date, ticker)`, then add a UNIQUE index so future writes upsert.
+    """
+    has_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='news_daily_summary'"
+    ).fetchone()
+    if not has_table:
+        return
+    conn.execute(
+        """
+        DELETE FROM news_daily_summary
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY report_date, ticker
+                     ORDER BY generated_at DESC, id DESC
+                   ) AS rn
+            FROM news_daily_summary
+          )
+          WHERE rn = 1
+        )
+        """
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_summary_date_ticker_unique "
+        "ON news_daily_summary(report_date, ticker)"
+    )
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -286,15 +323,26 @@ def save_report(conn: sqlite3.Connection, report: DailyReport) -> None:
         upsert_ticker_research_state(conn, state)
     for review in report.post_earnings_reviews.values():
         upsert_post_earnings_review(conn, review)
-    conn.commit()
+    # No commit here: this stays in the caller's transaction so it commits
+    # atomically with save_report_run, avoiding a half-saved run if the process
+    # dies between the two. (`with init_db(...) as conn` blocks still commit on
+    # exit for standalone callers.)
 
 
 def save_article(conn: sqlite3.Connection, article: NewsArticle) -> None:
     conn.execute(
         """
-        INSERT OR REPLACE INTO news_articles
+        INSERT INTO news_articles
         (ticker, title, source, domain, published_at, url, summary, event_type, importance_score)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, url) DO UPDATE SET
+          title = excluded.title,
+          source = excluded.source,
+          domain = excluded.domain,
+          published_at = excluded.published_at,
+          summary = excluded.summary,
+          event_type = excluded.event_type,
+          importance_score = excluded.importance_score
         """,
         (
             article.ticker,
@@ -503,9 +551,21 @@ def load_post_earnings_reviews(
 
 def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearchState) -> None:
     existing = load_ticker_research_states(conn, [state.ticker]).get(state.ticker)
-    changed = existing != state
     updated_at = state.updated_at or datetime.now(timezone.utc)
     review_status = state.review_status or _review_status_from_checklist(state.checklist)
+    # Only append a history row when a field that history actually records has
+    # changed. Comparing the whole dataclass (incl. updated_at) would log a row
+    # on every run even when nothing substantive changed.
+    if existing is None:
+        changed = True
+    else:
+        existing_status = existing.review_status or _review_status_from_checklist(existing.checklist)
+        changed = (
+            existing.note != state.note
+            or existing.thesis_state != state.thesis_state
+            or existing.thesis_trigger != state.thesis_trigger
+            or existing_status != review_status
+        )
     conn.execute(
         """
         INSERT INTO ticker_research_state
@@ -748,11 +808,27 @@ def save_report_run(
         rsi = _metric_float(item.valuation.metrics.get("rsi_14")) if item.valuation else None
         conn.execute(
             """
-            INSERT OR REPLACE INTO news_daily_summary
+            INSERT INTO news_daily_summary
             (report_run_id, report_date, generated_at, ticker, thesis_state, review_status,
              last_reviewed_at, news_count, top_news_count, valuation_risk, rsi, daily_change_pct,
              premarket_change_pct, earnings_days, warning_count, attention_score, news_burst_score)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(report_date, ticker) DO UPDATE SET
+              report_run_id = excluded.report_run_id,
+              generated_at = excluded.generated_at,
+              thesis_state = excluded.thesis_state,
+              review_status = excluded.review_status,
+              last_reviewed_at = excluded.last_reviewed_at,
+              news_count = excluded.news_count,
+              top_news_count = excluded.top_news_count,
+              valuation_risk = excluded.valuation_risk,
+              rsi = excluded.rsi,
+              daily_change_pct = excluded.daily_change_pct,
+              premarket_change_pct = excluded.premarket_change_pct,
+              earnings_days = excluded.earnings_days,
+              warning_count = excluded.warning_count,
+              attention_score = excluded.attention_score,
+              news_burst_score = excluded.news_burst_score
             """,
             (
                 run_id,

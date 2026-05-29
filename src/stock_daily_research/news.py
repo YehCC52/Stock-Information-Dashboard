@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -11,6 +12,8 @@ import feedparser
 import requests
 
 from .models import NewsArticle, TickerConfig
+
+logger = logging.getLogger(__name__)
 
 
 # Event classifier: 7 conservative categories + "other".
@@ -168,6 +171,7 @@ class GoogleNewsRssProvider:
                     self._fetch_for_domain(ticker, domain, lookback_days, min_published_at)
                 )
             except Exception as exc:
+                logger.warning("News fetch failed for %s (%s)", domain, ticker.symbol, exc_info=True)
                 warnings.append(f"News fetch failed for {domain}: {exc}")
 
         return dedupe_articles(articles)[:max_articles], warnings
@@ -228,7 +232,9 @@ class GoogleNewsRssProvider:
         source = getattr(getattr(entry, "source", None), "title", None) or domain
         summary = unescape(str(getattr(entry, "summary", "")).strip())
         published_at = parse_feed_datetime(str(getattr(entry, "published", "") or getattr(entry, "updated", "")))
-        if published_at and published_at < min_published_at:
+        # Drop undated/unparseable items rather than treating them as fresh — an
+        # entry with no usable date must not slip past the lookback window.
+        if published_at is None or published_at < min_published_at:
             return None
         if not is_relevant_article(ticker, title):
             return None

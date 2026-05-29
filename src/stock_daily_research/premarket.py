@@ -8,6 +8,7 @@ from typing import Any
 import yfinance as yf
 
 from .models import PremarketMove, PremarketSnapshot, TickerConfig
+from .valuation import YF_HISTORY_TIMEOUT, _series_floats
 
 
 BENCHMARK_SYMBOLS: tuple[tuple[str, str], ...] = (
@@ -128,12 +129,12 @@ def _first_number(info: dict[str, Any], keys: tuple[tuple[str, str], ...]) -> tu
 
 def _history_fallback(ticker: Any, source: str) -> tuple[float | None, float | None, str]:
     try:
-        hist = ticker.history(period="5d", auto_adjust=True)
+        hist = ticker.history(period="5d", auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
     except Exception:
         return None, None, source
     if hist is None or hist.empty or "Close" not in hist.columns:
         return None, None, source
-    closes = [float(v) for v in hist["Close"].dropna().tolist()]
+    closes = _series_floats(hist["Close"])
     if len(closes) < 2:
         return None, None, source
     return closes[-1], closes[-2], source or "latest close"

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import shutil
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 
@@ -10,6 +12,10 @@ from .storage import export_research_state_file, import_research_state_file, ini
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="Generate a personal daily stock research report.")
     parser.add_argument("--config", default="watchlist.yaml", help="Path to watchlist YAML config.")
     parser.add_argument("--date", default=None, help="Report date in YYYY-MM-DD format. Defaults to today.")
@@ -65,10 +71,10 @@ def init_config(config_path: Path) -> None:
 
 
 def export_research_state_cli(db_path: str | Path, output_path: str | Path) -> Path:
-    with init_db(db_path) as conn:
+    with closing(init_db(db_path)) as conn:
         return export_research_state_file(conn, output_path)
 
 
 def import_research_state_cli(db_path: str | Path, input_path: str | Path) -> None:
-    with init_db(db_path) as conn:
+    with closing(init_db(db_path)) as conn:
         import_research_state_file(conn, input_path)

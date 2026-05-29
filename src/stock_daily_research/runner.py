@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -36,6 +37,8 @@ from .storage import (
 from .valuation import fetch_yfinance_earnings_date, fetch_yfinance_valuation
 from .x_signals import load_manual_x_signals
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_FETCH_WORKERS = 6
 
@@ -80,16 +83,19 @@ def run_daily(
             market_sentiment = fetch_market_sentiment()
             global_warnings.extend(market_sentiment.warnings)
         except Exception as exc:
+            logger.warning("Market sentiment fetch failed", exc_info=True)
             global_warnings.append(f"Market sentiment fetch failed: {exc}")
         try:
             market_context = fetch_market_context()
             global_warnings.extend(market_context.warnings)
         except Exception as exc:
+            logger.warning("Market context fetch failed", exc_info=True)
             global_warnings.append(f"Market context fetch failed: {exc}")
         try:
             premarket = fetch_overnight_premarket(config.tickers, max_workers=max(1, max_workers))
             global_warnings.extend(premarket.warnings)
         except Exception as exc:
+            logger.warning("Premarket snapshot fetch failed", exc_info=True)
             global_warnings.append(f"Premarket snapshot fetch failed: {exc}")
     else:
         global_warnings.append("Market sentiment skipped because valuation fetching is disabled.")
@@ -175,6 +181,7 @@ def run_daily(
         try:
             telegram_notifier.send_message(build_daily_summary(preliminary_report, str(report_path)))
         except Exception as exc:
+            logger.warning("Telegram notification failed", exc_info=True)
             global_warnings.append(f"Telegram notification failed: {exc}")
 
     report = DailyReport(
@@ -190,6 +197,7 @@ def run_daily(
         post_earnings_reviews=post_earnings_reviews,
         ticker_history=ticker_history,
         history_overview=history_overview,
+        settings=config.settings,
     )
     write_report(report, output_dir)
     return report
@@ -230,6 +238,7 @@ def _fetch_all_tickers(
             try:
                 results[ticker.symbol] = future.result()
             except Exception as exc:
+                logger.warning("Worker crashed for %s", ticker.symbol, exc_info=True)
                 results[ticker.symbol] = TickerReport(
                     ticker=ticker,
                     articles=[],
@@ -343,11 +352,13 @@ def _fetch_one_ticker(
         try:
             valuation = fetch_yfinance_valuation(ticker)
         except Exception as exc:
+            logger.warning("Valuation fetch failed for %s", ticker.symbol, exc_info=True)
             warnings.append(f"Valuation fetch failed: {exc}")
 
         try:
             earnings = fetch_yfinance_earnings_date(ticker)
         except Exception as exc:
+            logger.warning("Earnings date fetch failed for %s", ticker.symbol, exc_info=True)
             warnings.append(f"Earnings date fetch failed: {exc}")
 
     return TickerReport(

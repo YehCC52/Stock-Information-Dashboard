@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import json
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from zoneinfo import ZoneInfo
 import requests
 
 from .models import EconomicEvent, ManualMacroEvent
+
+logger = logging.getLogger(__name__)
 
 BLS_EMPSIT_URL = "https://www.bls.gov/schedule/news_release/empsit.htm"
 BLS_SELECTED_RELEASES_URL = "https://www.bls.gov/schedule/{year}/home.htm"
@@ -136,6 +139,9 @@ class OfficialMacroCalendarProvider:
             html = self._get(FED_FOMC_URL)
             events.extend(parse_fomc_calendar(html, timezone_name, years=[report_date.year, report_date.year + 1]))
         except Exception as exc:
+            # Always log the live-fetch failure so a masked bug is diagnosable,
+            # even when the static fallback covers the window.
+            logger.warning("FOMC calendar live fetch failed; using fallback", exc_info=True)
             fallback_events = fallback_fomc_calendar(timezone_name)
             fallback_window = filter_event_window(fallback_events, report_date, days_back, days_ahead, timezone_name)
             if fallback_window:

@@ -12,6 +12,7 @@ from typing import Any
 import yfinance as yf
 
 from .models import BreadthRow, MarketContext, RateLevel
+from .valuation import YF_HISTORY_TIMEOUT, _series_floats
 
 
 # (display_name, yfinance_symbol, unit, kind).
@@ -90,12 +91,12 @@ def fetch_market_context() -> MarketContext:
 
 def _close_history(symbol: str, *, period: str = "1mo") -> list[float] | None:
     try:
-        hist = yf.Ticker(symbol).history(period=period, auto_adjust=True)
+        hist = yf.Ticker(symbol).history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
     except Exception:
         return None
     if hist is None or hist.empty or "Close" not in hist.columns:
         return None
-    return [float(v) for v in hist["Close"].dropna().tolist()]
+    return _series_floats(hist["Close"])
 
 
 def _n_day_return(symbol: str, n: int) -> float | None:

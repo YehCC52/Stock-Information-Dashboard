@@ -94,6 +94,31 @@ def test_news_articles_unique_per_ticker_not_per_url(tmp_path: Path) -> None:
     assert [row[0] for row in rows] == ["MSFT", "NVDA"]
 
 
+def test_save_article_preserves_row_id_on_refetch(tmp_path: Path) -> None:
+    """Re-saving the same (ticker, url) must UPDATE in place, keeping the row id
+    stable (the old INSERT OR REPLACE deleted + reinserted, churning the id)."""
+    db_path = tmp_path / "stock.sqlite3"
+
+    with init_db(db_path) as conn:
+        save_report(conn, _wrap("NVDA", articles=[_make_article("NVDA", url="https://x/a")]))
+        first_id = conn.execute("SELECT id FROM news_articles WHERE ticker='NVDA'").fetchone()[0]
+
+        refetched = NewsArticle(
+            ticker="NVDA", title="Updated headline", source="Reuters", domain="reuters.com",
+            published_at=datetime.now(timezone.utc), url="https://x/a", summary="now with detail",
+            event_type="earnings", importance_score=2.5,
+        )
+        save_report(conn, _wrap("NVDA", articles=[refetched]))
+        rows = conn.execute(
+            "SELECT id, title, importance_score FROM news_articles WHERE ticker='NVDA'"
+        ).fetchall()
+
+    assert len(rows) == 1
+    assert rows[0][0] == first_id          # id preserved
+    assert rows[0][1] == "Updated headline"  # fields updated
+    assert rows[0][2] == 2.5
+
+
 def test_earnings_dates_idempotent_across_runs(tmp_path: Path) -> None:
     db_path = tmp_path / "stock.sqlite3"
     earnings = _make_earnings()
@@ -172,6 +197,96 @@ def test_init_db_migrates_legacy_earnings_dates_no_unique(tmp_path: Path) -> Non
 
     assert count == 1  # dedup during migration
     assert count_after == 1  # idempotent on subsequent save
+
+
+def test_news_daily_summary_upserts_on_same_day(tmp_path: Path) -> None:
+    """Two runs on the same report_date for the same ticker should collapse to
+    one row in news_daily_summary (last write wins), not produce duplicates."""
+    db_path = tmp_path / "stock.sqlite3"
+
+    same_day = date(2026, 5, 29)
+    report_a = DailyReport(
+        report_date=same_day,
+        generated_at=datetime(2026, 5, 29, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[_make_article("NVDA", url="https://reuters.com/n1")],
+                x_signals=[], valuation=None, earnings=None,
+            )
+        ],
+    )
+    report_b = DailyReport(
+        report_date=same_day,
+        generated_at=datetime(2026, 5, 29, 14, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[
+                    _make_article("NVDA", url="https://reuters.com/n1"),
+                    _make_article("NVDA", url="https://reuters.com/n2"),
+                ],
+                x_signals=[], valuation=None, earnings=None,
+            )
+        ],
+    )
+
+    with init_db(db_path) as conn:
+        save_report_run(conn, report_a, html_path=str(tmp_path / "a.html"))
+        save_report_run(conn, report_b, html_path=str(tmp_path / "b.html"))
+
+        rows = conn.execute(
+            "SELECT report_date, ticker, news_count, generated_at "
+            "FROM news_daily_summary WHERE ticker = 'NVDA' ORDER BY generated_at"
+        ).fetchall()
+
+    assert len(rows) == 1, f"Expected single row after upsert, got {len(rows)}: {rows}"
+    assert rows[0][2] == 2  # later run's news_count wins
+    assert rows[0][3].startswith("2026-05-29T14")  # later generated_at
+
+
+def test_news_daily_summary_dedup_migration(tmp_path: Path) -> None:
+    """Pre-existing duplicate rows from before the UNIQUE index should be
+    collapsed during init_db migration, keeping the latest generated_at."""
+    db_path = tmp_path / "stock.sqlite3"
+    # Open once to create base schema
+    with init_db(db_path) as conn:
+        pass
+
+    # Drop the new unique index so we can insert duplicates simulating legacy state
+    with sqlite3.connect(db_path) as raw:
+        raw.execute("DROP INDEX IF EXISTS idx_summary_date_ticker_unique")
+        for run_id, gen_at, count in [
+            (1, "2026-05-29T08:00:00+00:00", 1),
+            (2, "2026-05-29T12:00:00+00:00", 3),  # newer — should win
+            (3, "2026-05-29T10:00:00+00:00", 2),
+        ]:
+            raw.execute(
+                "INSERT INTO report_runs (report_date, generated_at, html_path, warning_count, created_at) "
+                "VALUES (?, ?, '', 0, ?)",
+                ("2026-05-29", gen_at, gen_at),
+            )
+            raw.execute(
+                "INSERT INTO news_daily_summary "
+                "(report_run_id, report_date, generated_at, ticker, news_count) "
+                "VALUES (?, ?, ?, 'NVDA', ?)",
+                (run_id, "2026-05-29", gen_at, count),
+            )
+        raw.commit()
+        # Confirm the duplicates landed
+        assert raw.execute(
+            "SELECT COUNT(*) FROM news_daily_summary WHERE ticker='NVDA'"
+        ).fetchone()[0] == 3
+
+    # init_db should dedup
+    with init_db(db_path) as conn:
+        rows = conn.execute(
+            "SELECT generated_at, news_count FROM news_daily_summary WHERE ticker='NVDA'"
+        ).fetchall()
+
+    assert len(rows) == 1
+    assert rows[0][0].startswith("2026-05-29T12")
+    assert rows[0][1] == 3
 
 
 def test_load_latest_valuation_snapshot_returns_good_values(tmp_path: Path) -> None:

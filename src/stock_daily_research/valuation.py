@@ -9,6 +9,10 @@ import yfinance as yf
 
 from .models import EarningsDate, TickerConfig, ValuationSnapshot
 
+# Explicit bound on yfinance price-history calls. yfinance defaults to 10s
+# internally; pin it here so the timeout is visible and tunable in one place.
+YF_HISTORY_TIMEOUT = 10
+
 
 YFINANCE_FIELD_MAP = {
     "last_close": "regularMarketPrice",
@@ -56,12 +60,12 @@ def fetch_moving_averages(yf_ticker: Any, period: str = "1y") -> dict[str, float
     sma_keys = ("sma_5", "sma_20", "sma_60", "sma_120")
     empty = {k: None for k in sma_keys}
     try:
-        hist = yf_ticker.history(period=period, auto_adjust=True)
+        hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
     except Exception:
         return empty
     if hist is None or hist.empty or "Close" not in hist.columns:
         return empty
-    closes = [float(v) for v in hist["Close"].dropna().tolist()]
+    closes = _series_floats(hist["Close"])
     return {
         "sma_5": _mean_last_n(closes, 5),
         "sma_20": _mean_last_n(closes, 20),
@@ -88,12 +92,12 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
     )
     empty = {k: None for k in keys}
     try:
-        hist = yf_ticker.history(period=period, auto_adjust=True)
+        hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
     except Exception:
         return empty
     if hist is None or hist.empty or "Close" not in hist.columns:
         return empty
-    closes = [float(v) for v in hist["Close"].dropna().tolist()]
+    closes = _series_floats(hist["Close"])
     quality = compute_move_quality_metrics(hist)
     return {
         "sma_5": _mean_last_n(closes, 5),
@@ -124,6 +128,21 @@ def _mean_last_n(values: list[float], n: int) -> float | None:
     return sum(values[-n:]) / n
 
 
+def _series_floats(series: Any) -> list[float]:
+    """Coerce a pandas column to floats, dropping NaN and any non-numeric cells.
+
+    A single malformed value in a yfinance frame must not crash the whole run,
+    so unconvertible entries are skipped rather than raising.
+    """
+    out: list[float] = []
+    for value in series.dropna().tolist():
+        try:
+            out.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def compute_rsi(values: list[float], period: int = 14) -> float | None:
     if period <= 0 or len(values) < period + 1:
         return None
@@ -146,10 +165,10 @@ def compute_move_quality_metrics(hist: Any) -> dict[str, float | None]:
     if hist is None or hist.empty or not required.issubset(set(hist.columns)):
         return empty
 
-    closes = [float(v) for v in hist["Close"].dropna().tolist()]
-    highs = [float(v) for v in hist["High"].dropna().tolist()]
-    lows = [float(v) for v in hist["Low"].dropna().tolist()]
-    opens = [float(v) for v in hist["Open"].dropna().tolist()]
+    closes = _series_floats(hist["Close"])
+    highs = _series_floats(hist["High"])
+    lows = _series_floats(hist["Low"])
+    opens = _series_floats(hist["Open"])
     if len(closes) < 21 or len(highs) < 21 or len(lows) < 21 or len(opens) < 2:
         return empty
 
@@ -171,7 +190,7 @@ def compute_move_quality_metrics(hist: Any) -> dict[str, float | None]:
 
     volume_vs_20d = None
     if "Volume" in hist.columns:
-        volumes = [float(v) for v in hist["Volume"].dropna().tolist()]
+        volumes = _series_floats(hist["Volume"])
         if len(volumes) >= 21:
             prior_20 = [v for v in volumes[-21:-1] if v > 0]
             if prior_20:
