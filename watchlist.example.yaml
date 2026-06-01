@@ -44,6 +44,16 @@ tickers:
       avg_cost: 120.00
       portfolio_weight: 6.5
       position_size: 1200
+    # Optional trading playbook. These are baseline defaults: edits made in the
+    # dashboard override them per-field and round-trip to SQLite via
+    # --export-research-state / --import-research-state.
+    plan:
+      bull_case: AI capex still rising into 2026
+      bear_case: Margin compression if Blackwell yield slips
+      entry_plan: Add on 20MA pullback, only if RSI < 65
+      add_zone: 20MA retest, >= 1.5x average volume
+      reduce_zone: RSI > 80 with volume divergence
+      stop_loss: Daily close below 50MA
     trusted_news_domains:
       - reuters.com
       - cnbc.com

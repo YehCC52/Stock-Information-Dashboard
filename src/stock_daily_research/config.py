@@ -11,6 +11,7 @@ from .models import (
     AppConfig,
     AppSettings,
     EarningsSettings,
+    InvestmentPlan,
     MacroSettings,
     ManualMacroEvent,
     NewsSettings,
@@ -157,6 +158,20 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
         trusted_news_domains=[str(value).lower() for value in data.get("trusted_news_domains", [])],
         trusted_x_accounts=[_load_x_account(index, idx, account) for idx, account in enumerate(data.get("trusted_x_accounts", []))],
         position=_load_position(data.get("position", {})),
+        plan=_load_plan(data.get("plan", {})),
+    )
+
+
+def _load_plan(data: dict[str, Any]) -> InvestmentPlan:
+    if not isinstance(data, dict):
+        return InvestmentPlan()
+    return InvestmentPlan(
+        bull_case=str(data.get("bull_case", "") or ""),
+        bear_case=str(data.get("bear_case", "") or ""),
+        entry_plan=str(data.get("entry_plan", "") or ""),
+        add_zone=str(data.get("add_zone", "") or ""),
+        reduce_zone=str(data.get("reduce_zone", "") or ""),
+        stop_loss=str(data.get("stop_loss", "") or ""),
     )
 
 

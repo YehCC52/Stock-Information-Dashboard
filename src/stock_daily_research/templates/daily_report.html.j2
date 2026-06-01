@@ -129,7 +129,7 @@
       font-size: 11px;
       text-align: right;
     }
-    .search-box, .control-input, .control-select, .tag-select, .note-input, .revisit-input {
+    .search-box, .control-input, .control-select, .tag-select, .note-input, .revisit-input, .plan-input {
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--surface);
@@ -168,7 +168,7 @@
     .tool-button:hover, .icon-button:hover { background: var(--surface-soft); text-decoration: none; }
     .tool-button:focus-visible, .icon-button:focus-visible, .search-box:focus-visible,
     .control-select:focus-visible, .tag-select:focus-visible, .note-input:focus-visible,
-    .revisit-input:focus-visible {
+    .revisit-input:focus-visible, .plan-input:focus-visible {
       outline: 2px solid var(--info);
       outline-offset: 2px;
     }
@@ -1575,6 +1575,36 @@
       padding: 8px;
       line-height: 1.4;
     }
+    .plan-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .plan-field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .plan-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .plan-label.up { color: var(--good); }
+    .plan-label.down { color: var(--danger); }
+    .plan-input {
+      width: 100%;
+      min-height: 40px;
+      resize: vertical;
+      padding: 6px 8px;
+      line-height: 1.4;
+    }
+    @media (max-width: 480px) {
+      .plan-grid { grid-template-columns: minmax(0, 1fr); }
+    }
     .manage-panel {
       margin-top: 0;
       padding-top: 2px;
@@ -2948,6 +2978,36 @@
             </div>
           </details>
 
+          <details class="card-secondary investment-plan" data-plan-card="{{ item.ticker.symbol }}">
+            <summary>Investment plan</summary>
+            <div class="plan-grid">
+              <label class="plan-field">
+                <span class="plan-label up">Bull case</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="bull_case" placeholder="Why this works"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label down">Bear case</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="bear_case" placeholder="What breaks the thesis"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label">Entry plan</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="entry_plan" placeholder="When / how to start"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label">Add zone</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="add_zone" placeholder="Where to scale up"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label">Reduce zone</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="reduce_zone" placeholder="Where to trim"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label down">Stop loss</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="stop_loss" placeholder="Hard exit rule"></textarea>
+              </label>
+            </div>
+          </details>
+
           <details>
             <summary>News &amp; X signals</summary>
             {% if item.articles %}
@@ -3042,6 +3102,9 @@
       var thesisTriggers = readJson("stock-daily-draft-thesis-triggers", mapState("thesis_trigger"));
       var notes = readJson("stock-daily-draft-notes", mapNotes());
       var checklist = readJson("stock-daily-draft-checklist", mapState("checklist"));
+      var plans = readJson("stock-daily-draft-plans", mapPlans());
+
+      var PLAN_FIELDS = ["bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"];
 
       function mapState(key) {
         var out = {};
@@ -3060,6 +3123,18 @@
             note: tickerState[sym].note || "",
             revisit: tickerState[sym].revisit_date || ""
           };
+        });
+        return out;
+      }
+
+      function mapPlans() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          var entry = {};
+          ["bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"].forEach(function (field) {
+            entry[field] = (tickerState[sym] && tickerState[sym][field]) || "";
+          });
+          out[sym] = entry;
         });
         return out;
       }
@@ -3360,8 +3435,34 @@
             });
           });
           paintReviewStatus(card);
+
+          var planInputs = Array.prototype.slice.call(card.querySelectorAll("[data-plan-field]"));
+          planInputs.forEach(function (input) {
+            var field = input.dataset.planField;
+            var planState = plans[s] || {};
+            input.value = planState[field] || "";
+            input.addEventListener("input", function () {
+              plans[s] = Object.assign({}, plans[s]);
+              plans[s][field] = input.value;
+              writeJson("stock-daily-draft-plans", plans);
+              paintPlanSummary(card);
+            });
+          });
+          paintPlanSummary(card);
         });
         updateReviewSummary();
+      }
+
+      function paintPlanSummary(card) {
+        var details = card.querySelector("[data-plan-card]");
+        if (!details) return;
+        var summary = details.querySelector("summary");
+        if (!summary) return;
+        var planState = plans[symbol(card)] || {};
+        var filled = PLAN_FIELDS.filter(function (field) {
+          return (planState[field] || "").trim();
+        }).length;
+        summary.textContent = filled ? "Investment plan (" + filled + "/6)" : "Investment plan";
       }
 
       function paintNotePreview(card) {
@@ -3975,6 +4076,7 @@
         cards.forEach(function (card) {
           var sym = symbol(card);
           var base = tickerState[sym] || {};
+          var plan = plans[sym] || {};
           payload.tickers[sym] = {
             tag: tags[sym] || "",
             thesis_state: thesis[sym] || "",
@@ -3985,6 +4087,12 @@
             pinned: isPinned(card),
             review_status: reviewState(card),
             last_reviewed_at: base.last_reviewed_at || "",
+            bull_case: plan.bull_case || "",
+            bear_case: plan.bear_case || "",
+            entry_plan: plan.entry_plan || "",
+            add_zone: plan.add_zone || "",
+            reduce_zone: plan.reduce_zone || "",
+            stop_loss: plan.stop_loss || "",
             post_earnings_review: (window.postEarningsState && window.postEarningsState[sym]) || {}
           };
         });

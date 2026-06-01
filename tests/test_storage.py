@@ -363,6 +363,51 @@ def test_research_state_export_import_roundtrip(tmp_path: Path) -> None:
     assert review.conclusion == "Thesis intact."
 
 
+def test_research_state_plan_fields_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+        ],
+        research_states={
+            "NVDA": TickerResearchState(
+                ticker="NVDA",
+                bull_case="AI capex still rising into 2026",
+                bear_case="Margin compression if Blackwell yield slips",
+                entry_plan="Add on 20MA pullback, only if RSI < 65",
+                add_zone="20MA retest, >= 1.5x avg volume",
+                reduce_zone="RSI > 80 with volume divergence",
+                stop_loss="Daily close below 50MA",
+            )
+        },
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, report)
+        loaded = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+        payload = export_research_state_payload(conn)
+
+    assert loaded.bull_case == "AI capex still rising into 2026"
+    assert loaded.stop_loss == "Daily close below 50MA"
+    assert payload["tickers"]["NVDA"]["entry_plan"] == "Add on 20MA pullback, only if RSI < 65"
+
+    with init_db(tmp_path / "import.sqlite3") as conn:
+        import_research_state_payload(conn, payload)
+        reimported = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+
+    assert reimported.bear_case == "Margin compression if Blackwell yield slips"
+    assert reimported.add_zone == "20MA retest, >= 1.5x avg volume"
+    assert reimported.reduce_zone == "RSI > 80 with volume divergence"
+
+
 def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
     db_path = tmp_path / "stock.sqlite3"
     ticker = TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation")

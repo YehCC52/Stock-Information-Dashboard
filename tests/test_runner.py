@@ -1,8 +1,8 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from stock_daily_research.models import DailyReport, MarketContext, MarketSentiment, PremarketSnapshot, TickerConfig, TickerReport, ValuationSnapshot
-from stock_daily_research.runner import run_daily
+from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PremarketSnapshot, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
+from stock_daily_research.runner import _apply_plan_defaults, run_daily
 from stock_daily_research.storage import init_db, save_report
 
 
@@ -43,6 +43,43 @@ def _write_config(tmp_path: Path) -> Path:
     config = tmp_path / "watchlist.yaml"
     config.write_text(CONFIG_BODY, encoding="utf-8")
     return config
+
+
+def test_apply_plan_defaults_seeds_from_yaml() -> None:
+    tickers = [
+        TickerConfig(
+            symbol="NVDA",
+            company_name="NVIDIA Corporation",
+            plan=InvestmentPlan(bull_case="AI capex", stop_loss="Close below 50MA"),
+        )
+    ]
+    merged = _apply_plan_defaults({}, tickers)
+    assert merged["NVDA"].bull_case == "AI capex"
+    assert merged["NVDA"].stop_loss == "Close below 50MA"
+    assert merged["NVDA"].bear_case == ""
+
+
+def test_apply_plan_defaults_db_overrides_yaml() -> None:
+    tickers = [
+        TickerConfig(
+            symbol="NVDA",
+            company_name="NVIDIA Corporation",
+            plan=InvestmentPlan(bull_case="YAML bull", bear_case="YAML bear"),
+        )
+    ]
+    states = {"NVDA": TickerResearchState(ticker="NVDA", bull_case="DB bull")}
+    merged = _apply_plan_defaults(states, tickers)
+    # Non-empty DB field wins; empty DB field falls back to YAML.
+    assert merged["NVDA"].bull_case == "DB bull"
+    assert merged["NVDA"].bear_case == "YAML bear"
+
+
+def test_apply_plan_defaults_ignores_empty_plan() -> None:
+    tickers = [TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation")]
+    states = {"NVDA": TickerResearchState(ticker="NVDA", note="keep me")}
+    merged = _apply_plan_defaults(states, tickers)
+    assert merged["NVDA"].note == "keep me"
+    assert merged["NVDA"].bull_case == ""
 
 
 def test_run_daily_writes_report_and_db(tmp_path: Path, monkeypatch) -> None:

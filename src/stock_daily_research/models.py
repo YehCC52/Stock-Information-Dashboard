@@ -32,6 +32,30 @@ class PortfolioSettings:
 
 
 @dataclass(frozen=True)
+class InvestmentPlan:
+    """Free-text trading playbook for a ticker (YAML defaults, UI overrides)."""
+    bull_case: str = ""
+    bear_case: str = ""
+    entry_plan: str = ""
+    add_zone: str = ""
+    reduce_zone: str = ""
+    stop_loss: str = ""
+
+    @property
+    def is_empty(self) -> bool:
+        return not any(
+            (
+                self.bull_case,
+                self.bear_case,
+                self.entry_plan,
+                self.add_zone,
+                self.reduce_zone,
+                self.stop_loss,
+            )
+        )
+
+
+@dataclass(frozen=True)
 class TickerConfig:
     symbol: str
     company_name: str
@@ -40,6 +64,7 @@ class TickerConfig:
     trusted_news_domains: list[str] = field(default_factory=list)
     trusted_x_accounts: list[TrustedXAccount] = field(default_factory=list)
     position: PositionConfig = field(default_factory=PositionConfig)
+    plan: InvestmentPlan = field(default_factory=InvestmentPlan)
 
     @property
     def search_terms(self) -> list[str]:
@@ -275,6 +300,12 @@ class TickerResearchState:
     review_status: str = "not-reviewed"
     last_reviewed_at: datetime | None = None
     updated_at: datetime | None = None
+    bull_case: str = ""
+    bear_case: str = ""
+    entry_plan: str = ""
+    add_zone: str = ""
+    reduce_zone: str = ""
+    stop_loss: str = ""
 
 
 @dataclass(frozen=True)

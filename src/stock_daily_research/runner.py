@@ -17,7 +17,7 @@ from .config import load_config
 from .macro import OfficialMacroCalendarProvider
 from .market_context import fetch_market_context
 from .market_sentiment import fetch_market_sentiment
-from .models import DailyReport, TickerConfig, TickerReport, XSignal
+from .models import DailyReport, TickerConfig, TickerReport, TickerResearchState, XSignal
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
@@ -113,6 +113,7 @@ def run_daily(
         if import_research_state_path:
             import_research_state_file(conn, import_research_state_path)
         research_states = load_ticker_research_states(conn, ticker_symbols)
+        research_states = _apply_plan_defaults(research_states, config.tickers)
         post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
 
         news_provider = GoogleNewsRssProvider()
@@ -201,6 +202,35 @@ def run_daily(
     )
     write_report(report, output_dir)
     return report
+
+
+def _apply_plan_defaults(
+    research_states: dict[str, TickerResearchState],
+    tickers: list[TickerConfig],
+) -> dict[str, TickerResearchState]:
+    """Fill plan fields from YAML defaults; a non-empty DB value always wins.
+
+    YAML `plan:` is the baseline playbook; the DB row (edited in the UI and
+    round-tripped via export/import) overrides it field-by-field. An empty DB
+    field falls back to YAML so a freshly-seeded ticker shows its plan.
+    """
+    merged = dict(research_states)
+    for ticker in tickers:
+        plan = ticker.plan
+        if plan.is_empty:
+            continue
+        symbol = ticker.symbol
+        state = merged.get(symbol) or TickerResearchState(ticker=symbol)
+        merged[symbol] = replace(
+            state,
+            bull_case=state.bull_case or plan.bull_case,
+            bear_case=state.bear_case or plan.bear_case,
+            entry_plan=state.entry_plan or plan.entry_plan,
+            add_zone=state.add_zone or plan.add_zone,
+            reduce_zone=state.reduce_zone or plan.reduce_zone,
+            stop_loss=state.stop_loss or plan.stop_loss,
+        )
+    return merged
 
 
 def _fetch_all_tickers(

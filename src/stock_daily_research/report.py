@@ -254,6 +254,12 @@ def research_payload(report: DailyReport) -> dict[str, object]:
             "pinned": state.pinned,
             "review_status": state.review_status,
             "last_reviewed_at": state.last_reviewed_at.isoformat() if state.last_reviewed_at else "",
+            "bull_case": state.bull_case,
+            "bear_case": state.bear_case,
+            "entry_plan": state.entry_plan,
+            "add_zone": state.add_zone,
+            "reduce_zone": state.reduce_zone,
+            "stop_loss": state.stop_loss,
             "post_earnings_review": {
                 "earnings_date": review.earnings_date.isoformat() if review and review.earnings_date else "",
                 "eps": review.eps if review else "",

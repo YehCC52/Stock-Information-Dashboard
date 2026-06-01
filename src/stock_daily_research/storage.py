@@ -96,7 +96,13 @@ CREATE TABLE IF NOT EXISTS ticker_research_state (
   pinned INTEGER NOT NULL DEFAULT 0,
   review_status TEXT NOT NULL DEFAULT 'not-reviewed',
   last_reviewed_at TEXT,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  bull_case TEXT NOT NULL DEFAULT '',
+  bear_case TEXT NOT NULL DEFAULT '',
+  entry_plan TEXT NOT NULL DEFAULT '',
+  add_zone TEXT NOT NULL DEFAULT '',
+  reduce_zone TEXT NOT NULL DEFAULT '',
+  stop_loss TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS ticker_notes_history (
@@ -234,6 +240,8 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         )
 
     _ensure_column(conn, "ticker_research_state", "note", "TEXT NOT NULL DEFAULT ''")
+    for plan_column in ("bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"):
+        _ensure_column(conn, "ticker_research_state", plan_column, "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
     _cleanup_earnings_duplicates(conn)
     _dedupe_news_daily_summary(conn)
@@ -485,7 +493,8 @@ def load_ticker_research_states(
 ) -> dict[str, TickerResearchState]:
     sql = """
         SELECT ticker, tag, thesis_state, thesis_trigger, note, checklist_json,
-               revisit_date, pinned, review_status, last_reviewed_at, updated_at
+               revisit_date, pinned, review_status, last_reviewed_at, updated_at,
+               bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss
         FROM ticker_research_state
     """
     params: list[Any] = []
@@ -508,6 +517,12 @@ def load_ticker_research_states(
             review_status=row[8] or "not-reviewed",
             last_reviewed_at=datetime.fromisoformat(row[9]) if row[9] else None,
             updated_at=datetime.fromisoformat(row[10]) if row[10] else None,
+            bull_case=row[11] or "",
+            bear_case=row[12] or "",
+            entry_plan=row[13] or "",
+            add_zone=row[14] or "",
+            reduce_zone=row[15] or "",
+            stop_loss=row[16] or "",
         )
         for row in rows
     }
@@ -570,8 +585,9 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
         """
         INSERT INTO ticker_research_state
         (ticker, tag, thesis_state, thesis_trigger, note, checklist_json, revisit_date,
-         pinned, review_status, last_reviewed_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         pinned, review_status, last_reviewed_at, updated_at,
+         bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ticker) DO UPDATE SET
           tag = excluded.tag,
           thesis_state = excluded.thesis_state,
@@ -582,7 +598,13 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
           pinned = excluded.pinned,
           review_status = excluded.review_status,
           last_reviewed_at = excluded.last_reviewed_at,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          bull_case = excluded.bull_case,
+          bear_case = excluded.bear_case,
+          entry_plan = excluded.entry_plan,
+          add_zone = excluded.add_zone,
+          reduce_zone = excluded.reduce_zone,
+          stop_loss = excluded.stop_loss
         """,
         (
             state.ticker,
@@ -596,6 +618,12 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
             review_status,
             state.last_reviewed_at.isoformat() if state.last_reviewed_at else None,
             updated_at.isoformat(),
+            state.bull_case,
+            state.bear_case,
+            state.entry_plan,
+            state.add_zone,
+            state.reduce_zone,
+            state.stop_loss,
         ),
     )
     if changed:
@@ -678,6 +706,12 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "pinned": state.pinned,
                 "review_status": state.review_status,
                 "last_reviewed_at": state.last_reviewed_at.isoformat() if state.last_reviewed_at else None,
+                "bull_case": state.bull_case,
+                "bear_case": state.bear_case,
+                "entry_plan": state.entry_plan,
+                "add_zone": state.add_zone,
+                "reduce_zone": state.reduce_zone,
+                "stop_loss": state.stop_loss,
             })
         if review is not None:
             row["post_earnings_review"] = {
@@ -732,6 +766,12 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
             review_status=review_status,
             last_reviewed_at=last_reviewed_at,
             updated_at=datetime.now(timezone.utc),
+            bull_case=str(row.get("bull_case") or ""),
+            bear_case=str(row.get("bear_case") or ""),
+            entry_plan=str(row.get("entry_plan") or ""),
+            add_zone=str(row.get("add_zone") or ""),
+            reduce_zone=str(row.get("reduce_zone") or ""),
+            stop_loss=str(row.get("stop_loss") or ""),
         )
         upsert_ticker_research_state(conn, state)
 
