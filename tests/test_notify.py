@@ -192,5 +192,24 @@ def test_telegram_notifier_raises_after_max_retries(monkeypatch) -> None:
     monkeypatch.setattr("stock_daily_research.notify.requests.post", fake_post)
     monkeypatch.setattr("stock_daily_research.notify.time.sleep", lambda _: None)
 
-    with pytest.raises(requests.ConnectionError):
+    with pytest.raises(RuntimeError):
         TelegramNotifier(bot_token="t", chat_id="c").send_message("hi")
+
+
+def test_telegram_notifier_redacts_token_in_error(monkeypatch) -> None:
+    import requests
+
+    secret = "123456:SECRET-TOKEN"
+
+    def fake_post(url, json, timeout):
+        # Real request errors embed the full URL, which contains the bot token.
+        raise requests.ConnectionError(f"failed to reach {url}")
+
+    monkeypatch.setattr("stock_daily_research.notify.requests.post", fake_post)
+    monkeypatch.setattr("stock_daily_research.notify.time.sleep", lambda _: None)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        TelegramNotifier(bot_token=secret, chat_id="c").send_message("hi")
+
+    assert secret not in str(excinfo.value)
+    assert "***" in str(excinfo.value)

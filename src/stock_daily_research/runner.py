@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,7 +17,7 @@ from .config import load_config
 from .macro import OfficialMacroCalendarProvider
 from .market_context import fetch_market_context
 from .market_sentiment import fetch_market_sentiment
-from .models import DailyReport, TickerConfig, TickerReport, XSignal
+from .models import DailyReport, TickerConfig, TickerReport, TickerResearchState, XSignal
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
@@ -36,6 +37,8 @@ from .storage import (
 from .valuation import fetch_yfinance_earnings_date, fetch_yfinance_valuation
 from .x_signals import load_manual_x_signals
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_FETCH_WORKERS = 6
 
@@ -80,16 +83,19 @@ def run_daily(
             market_sentiment = fetch_market_sentiment()
             global_warnings.extend(market_sentiment.warnings)
         except Exception as exc:
+            logger.warning("Market sentiment fetch failed", exc_info=True)
             global_warnings.append(f"Market sentiment fetch failed: {exc}")
         try:
             market_context = fetch_market_context()
             global_warnings.extend(market_context.warnings)
         except Exception as exc:
+            logger.warning("Market context fetch failed", exc_info=True)
             global_warnings.append(f"Market context fetch failed: {exc}")
         try:
             premarket = fetch_overnight_premarket(config.tickers, max_workers=max(1, max_workers))
             global_warnings.extend(premarket.warnings)
         except Exception as exc:
+            logger.warning("Premarket snapshot fetch failed", exc_info=True)
             global_warnings.append(f"Premarket snapshot fetch failed: {exc}")
     else:
         global_warnings.append("Market sentiment skipped because valuation fetching is disabled.")
@@ -107,6 +113,7 @@ def run_daily(
         if import_research_state_path:
             import_research_state_file(conn, import_research_state_path)
         research_states = load_ticker_research_states(conn, ticker_symbols)
+        research_states = _apply_plan_defaults(research_states, config.tickers)
         post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
 
         news_provider = GoogleNewsRssProvider()
@@ -175,6 +182,7 @@ def run_daily(
         try:
             telegram_notifier.send_message(build_daily_summary(preliminary_report, str(report_path)))
         except Exception as exc:
+            logger.warning("Telegram notification failed", exc_info=True)
             global_warnings.append(f"Telegram notification failed: {exc}")
 
     report = DailyReport(
@@ -190,9 +198,39 @@ def run_daily(
         post_earnings_reviews=post_earnings_reviews,
         ticker_history=ticker_history,
         history_overview=history_overview,
+        settings=config.settings,
     )
     write_report(report, output_dir)
     return report
+
+
+def _apply_plan_defaults(
+    research_states: dict[str, TickerResearchState],
+    tickers: list[TickerConfig],
+) -> dict[str, TickerResearchState]:
+    """Fill plan fields from YAML defaults; a non-empty DB value always wins.
+
+    YAML `plan:` is the baseline playbook; the DB row (edited in the UI and
+    round-tripped via export/import) overrides it field-by-field. An empty DB
+    field falls back to YAML so a freshly-seeded ticker shows its plan.
+    """
+    merged = dict(research_states)
+    for ticker in tickers:
+        plan = ticker.plan
+        if plan.is_empty:
+            continue
+        symbol = ticker.symbol
+        state = merged.get(symbol) or TickerResearchState(ticker=symbol)
+        merged[symbol] = replace(
+            state,
+            bull_case=state.bull_case or plan.bull_case,
+            bear_case=state.bear_case or plan.bear_case,
+            entry_plan=state.entry_plan or plan.entry_plan,
+            add_zone=state.add_zone or plan.add_zone,
+            reduce_zone=state.reduce_zone or plan.reduce_zone,
+            stop_loss=state.stop_loss or plan.stop_loss,
+        )
+    return merged
 
 
 def _fetch_all_tickers(
@@ -230,6 +268,7 @@ def _fetch_all_tickers(
             try:
                 results[ticker.symbol] = future.result()
             except Exception as exc:
+                logger.warning("Worker crashed for %s", ticker.symbol, exc_info=True)
                 results[ticker.symbol] = TickerReport(
                     ticker=ticker,
                     articles=[],
@@ -343,11 +382,13 @@ def _fetch_one_ticker(
         try:
             valuation = fetch_yfinance_valuation(ticker)
         except Exception as exc:
+            logger.warning("Valuation fetch failed for %s", ticker.symbol, exc_info=True)
             warnings.append(f"Valuation fetch failed: {exc}")
 
         try:
             earnings = fetch_yfinance_earnings_date(ticker)
         except Exception as exc:
+            logger.warning("Earnings date fetch failed for %s", ticker.symbol, exc_info=True)
             warnings.append(f"Earnings date fetch failed: {exc}")
 
     return TickerReport(

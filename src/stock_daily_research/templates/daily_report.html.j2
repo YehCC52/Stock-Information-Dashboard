@@ -129,7 +129,7 @@
       font-size: 11px;
       text-align: right;
     }
-    .search-box, .control-input, .control-select, .tag-select, .note-input, .revisit-input {
+    .search-box, .control-input, .control-select, .tag-select, .note-input, .revisit-input, .plan-input {
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--surface);
@@ -168,7 +168,7 @@
     .tool-button:hover, .icon-button:hover { background: var(--surface-soft); text-decoration: none; }
     .tool-button:focus-visible, .icon-button:focus-visible, .search-box:focus-visible,
     .control-select:focus-visible, .tag-select:focus-visible, .note-input:focus-visible,
-    .revisit-input:focus-visible {
+    .revisit-input:focus-visible, .plan-input:focus-visible {
       outline: 2px solid var(--info);
       outline-offset: 2px;
     }
@@ -1030,6 +1030,56 @@
       color: var(--info);
     }
     .post-earnings[open] > summary::before { content: "▾ "; }
+    .pre-earnings {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background: var(--warning-bg);
+      border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
+      border-radius: 6px;
+    }
+    .pre-earnings > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .pre-earnings > summary::-webkit-details-marker { display: none; }
+    .pre-earnings > summary::before { content: "▸ "; font-size: 10px; color: var(--warning); }
+    .pre-earnings[open] > summary::before { content: "▾ "; }
+    .pe-pill.pre { color: var(--warning); }
+    .pe-status.extended { color: var(--danger); margin-left: auto; }
+    .pre-earnings-body { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .pre-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      gap: 6px;
+    }
+    .pre-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px 6px;
+      background: var(--surface);
+      border-radius: 4px;
+    }
+    .pre-k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pre-v { font-size: 13px; font-weight: 700; }
+    .pre-questions { display: flex; flex-direction: column; gap: 4px; }
+    .pre-q-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pre-q-input {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      border-radius: 4px;
+      resize: vertical;
+    }
     .pe-pill {
       font-size: 10px;
       font-weight: 800;
@@ -1205,6 +1255,57 @@
     .mb-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
     .mb-detail { color: var(--muted); font-size: 11px; }
     .mb-empty { color: var(--muted); font-size: 11px; font-style: italic; }
+    .my-book-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 4px 0 10px;
+      font-size: 12px;
+    }
+    .my-book-stats .stat {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 4px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 110px;
+    }
+    .my-book-stats .stat .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+    .my-book-stats .stat .value {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .my-book-card.sectors { border-left: 3px solid var(--info); }
+    .my-book-card.stops { border-left: 3px solid var(--danger); }
+    .sector-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      font-size: 12px;
+      padding: 2px 0;
+    }
+    .sector-row.over-cap { color: var(--danger); font-weight: 700; }
+    .sector-row .tickers { color: var(--muted); font-size: 11px; font-weight: 400; }
+    .stop-row {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 8px;
+      font-size: 12px;
+      padding: 2px 0;
+    }
+    .stop-row.tone-danger { color: var(--danger); font-weight: 700; }
+    .stop-row.tone-warn { color: var(--warning); }
+    .stop-row .detail { font-size: 11px; color: var(--muted); }
+    .position-chip.tone-danger .value { color: var(--danger); font-weight: 700; }
+    .position-chip.tone-warn .value { color: var(--warning); }
+    .position-chip.tone-ok .value { color: var(--good); }
 
     /* Overextended list (top-of-dashboard danger panel) */
     .overextended-section {
@@ -1242,6 +1343,53 @@
     .event-badge.event-ma, .event-badge.event-antitrust, .event-badge.event-lawsuit, .event-badge.event-regulation { color: var(--info); background: var(--info-bg); }
     .event-badge.event-ai, .event-badge.event-product { color: var(--good); background: var(--good-bg); }
     .event-badge.event-analyst_call, .event-badge.event-management, .event-badge.event-macro, .event-badge.event-other { color: var(--muted); background: var(--surface-soft); }
+
+    /* Event clusters — cross-source story grouping */
+    .cluster-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .cluster-item {
+      border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--muted);
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: var(--surface);
+    }
+    .cluster-item.confidence-high { border-left-color: var(--good); }
+    .cluster-item.confidence-medium { border-left-color: var(--warning); }
+    .cluster-item.confidence-low { border-left-color: var(--muted); }
+    .cluster-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .cluster-headline { font-weight: 700; font-size: 13px; color: var(--text); }
+    .cluster-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .cluster-field .cf-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-right: 4px;
+    }
+    .cluster-field a { color: var(--text); font-weight: 700; }
+    .conf-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .conf-tag.conf-high { color: var(--good); background: var(--good-bg); }
+    .conf-tag.conf-medium { color: var(--warning); background: var(--warning-bg); }
+    .conf-tag.conf-low { color: var(--muted); background: var(--surface-soft); }
+    .cluster-action { margin-top: 6px; font-size: 11px; color: var(--muted); font-style: italic; }
 
     /* Ticker grid */
     .ticker-grid {
@@ -1316,7 +1464,40 @@
     .insight-row.rs.trend-down .insight-text { color: var(--danger); }
     .insight-row.rs.trend-mixed .insight-label { color: var(--warning); }
     /* Right-side trading score */
-    .insight-row.score { cursor: help; }
+    details.insight-row.score { display: block; cursor: pointer; padding: 4px 0; }
+    details.insight-row.score > summary {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 8px;
+      align-items: baseline;
+      list-style: none;
+      cursor: pointer;
+    }
+    details.insight-row.score > summary::-webkit-details-marker { display: none; }
+    details.insight-row.score > summary::after {
+      content: "▸";
+      font-size: 9px;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+    details.insight-row.score[open] > summary::after { content: "▾"; }
+    .score-breakdown {
+      list-style: none;
+      margin: 6px 0 0 56px;
+      padding: 6px 10px;
+      background: var(--surface-alt);
+      border-left: 2px solid var(--border);
+      border-radius: 4px;
+    }
+    .score-reason {
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      padding: 1px 0;
+      color: var(--text);
+    }
+    .score-reason.positive { color: var(--good); }
+    .score-reason.negative { color: var(--danger); }
+    .score-empty { font-size: 11px; color: var(--muted); margin-left: 56px; font-style: italic; }
     .insight-row.score .insight-label { color: var(--info); font-weight: 800; }
     .insight-row.score .insight-text { font-weight: 700; font-variant-numeric: tabular-nums; }
     .insight-row.score.score-up .insight-label { color: var(--good); }
@@ -1331,6 +1512,13 @@
     .badge.score-badge.score-down { background: var(--danger-bg); color: var(--danger); }
     .badge.score-badge.score-mixed { background: var(--warning-bg); color: var(--warning); opacity: 0.75; }
     .badge.score-badge.score-extended { background: var(--warning-bg); color: var(--warning); }
+    .badge.dq-medium { background: var(--warning-bg); color: var(--warning); font-weight: 700; }
+    .badge.dq-low { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
+    .dq-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .dq-table th, .dq-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+    .dq-table th.num, .dq-table td.num { text-align: right; }
+    .dq-flags { margin: 0; padding-left: 16px; color: var(--muted); }
+    .dq-flags li { margin: 1px 0; }
     .compare-table-wrap td.score-up { color: var(--good); font-weight: 700; }
     .compare-table-wrap td.score-down { color: var(--danger); font-weight: 700; }
     .compare-table-wrap td.score-mixed { color: var(--warning); }
@@ -1443,6 +1631,36 @@
       resize: vertical;
       padding: 8px;
       line-height: 1.4;
+    }
+    .plan-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .plan-field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .plan-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .plan-label.up { color: var(--good); }
+    .plan-label.down { color: var(--danger); }
+    .plan-input {
+      width: 100%;
+      min-height: 40px;
+      resize: vertical;
+      padding: 6px 8px;
+      line-height: 1.4;
+    }
+    @media (max-width: 480px) {
+      .plan-grid { grid-template-columns: minmax(0, 1fr); }
     }
     .manage-panel {
       margin-top: 0;
@@ -1606,11 +1824,13 @@
       {% if overextended %}<a href="#overextended" class="toc-pill">Stretched {{ overextended|length }}</a>{% endif %}
       {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">Alerts {{ rule_alerts|length }}</a>{% endif %}
       {% if report.warnings %}<a href="#global-warnings" class="toc-pill">Warnings {{ report.warnings|length }}</a>{% endif %}
+      {% if data_quality.flagged %}<a href="#data-quality" class="toc-pill">Data {{ data_quality.flagged|length }}</a>{% endif %}
       {% if report.market_sentiment %}<a href="#market-sentiment">Sentiment</a>{% endif %}
       {% if report.market_context and report.market_context.rates %}<a href="#rates">Rates</a>{% endif %}
       {% if report.market_context and report.market_context.breadth %}<a href="#breadth">Breadth</a>{% endif %}
       <a href="#macro">Macro ({{ report.economic_events|length }})</a>
       <a href="#earnings">Earnings ({{ earnings_soon|length }})</a>
+      {% if news_clusters %}<a href="#news-clusters">Events ({{ news_clusters|length }})</a>{% endif %}
       <a href="#news">News ({{ important_news|length }})</a>
       <a href="#changes">Changes</a>
       <a href="#valuation">Valuation</a>
@@ -2005,6 +2225,31 @@
         </span>
       </div>
 
+      <div class="my-book-stats">
+        <div class="stat" title="Sum of position weights across holdings">
+          <span class="label">Invested weight</span>
+          <span class="value">{{ portfolio.total_weight_pct|format_pct(sign=False) }}</span>
+        </div>
+        {% if portfolio.addable_cash is not none %}
+        <div class="stat" title="Cash available to deploy (from settings.portfolio.addable_cash)">
+          <span class="label">Addable cash</span>
+          <span class="value">${{ "{:,.0f}".format(portfolio.addable_cash) }}</span>
+        </div>
+        {% endif %}
+        {% if portfolio.total_value is not none %}
+        <div class="stat" title="Total portfolio value (from settings.portfolio.total_value)">
+          <span class="label">Book value</span>
+          <span class="value">${{ "{:,.0f}".format(portfolio.total_value) }}</span>
+        </div>
+        {% endif %}
+        {% if portfolio.max_single_weight is not none %}
+        <div class="stat" title="Max single-name weight cap">
+          <span class="label">Single cap</span>
+          <span class="value">{{ portfolio.max_single_weight|format_pct(sign=False) }}</span>
+        </div>
+        {% endif %}
+      </div>
+
       <div class="my-book-grid">
         <div class="my-book-card winners">
           <div class="mb-label">Largest positive impact</div>
@@ -2058,6 +2303,31 @@
             {% endfor %}
           </ul>
           {% else %}<div class="mb-empty">No thesis flags.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card sectors">
+          <div class="mb-label">Sector concentration</div>
+          {% if portfolio.sectors %}
+          {% for bucket in portfolio.sectors %}
+          <div class="sector-row{% if bucket.get('over_cap') %} over-cap{% endif %}" {% if bucket.get('over_cap') %}title="Above {{ bucket.cap }}% cap"{% endif %}>
+            <span>{{ bucket.sector }} <span class="tickers">({{ bucket.tickers|join(', ') }})</span></span>
+            <span>{{ bucket.weight|format_pct(sign=False) }}</span>
+          </div>
+          {% endfor %}
+          {% else %}<div class="mb-empty">No sector data yet.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card stops">
+          <div class="mb-label">Stop distance ≤ 5%</div>
+          {% if portfolio.stop_warnings %}
+          {% for w in portfolio.stop_warnings %}
+          <div class="stop-row tone-{{ w.tone }}">
+            <a href="#{{ w.symbol|ticker_anchor }}">{{ w.symbol }}</a>
+            <span class="detail">last ${{ "%.2f"|format(w.last) }} vs stop ${{ "%.2f"|format(w.stop_loss) }}</span>
+            <span>{{ w.distance_pct|format_pct }}</span>
+          </div>
+          {% endfor %}
+          {% else %}<div class="mb-empty">All holdings comfortably above stops.</div>{% endif %}
         </div>
       </div>
     </section>
@@ -2253,6 +2523,37 @@
     </section>
     {% endif %}
 
+    <section id="data-quality" class="section section-secondary">
+      <h2>Data Quality
+        <span class="count">(avg confidence {{ data_quality.average }}/100 · {{ data_quality.checked }} tickers)</span>
+      </h2>
+      {% if data_quality.flagged %}
+      <table class="dq-table">
+        <thead>
+          <tr><th>Ticker</th><th class="num">Confidence</th><th>Tag</th><th>Flags</th></tr>
+        </thead>
+        <tbody>
+          {% for row in data_quality.flagged %}
+          <tr>
+            <td><a href="#{{ row.symbol|ticker_anchor }}">{{ row.symbol }}</a></td>
+            <td class="num">{{ row.score }}</td>
+            <td><span class="badge dq-{{ row.tag }}">{{ row.tag }}</span></td>
+            <td>
+              <ul class="dq-flags">
+                {% if row.fallback %}<li>Valuation fallback used</li>{% endif %}
+                {% if row.missing_fields %}<li>Missing: {{ row.missing_fields|join(", ") }}</li>{% endif %}
+                {% for flag in row.flags %}<li>{{ flag }}</li>{% endfor %}
+              </ul>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="section-empty">All tickers scored 80+ confidence — no data-quality flags this run.</div>
+      {% endif %}
+    </section>
+
     <section id="macro" class="section section-secondary">
       <h2>Macro Calendar <span class="count">(next events)</span></h2>
       {% if report.economic_events %}
@@ -2291,6 +2592,34 @@
       <div class="section-empty">No earnings dates within the next 7 days.</div>
       {% endif %}
     </section>
+
+    {% if news_clusters %}
+    <section id="news-clusters" class="section section-tertiary news-clusters-section">
+      <div class="section-header">
+        <h2>Event Clusters <span class="count">({{ news_clusters|length }})</span></h2>
+      </div>
+      <div class="sort-hint">Same story reported by multiple outlets — grouped to cut duplicate headlines.</div>
+      <ul class="cluster-list">
+        {% for c in news_clusters %}
+        <li class="cluster-item confidence-{{ c.confidence }}">
+          <div class="cluster-head">
+            <span class="cluster-headline">{{ c.headline }}</span>
+            <span class="badge event-badge event-{{ c.event_type }}">{{ c.event_type|event_label }}</span>
+          </div>
+          <div class="cluster-meta">
+            <span class="cluster-field"><span class="cf-label">Tickers</span>
+              {% for sym in c.tickers %}<a href="#{{ sym|ticker_anchor }}">{{ sym }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+            </span>
+            <span class="cluster-field"><span class="cf-label">Sources</span>{{ c.sources }} ({{ c.article_count }} articles)</span>
+            <span class="cluster-field"><span class="cf-label">Impact</span>{{ c.impact }}</span>
+            <span class="cluster-field"><span class="cf-label">Confidence</span><span class="conf-tag conf-{{ c.confidence }}">{{ c.confidence }}</span></span>
+          </div>
+          <div class="cluster-action">{{ c.action }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
 
     <section id="news" class="section section-tertiary">
       <div class="section-header">
@@ -2469,7 +2798,8 @@
         {% set fhigh = item|from_52w_high %}
         {% set pmchg = item|premarket_change %}
         {% set pos = item|position_view %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}">
+        {% set dq = item|data_quality %}
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
@@ -2492,6 +2822,7 @@
               {% elif state == "warm" %}<span class="badge good">Warm</span>
               {% else %}<span class="badge">Quiet</span>{% endif %}
               {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="Right-side score {{ insights.score.score }}/100">{{ insights.score.status }}</span>{% endif %}
+              {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="Data confidence {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ') }}{% endif %}">Data {{ dq.tag }}</span>{% endif %}
               <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
             </div>
           </div>
@@ -2521,7 +2852,7 @@
             <div class="position-row">
               <div class="position-chip">
                 <span class="label">Position</span>
-                <span class="value">{{ pos.status }}</span>
+                <span class="value">{{ pos.status }}{% if pos.sector %} · {{ pos.sector }}{% endif %}</span>
               </div>
               <div class="position-chip">
                 <span class="label">Weight / Impact</span>
@@ -2533,15 +2864,43 @@
               </div>
               <div class="position-chip">
                 <span class="label">P/L</span>
-                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}</span>
+                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}{% if pos.pl_dollar is not none %} ({{ "$%+,.0f"|format(pos.pl_dollar) }}){% endif %}</span>
               </div>
+              {% if pos.stop_loss is not none %}
+              <div class="position-chip tone-{{ pos.stop_distance_tone }}" title="Distance from stop-loss">
+                <span class="label">Stop</span>
+                <span class="value">${{ "%.2f"|format(pos.stop_loss) }}{% if pos.stop_distance_pct is not none %} · {{ pos.stop_distance_pct|format_pct }} away{% endif %}</span>
+              </div>
+              {% endif %}
+              {% if pos.position_size is not none %}
+              <div class="position-chip">
+                <span class="label">Size</span>
+                <span class="value">${{ "{:,.0f}".format(pos.position_size) }}</span>
+              </div>
+              {% endif %}
             </div>
           </details>
 
           {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score %}
           <div class="insights">
             {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
-            {% if insights.score %}<div class="insight-row score score-{{ insights.score.tone }}" title="{{ insights.score.reasons|join(' · ') }}"><span class="insight-label">Score</span><span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status }}</span></div>{% endif %}
+            {% if insights.score %}
+            <details class="insight-row score score-{{ insights.score.tone }}">
+              <summary>
+                <span class="insight-label">Score</span>
+                <span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status }}</span>
+              </summary>
+              {% if insights.score.reasons %}
+              <ul class="score-breakdown">
+                {% for reason in insights.score.reasons %}
+                <li class="score-reason {% if reason.startswith('+') %}positive{% elif reason.startswith('-') %}negative{% endif %}">{{ reason }}</li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <div class="score-empty">No contributing factors recorded.</div>
+              {% endif %}
+            </details>
+            {% endif %}
             {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
             {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">Strength</span><span class="insight-text">{{ insights.rs|join(' · ') }}</span></div>{% endif %}
@@ -2599,6 +2958,51 @@
           </ul>
           {% endif %}
 
+          {% set pre_er = item|pre_earnings_card %}
+          {% if pre_er %}
+          <details class="pre-earnings" data-pre-earnings="{{ item.ticker.symbol }}" open>
+            <summary>
+              <span class="pe-pill pre">Pre-earnings setup</span>
+              <span class="pe-meta">reports in {{ pre_er.days_until }}d{% if pre_er.action %} · {{ pre_er.action }}{% endif %}</span>
+              {% if pre_er.overextended %}<span class="pe-status extended">Extended</span>{% endif %}
+            </summary>
+            <div class="pre-earnings-body">
+              <div class="pre-metrics">
+                <div class="pre-metric">
+                  <span class="pre-k">Consensus EPS</span>
+                  <span class="pre-v">{{ "%.2f"|format(pre_er.eps_estimate) if pre_er.eps_estimate is not none else "—" }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">Consensus rev</span>
+                  <span class="pre-v">{{ "{:,.0f}".format(pre_er.revenue_estimate) if pre_er.revenue_estimate is not none else "—" }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">FY1 EPS rev 30D</span>
+                  <span class="pre-v {{ pre_er.eps_revision_30d|change_class }}">{{ pre_er.eps_revision_30d|format_pct }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">20D move</span>
+                  <span class="pre-v {{ pre_er.move_30d|change_class }}">{{ pre_er.move_30d|format_pct }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">RSI 14</span>
+                  <span class="pre-v {{ pre_er.rsi|rsi_class }}">{{ "%.0f"|format(pre_er.rsi) if pre_er.rsi is not none else "—" }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">From 52W high</span>
+                  <span class="pre-v {{ pre_er.from_52w_high|change_class }}">{{ pre_er.from_52w_high|format_pct }}</span>
+                </div>
+              </div>
+              <div class="pre-questions">
+                <span class="pre-q-label">Key questions to resolve at the print</span>
+                {% for q in pre_er.questions %}
+                <textarea class="pre-q-input" data-eq-field="{{ loop.index0 }}" data-eq-symbol="{{ item.ticker.symbol }}" rows="1" placeholder="Question {{ loop.index }}">{{ q }}</textarea>
+                {% endfor %}
+              </div>
+            </div>
+          </details>
+          {% endif %}
+
           {% set post_er = item|post_earnings %}
           {% if post_er %}
           <details class="post-earnings" data-post-earnings="{{ item.ticker.symbol }}" data-earnings-date="{{ post_er.earnings_date.isoformat() }}">
@@ -2647,6 +3051,15 @@
               <div class="pe-row">
                 <label class="pe-label" for="fy1-rev-rev-after-{{ item.ticker.symbol }}">FY1 revenue revision after %</label>
                 <input id="fy1-rev-rev-after-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="fy1_revenue_revision_after" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="-1.0">
+              </div>
+              <textarea class="pe-text" data-pe-field="gross_margin_change" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Gross margin: direction vs prior quarter / guide"></textarea>
+              <textarea class="pe-text" data-pe-field="management_keywords" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Management keywords: demand, backlog, pricing, caution..."></textarea>
+              <div class="pe-row">
+                <label class="pe-label">Thesis changed?</label>
+                <div class="pe-buttons" data-pe-field="thesis_changed" data-pe-symbol="{{ item.ticker.symbol }}">
+                  <button type="button" data-pe-value="no">No</button>
+                  <button type="button" data-pe-value="yes">Yes</button>
+                </div>
               </div>
               <textarea class="pe-text" data-pe-field="conclusion" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Conclusion: thesis intact / cracked / pivoting"></textarea>
               <textarea class="pe-text" data-pe-field="next_step" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Next step: hold / add / trim / re-evaluate at $X"></textarea>
@@ -2707,6 +3120,36 @@
                 <label><input type="checkbox" value="news"> news reviewed</label>
                 <label><input type="checkbox" value="thesis"> thesis updated</label>
               </div>
+            </div>
+          </details>
+
+          <details class="card-secondary investment-plan" data-plan-card="{{ item.ticker.symbol }}">
+            <summary>Investment plan</summary>
+            <div class="plan-grid">
+              <label class="plan-field">
+                <span class="plan-label up">Bull case</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="bull_case" placeholder="Why this works"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label down">Bear case</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="bear_case" placeholder="What breaks the thesis"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label">Entry plan</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="entry_plan" placeholder="When / how to start"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label">Add zone</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="add_zone" placeholder="Where to scale up"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label">Reduce zone</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="reduce_zone" placeholder="Where to trim"></textarea>
+              </label>
+              <label class="plan-field">
+                <span class="plan-label down">Stop loss</span>
+                <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="stop_loss" placeholder="Hard exit rule"></textarea>
+              </label>
             </div>
           </details>
 
@@ -2804,6 +3247,10 @@
       var thesisTriggers = readJson("stock-daily-draft-thesis-triggers", mapState("thesis_trigger"));
       var notes = readJson("stock-daily-draft-notes", mapNotes());
       var checklist = readJson("stock-daily-draft-checklist", mapState("checklist"));
+      var plans = readJson("stock-daily-draft-plans", mapPlans());
+      var earningsQuestions = readJson("stock-daily-draft-earnings-questions", mapEarningsQuestions());
+
+      var PLAN_FIELDS = ["bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"];
 
       function mapState(key) {
         var out = {};
@@ -2822,6 +3269,27 @@
             note: tickerState[sym].note || "",
             revisit: tickerState[sym].revisit_date || ""
           };
+        });
+        return out;
+      }
+
+      function mapPlans() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          var entry = {};
+          ["bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"].forEach(function (field) {
+            entry[field] = (tickerState[sym] && tickerState[sym][field]) || "";
+          });
+          out[sym] = entry;
+        });
+        return out;
+      }
+
+      function mapEarningsQuestions() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          var value = tickerState[sym] && tickerState[sym].earnings_questions;
+          out[sym] = Array.isArray(value) ? value.slice() : [];
         });
         return out;
       }
@@ -3122,8 +3590,48 @@
             });
           });
           paintReviewStatus(card);
+
+          var planInputs = Array.prototype.slice.call(card.querySelectorAll("[data-plan-field]"));
+          planInputs.forEach(function (input) {
+            var field = input.dataset.planField;
+            var planState = plans[s] || {};
+            input.value = planState[field] || "";
+            input.addEventListener("input", function () {
+              plans[s] = Object.assign({}, plans[s]);
+              plans[s][field] = input.value;
+              writeJson("stock-daily-draft-plans", plans);
+              paintPlanSummary(card);
+            });
+          });
+          paintPlanSummary(card);
+
+          var eqInputs = Array.prototype.slice.call(card.querySelectorAll("[data-eq-field]"));
+          eqInputs.forEach(function (input) {
+            var idx = parseInt(input.dataset.eqField, 10);
+            var list = earningsQuestions[s] || [];
+            input.value = list[idx] || "";
+            input.addEventListener("input", function () {
+              var current = (earningsQuestions[s] || []).slice();
+              while (current.length <= idx) current.push("");
+              current[idx] = input.value;
+              earningsQuestions[s] = current;
+              writeJson("stock-daily-draft-earnings-questions", earningsQuestions);
+            });
+          });
         });
         updateReviewSummary();
+      }
+
+      function paintPlanSummary(card) {
+        var details = card.querySelector("[data-plan-card]");
+        if (!details) return;
+        var summary = details.querySelector("summary");
+        if (!summary) return;
+        var planState = plans[symbol(card)] || {};
+        var filled = PLAN_FIELDS.filter(function (field) {
+          return (planState[field] || "").trim();
+        }).length;
+        summary.textContent = filled ? "Investment plan (" + filled + "/6)" : "Investment plan";
       }
 
       function paintNotePreview(card) {
@@ -3737,6 +4245,7 @@
         cards.forEach(function (card) {
           var sym = symbol(card);
           var base = tickerState[sym] || {};
+          var plan = plans[sym] || {};
           payload.tickers[sym] = {
             tag: tags[sym] || "",
             thesis_state: thesis[sym] || "",
@@ -3747,6 +4256,13 @@
             pinned: isPinned(card),
             review_status: reviewState(card),
             last_reviewed_at: base.last_reviewed_at || "",
+            bull_case: plan.bull_case || "",
+            bear_case: plan.bear_case || "",
+            entry_plan: plan.entry_plan || "",
+            add_zone: plan.add_zone || "",
+            reduce_zone: plan.reduce_zone || "",
+            stop_loss: plan.stop_loss || "",
+            earnings_questions: (earningsQuestions[sym] || []).filter(function (q) { return (q || "").trim(); }),
             post_earnings_review: (window.postEarningsState && window.postEarningsState[sym]) || {}
           };
         });

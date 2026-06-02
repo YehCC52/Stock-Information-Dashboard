@@ -96,7 +96,14 @@ CREATE TABLE IF NOT EXISTS ticker_research_state (
   pinned INTEGER NOT NULL DEFAULT 0,
   review_status TEXT NOT NULL DEFAULT 'not-reviewed',
   last_reviewed_at TEXT,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  bull_case TEXT NOT NULL DEFAULT '',
+  bear_case TEXT NOT NULL DEFAULT '',
+  entry_plan TEXT NOT NULL DEFAULT '',
+  add_zone TEXT NOT NULL DEFAULT '',
+  reduce_zone TEXT NOT NULL DEFAULT '',
+  stop_loss TEXT NOT NULL DEFAULT '',
+  earnings_questions_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS ticker_notes_history (
@@ -121,6 +128,9 @@ CREATE TABLE IF NOT EXISTS post_earnings_reviews (
   fy1_revenue_revision_after REAL,
   conclusion TEXT NOT NULL DEFAULT '',
   next_step TEXT NOT NULL DEFAULT '',
+  gross_margin_change TEXT NOT NULL DEFAULT '',
+  management_keywords TEXT NOT NULL DEFAULT '',
+  thesis_changed TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
 );
 
@@ -156,6 +166,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_earnings_ticker_date_source_expr
 CREATE INDEX IF NOT EXISTS idx_report_runs_report_date ON report_runs(report_date, generated_at);
 CREATE INDEX IF NOT EXISTS idx_notes_history_ticker ON ticker_notes_history(ticker, changed_at);
 CREATE INDEX IF NOT EXISTS idx_summary_ticker_date ON news_daily_summary(ticker, report_date, generated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_summary_date_ticker_unique ON news_daily_summary(report_date, ticker);
 """
 
 
@@ -233,9 +244,50 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         )
 
     _ensure_column(conn, "ticker_research_state", "note", "TEXT NOT NULL DEFAULT ''")
+    for plan_column in ("bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"):
+        _ensure_column(conn, "ticker_research_state", plan_column, "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "ticker_research_state", "earnings_questions_json", "TEXT NOT NULL DEFAULT '[]'")
+    for pe_column in ("gross_margin_change", "management_keywords", "thesis_changed"):
+        _ensure_column(conn, "post_earnings_reviews", pe_column, "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
     _cleanup_earnings_duplicates(conn)
+    _dedupe_news_daily_summary(conn)
     conn.commit()
+
+
+def _dedupe_news_daily_summary(conn: sqlite3.Connection) -> None:
+    """Collapse multiple (report_date, ticker) rows down to the latest snapshot.
+
+    Multiple runs of the pipeline on the same day used to create one
+    `news_daily_summary` row per `report_run_id`, polluting the Research timeline
+    on each ticker card. Keep only the row with the latest `generated_at` per
+    `(report_date, ticker)`, then add a UNIQUE index so future writes upsert.
+    """
+    has_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='news_daily_summary'"
+    ).fetchone()
+    if not has_table:
+        return
+    conn.execute(
+        """
+        DELETE FROM news_daily_summary
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY report_date, ticker
+                     ORDER BY generated_at DESC, id DESC
+                   ) AS rn
+            FROM news_daily_summary
+          )
+          WHERE rn = 1
+        )
+        """
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_summary_date_ticker_unique "
+        "ON news_daily_summary(report_date, ticker)"
+    )
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -286,15 +338,26 @@ def save_report(conn: sqlite3.Connection, report: DailyReport) -> None:
         upsert_ticker_research_state(conn, state)
     for review in report.post_earnings_reviews.values():
         upsert_post_earnings_review(conn, review)
-    conn.commit()
+    # No commit here: this stays in the caller's transaction so it commits
+    # atomically with save_report_run, avoiding a half-saved run if the process
+    # dies between the two. (`with init_db(...) as conn` blocks still commit on
+    # exit for standalone callers.)
 
 
 def save_article(conn: sqlite3.Connection, article: NewsArticle) -> None:
     conn.execute(
         """
-        INSERT OR REPLACE INTO news_articles
+        INSERT INTO news_articles
         (ticker, title, source, domain, published_at, url, summary, event_type, importance_score)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, url) DO UPDATE SET
+          title = excluded.title,
+          source = excluded.source,
+          domain = excluded.domain,
+          published_at = excluded.published_at,
+          summary = excluded.summary,
+          event_type = excluded.event_type,
+          importance_score = excluded.importance_score
         """,
         (
             article.ticker,
@@ -437,7 +500,9 @@ def load_ticker_research_states(
 ) -> dict[str, TickerResearchState]:
     sql = """
         SELECT ticker, tag, thesis_state, thesis_trigger, note, checklist_json,
-               revisit_date, pinned, review_status, last_reviewed_at, updated_at
+               revisit_date, pinned, review_status, last_reviewed_at, updated_at,
+               bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss,
+               earnings_questions_json
         FROM ticker_research_state
     """
     params: list[Any] = []
@@ -460,6 +525,13 @@ def load_ticker_research_states(
             review_status=row[8] or "not-reviewed",
             last_reviewed_at=datetime.fromisoformat(row[9]) if row[9] else None,
             updated_at=datetime.fromisoformat(row[10]) if row[10] else None,
+            bull_case=row[11] or "",
+            bear_case=row[12] or "",
+            entry_plan=row[13] or "",
+            add_zone=row[14] or "",
+            reduce_zone=row[15] or "",
+            stop_loss=row[16] or "",
+            earnings_questions=_loads_json_list(row[17]),
         )
         for row in rows
     }
@@ -472,7 +544,8 @@ def load_post_earnings_reviews(
     sql = """
         SELECT ticker, earnings_date, eps, revenue, guide, eps_surprise_pct,
                revenue_surprise_pct, fy1_eps_revision_after, fy1_revenue_revision_after,
-               conclusion, next_step, updated_at
+               conclusion, next_step, gross_margin_change, management_keywords,
+               thesis_changed, updated_at
         FROM post_earnings_reviews
     """
     params: list[Any] = []
@@ -495,7 +568,10 @@ def load_post_earnings_reviews(
             fy1_revenue_revision_after=row[8],
             conclusion=row[9] or "",
             next_step=row[10] or "",
-            updated_at=datetime.fromisoformat(row[11]) if row[11] else None,
+            gross_margin_change=row[11] or "",
+            management_keywords=row[12] or "",
+            thesis_changed=row[13] or "",
+            updated_at=datetime.fromisoformat(row[14]) if row[14] else None,
         )
         for row in rows
     }
@@ -503,15 +579,29 @@ def load_post_earnings_reviews(
 
 def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearchState) -> None:
     existing = load_ticker_research_states(conn, [state.ticker]).get(state.ticker)
-    changed = existing != state
     updated_at = state.updated_at or datetime.now(timezone.utc)
     review_status = state.review_status or _review_status_from_checklist(state.checklist)
+    # Only append a history row when a field that history actually records has
+    # changed. Comparing the whole dataclass (incl. updated_at) would log a row
+    # on every run even when nothing substantive changed.
+    if existing is None:
+        changed = True
+    else:
+        existing_status = existing.review_status or _review_status_from_checklist(existing.checklist)
+        changed = (
+            existing.note != state.note
+            or existing.thesis_state != state.thesis_state
+            or existing.thesis_trigger != state.thesis_trigger
+            or existing_status != review_status
+        )
     conn.execute(
         """
         INSERT INTO ticker_research_state
         (ticker, tag, thesis_state, thesis_trigger, note, checklist_json, revisit_date,
-         pinned, review_status, last_reviewed_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         pinned, review_status, last_reviewed_at, updated_at,
+         bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss,
+         earnings_questions_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ticker) DO UPDATE SET
           tag = excluded.tag,
           thesis_state = excluded.thesis_state,
@@ -522,7 +612,14 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
           pinned = excluded.pinned,
           review_status = excluded.review_status,
           last_reviewed_at = excluded.last_reviewed_at,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          bull_case = excluded.bull_case,
+          bear_case = excluded.bear_case,
+          entry_plan = excluded.entry_plan,
+          add_zone = excluded.add_zone,
+          reduce_zone = excluded.reduce_zone,
+          stop_loss = excluded.stop_loss,
+          earnings_questions_json = excluded.earnings_questions_json
         """,
         (
             state.ticker,
@@ -536,6 +633,13 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
             review_status,
             state.last_reviewed_at.isoformat() if state.last_reviewed_at else None,
             updated_at.isoformat(),
+            state.bull_case,
+            state.bear_case,
+            state.entry_plan,
+            state.add_zone,
+            state.reduce_zone,
+            state.stop_loss,
+            json.dumps([str(q) for q in state.earnings_questions]),
         ),
     )
     if changed:
@@ -562,8 +666,9 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
         """
         INSERT INTO post_earnings_reviews
         (ticker, earnings_date, eps, revenue, guide, eps_surprise_pct, revenue_surprise_pct,
-         fy1_eps_revision_after, fy1_revenue_revision_after, conclusion, next_step, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         fy1_eps_revision_after, fy1_revenue_revision_after, conclusion, next_step,
+         gross_margin_change, management_keywords, thesis_changed, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ticker) DO UPDATE SET
           earnings_date = excluded.earnings_date,
           eps = excluded.eps,
@@ -575,6 +680,9 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
           fy1_revenue_revision_after = excluded.fy1_revenue_revision_after,
           conclusion = excluded.conclusion,
           next_step = excluded.next_step,
+          gross_margin_change = excluded.gross_margin_change,
+          management_keywords = excluded.management_keywords,
+          thesis_changed = excluded.thesis_changed,
           updated_at = excluded.updated_at
         """,
         (
@@ -589,6 +697,9 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
             review.fy1_revenue_revision_after,
             review.conclusion,
             review.next_step,
+            review.gross_margin_change,
+            review.management_keywords,
+            review.thesis_changed,
             updated_at.isoformat(),
         ),
     )
@@ -618,6 +729,13 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "pinned": state.pinned,
                 "review_status": state.review_status,
                 "last_reviewed_at": state.last_reviewed_at.isoformat() if state.last_reviewed_at else None,
+                "bull_case": state.bull_case,
+                "bear_case": state.bear_case,
+                "entry_plan": state.entry_plan,
+                "add_zone": state.add_zone,
+                "reduce_zone": state.reduce_zone,
+                "stop_loss": state.stop_loss,
+                "earnings_questions": list(state.earnings_questions),
             })
         if review is not None:
             row["post_earnings_review"] = {
@@ -631,6 +749,9 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "fy1_revenue_revision_after": review.fy1_revenue_revision_after,
                 "conclusion": review.conclusion,
                 "next_step": review.next_step,
+                "gross_margin_change": review.gross_margin_change,
+                "management_keywords": review.management_keywords,
+                "thesis_changed": review.thesis_changed,
             }
         payload["tickers"][symbol] = row
     return payload
@@ -672,6 +793,13 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
             review_status=review_status,
             last_reviewed_at=last_reviewed_at,
             updated_at=datetime.now(timezone.utc),
+            bull_case=str(row.get("bull_case") or ""),
+            bear_case=str(row.get("bear_case") or ""),
+            entry_plan=str(row.get("entry_plan") or ""),
+            add_zone=str(row.get("add_zone") or ""),
+            reduce_zone=str(row.get("reduce_zone") or ""),
+            stop_loss=str(row.get("stop_loss") or ""),
+            earnings_questions=_import_questions(row.get("earnings_questions")),
         )
         upsert_ticker_research_state(conn, state)
 
@@ -691,6 +819,9 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
                     fy1_revenue_revision_after=_parse_float(review_row.get("fy1_revenue_revision_after")),
                     conclusion=str(review_row.get("conclusion") or ""),
                     next_step=str(review_row.get("next_step") or ""),
+                    gross_margin_change=str(review_row.get("gross_margin_change") or ""),
+                    management_keywords=str(review_row.get("management_keywords") or ""),
+                    thesis_changed=str(review_row.get("thesis_changed") or ""),
                     updated_at=datetime.now(timezone.utc),
                 ),
             )
@@ -748,11 +879,27 @@ def save_report_run(
         rsi = _metric_float(item.valuation.metrics.get("rsi_14")) if item.valuation else None
         conn.execute(
             """
-            INSERT OR REPLACE INTO news_daily_summary
+            INSERT INTO news_daily_summary
             (report_run_id, report_date, generated_at, ticker, thesis_state, review_status,
              last_reviewed_at, news_count, top_news_count, valuation_risk, rsi, daily_change_pct,
              premarket_change_pct, earnings_days, warning_count, attention_score, news_burst_score)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(report_date, ticker) DO UPDATE SET
+              report_run_id = excluded.report_run_id,
+              generated_at = excluded.generated_at,
+              thesis_state = excluded.thesis_state,
+              review_status = excluded.review_status,
+              last_reviewed_at = excluded.last_reviewed_at,
+              news_count = excluded.news_count,
+              top_news_count = excluded.top_news_count,
+              valuation_risk = excluded.valuation_risk,
+              rsi = excluded.rsi,
+              daily_change_pct = excluded.daily_change_pct,
+              premarket_change_pct = excluded.premarket_change_pct,
+              earnings_days = excluded.earnings_days,
+              warning_count = excluded.warning_count,
+              attention_score = excluded.attention_score,
+              news_burst_score = excluded.news_burst_score
             """,
             (
                 run_id,
@@ -998,6 +1145,12 @@ def _loads_json_list(value: Any) -> list[str]:
     if not isinstance(loaded, list):
         return []
     return [str(item) for item in loaded if str(item)]
+
+
+def _import_questions(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return []
 
 
 def _coerce_metric_value(value: str | None) -> object:

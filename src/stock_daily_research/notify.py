@@ -44,7 +44,14 @@ class TelegramNotifier:
                 if attempt < self.max_retries:
                     time.sleep(2 ** attempt)
         assert last_exc is not None
-        raise last_exc
+        # Redact the bot token: request exceptions embed the full URL, which the
+        # caller logs into report warnings.
+        raise RuntimeError(self._redact(str(last_exc))) from None
+
+    def _redact(self, message: str) -> str:
+        if self.bot_token and self.bot_token in message:
+            return message.replace(self.bot_token, "***")
+        return message
 
 
 def build_telegram_notifier(disable_web_page_preview: bool = True) -> TelegramNotifier | None:

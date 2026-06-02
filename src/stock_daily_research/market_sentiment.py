@@ -6,6 +6,7 @@ from typing import Any
 import yfinance as yf
 
 from .models import MarketSentiment, MarketSentimentComponent
+from .valuation import YF_HISTORY_TIMEOUT, _series_floats
 
 
 def fetch_market_sentiment() -> MarketSentiment:
@@ -108,12 +109,12 @@ def _score_vix(value: float) -> float:
 
 def _close_history(symbol: str, *, period: str) -> list[float]:
     try:
-        hist = yf.Ticker(symbol).history(period=period, auto_adjust=True)
+        hist = yf.Ticker(symbol).history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
     except Exception:
         return []
     if hist is None or getattr(hist, "empty", True) or "Close" not in hist.columns:
         return []
-    return [float(value) for value in hist["Close"].dropna().tolist()]
+    return _series_floats(hist["Close"])
 
 
 def _last_close(symbol: str, *, period: str) -> float | None:

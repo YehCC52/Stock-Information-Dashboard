@@ -19,6 +19,40 @@ class PositionConfig:
     avg_cost: float | None = None
     portfolio_weight: float | None = None
     position_size: float | None = None
+    stop_loss: float | None = None
+    sector: str = ""
+
+
+@dataclass(frozen=True)
+class PortfolioSettings:
+    total_value: float | None = None
+    addable_cash: float | None = None
+    max_sector_weight: float | None = None
+    max_single_weight: float | None = None
+
+
+@dataclass(frozen=True)
+class InvestmentPlan:
+    """Free-text trading playbook for a ticker (YAML defaults, UI overrides)."""
+    bull_case: str = ""
+    bear_case: str = ""
+    entry_plan: str = ""
+    add_zone: str = ""
+    reduce_zone: str = ""
+    stop_loss: str = ""
+
+    @property
+    def is_empty(self) -> bool:
+        return not any(
+            (
+                self.bull_case,
+                self.bear_case,
+                self.entry_plan,
+                self.add_zone,
+                self.reduce_zone,
+                self.stop_loss,
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -30,6 +64,7 @@ class TickerConfig:
     trusted_news_domains: list[str] = field(default_factory=list)
     trusted_x_accounts: list[TrustedXAccount] = field(default_factory=list)
     position: PositionConfig = field(default_factory=PositionConfig)
+    plan: InvestmentPlan = field(default_factory=InvestmentPlan)
 
     @property
     def search_terms(self) -> list[str]:
@@ -107,6 +142,7 @@ class AppSettings:
     earnings: EarningsSettings = field(default_factory=EarningsSettings)
     macro: MacroSettings = field(default_factory=MacroSettings)
     notifications: NotificationSettings = field(default_factory=NotificationSettings)
+    portfolio: PortfolioSettings = field(default_factory=PortfolioSettings)
 
 
 @dataclass(frozen=True)
@@ -264,6 +300,13 @@ class TickerResearchState:
     review_status: str = "not-reviewed"
     last_reviewed_at: datetime | None = None
     updated_at: datetime | None = None
+    bull_case: str = ""
+    bear_case: str = ""
+    entry_plan: str = ""
+    add_zone: str = ""
+    reduce_zone: str = ""
+    stop_loss: str = ""
+    earnings_questions: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -279,6 +322,9 @@ class PostEarningsReview:
     fy1_revenue_revision_after: float | None = None
     conclusion: str = ""
     next_step: str = ""
+    gross_margin_change: str = ""
+    management_keywords: str = ""
+    thesis_changed: str = ""
     updated_at: datetime | None = None
 
 
@@ -326,3 +372,4 @@ class DailyReport:
     post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
     ticker_history: dict[str, list[TickerHistoryPoint]] = field(default_factory=dict)
     history_overview: dict[str, Any] = field(default_factory=dict)
+    settings: "AppSettings | None" = None

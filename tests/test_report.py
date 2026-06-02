@@ -38,6 +38,7 @@ from stock_daily_research.report import (
     pe_class,
     position_view,
     post_earnings_items,
+    pre_earnings_card,
     premarket_triage,
     priority_items,
     quality_of_move,
@@ -1925,3 +1926,330 @@ def _sample_report() -> DailyReport:
             ],
         ),
     )
+
+
+def test_position_view_includes_unrealized_pl_dollar_and_stop_distance() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(
+            symbol="NVDA", company_name="NVIDIA",
+            position=PositionConfig(
+                status="holding", shares=10, avg_cost=80.0,
+                portfolio_weight=5.0, stop_loss=92.0, sector="Semis",
+            ),
+        ),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=date(2026, 5, 12), source="yfinance",
+            metrics={"last_close": 100.0, "previous_close": 95.0},
+            retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ),
+    )
+
+    view = position_view(item)
+
+    assert view["pl_dollar"] == 200.0
+    assert abs(view["stop_distance_pct"] - 8.6956) < 0.1
+    assert view["stop_distance_tone"] == "ok"
+    assert view["sector"] == "Semis"
+
+
+def test_position_view_stop_distance_tone_escalates_when_close_to_stop() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(
+            symbol="X", company_name="X",
+            position=PositionConfig(status="holding", shares=5, avg_cost=100.0, stop_loss=99.0),
+        ),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X", as_of_date=date(2026, 5, 12), source="yfinance",
+            metrics={"last_close": 100.0, "previous_close": 100.0},
+            retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ),
+    )
+
+    view = position_view(item)
+    assert view["stop_distance_tone"] == "danger"
+
+
+def test_sector_concentration_groups_holdings() -> None:
+    from stock_daily_research.report import sector_concentration
+
+    def holding(symbol, weight, sector):
+        return TickerReport(
+            ticker=TickerConfig(
+                symbol=symbol, company_name=symbol,
+                position=PositionConfig(status="holding", portfolio_weight=weight, sector=sector),
+            ),
+            articles=[], x_signals=[], earnings=None, valuation=None,
+        )
+
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[
+            holding("NVDA", 20.0, "Semis"),
+            holding("AMD", 10.0, "Semis"),
+            holding("AAPL", 8.0, "Hardware"),
+        ],
+    )
+
+    buckets = sector_concentration(report)
+    assert [b["sector"] for b in buckets] == ["Semis", "Hardware"]
+    assert buckets[0]["weight"] == 30.0
+    assert buckets[0]["count"] == 2
+    assert set(buckets[0]["tickers"]) == {"NVDA", "AMD"}
+
+
+def test_sector_concentration_flags_over_cap() -> None:
+    from stock_daily_research.report import sector_concentration
+    from stock_daily_research.models import AppSettings, PortfolioSettings
+
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(
+                    symbol="NVDA", company_name="NVDA",
+                    position=PositionConfig(status="holding", portfolio_weight=40.0, sector="Semis"),
+                ),
+                articles=[], x_signals=[], earnings=None, valuation=None,
+            ),
+        ],
+        settings=AppSettings(portfolio=PortfolioSettings(max_sector_weight=25.0)),
+    )
+
+    buckets = sector_concentration(report)
+    assert buckets[0]["over_cap"] is True
+    assert buckets[0]["cap"] == 25.0
+
+
+def test_stop_distance_warnings_filters_to_close_to_stop() -> None:
+    from stock_daily_research.report import stop_distance_warnings
+
+    def holding(symbol, last, stop):
+        return TickerReport(
+            ticker=TickerConfig(
+                symbol=symbol, company_name=symbol,
+                position=PositionConfig(status="holding", portfolio_weight=10.0, stop_loss=stop),
+            ),
+            articles=[], x_signals=[], earnings=None,
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=date(2026, 5, 12), source="yfinance",
+                metrics={"last_close": last, "previous_close": last},
+                retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+            ),
+        )
+
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[
+            holding("NEAR", 101.0, 100.0),   # 1% above stop → danger
+            holding("WARN", 104.0, 100.0),   # 4% above → warn
+            holding("SAFE", 120.0, 100.0),   # 20% above → excluded
+        ],
+    )
+
+    warnings = stop_distance_warnings(report)
+    symbols = [w["symbol"] for w in warnings]
+    assert symbols == ["NEAR", "WARN"]
+    assert warnings[0]["tone"] == "danger"
+    assert warnings[1]["tone"] == "warn"
+
+
+def test_portfolio_impact_summary_surfaces_addable_cash_and_sectors() -> None:
+    from stock_daily_research.report import portfolio_impact_summary
+    from stock_daily_research.models import AppSettings, PortfolioSettings
+
+    holding = TickerReport(
+        ticker=TickerConfig(
+            symbol="NVDA", company_name="NVDA",
+            position=PositionConfig(
+                status="holding", portfolio_weight=15.0, stop_loss=90.0, sector="Semis",
+            ),
+        ),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=date(2026, 5, 12), source="yfinance",
+            metrics={"last_close": 100.0, "previous_close": 95.0},
+            retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ),
+    )
+
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[holding],
+        settings=AppSettings(
+            portfolio=PortfolioSettings(
+                total_value=100000.0, addable_cash=25000.0,
+                max_sector_weight=30.0, max_single_weight=10.0,
+            ),
+        ),
+    )
+
+    summary = portfolio_impact_summary(report)
+    assert summary["addable_cash"] == 25000.0
+    assert summary["total_value"] == 100000.0
+    assert summary["max_single_weight"] == 10.0
+    assert summary["total_weight_pct"] == 15.0
+    assert summary["sectors"][0]["sector"] == "Semis"
+    assert [r["symbol"] for r in summary["over_concentrated"]] == ["NVDA"]
+
+
+def _news(symbol, title, source, event_type="other", score=1.0):
+    return NewsArticle(
+        ticker=symbol, title=title, source=source, domain=f"{source.lower()}.com",
+        published_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        url=f"https://{source.lower()}.com/{abs(hash(title)) % 100000}",
+        summary="", event_type=event_type, importance_score=score,
+    )
+
+
+def test_event_clusters_groups_same_story_across_sources() -> None:
+    from stock_daily_research.report import event_clusters
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="TSLA", company_name="Tesla"),
+        articles=[
+            _news("TSLA", "Tesla SpaceX merger speculation heats up", "Bloomberg", "deal", 1.2),
+            _news("TSLA", "Musk floats SpaceX Tesla merger, sources say", "CNBC", "deal", 1.1),
+            _news("TSLA", "SpaceX Tesla merger talks draw scrutiny", "Reuters", "deal", 1.0),
+            _news("TSLA", "Tesla unveils new charging network expansion", "CNBC", "product", 0.9),
+        ],
+        x_signals=[], earnings=None, valuation=None,
+    )
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    clusters = event_clusters(report)
+    # The 3 merger stories cluster; the charging-network story stays single-source → dropped.
+    assert len(clusters) == 1
+    cluster = clusters[0]
+    assert cluster["article_count"] == 3
+    assert cluster["source_count"] == 3
+    assert cluster["confidence"] == "high"
+    assert cluster["impact"] == "strategic optionality"
+    assert "Bloomberg" in cluster["sources"]
+    assert cluster["tickers"] == ["TSLA"]
+
+
+def test_event_clusters_drops_single_source_stories() -> None:
+    from stock_daily_research.report import event_clusters
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[
+            _news("NVDA", "NVIDIA Blackwell ramp accelerates demand", "Reuters", "product", 1.0),
+            _news("NVDA", "Apple expands services revenue sharply", "CNBC", "earnings", 1.0),
+        ],
+        x_signals=[], earnings=None, valuation=None,
+    )
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    assert event_clusters(report) == []
+
+
+def test_event_clusters_confidence_medium_for_two_sources() -> None:
+    from stock_daily_research.report import event_clusters
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="INTC", company_name="Intel"),
+        articles=[
+            _news("INTC", "Intel foundry secures major customer deal", "Bloomberg", "deal", 1.1),
+            _news("INTC", "Intel foundry lands major customer, sources say", "Reuters", "deal", 1.0),
+        ],
+        x_signals=[], earnings=None, valuation=None,
+    )
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    clusters = event_clusters(report)
+    assert len(clusters) == 1
+    assert clusters[0]["confidence"] == "medium"
+    assert "review" in clusters[0]["action"]
+
+
+def _pre_earnings_report(earnings_date, *, metrics=None, questions=None):
+    item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[], x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics=metrics or {},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+        earnings=EarningsDate(
+            ticker="NVDA", company_name="NVIDIA",
+            earnings_date=earnings_date, time_of_day="after_market",
+            fiscal_quarter="Q1", fiscal_year=2026,
+            eps_estimate=1.25, revenue_estimate=44_000_000_000.0, source="yfinance",
+            source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+    research_states = {}
+    if questions is not None:
+        research_states["NVDA"] = TickerResearchState(ticker="NVDA", earnings_questions=questions)
+    return DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[item],
+        research_states=research_states,
+    ), item
+
+
+def test_pre_earnings_card_within_window_surfaces_estimates() -> None:
+    report, item = _pre_earnings_report(
+        date(2026, 4, 30),
+        metrics={"fy1_eps_revision_30d": 3.2, "return_20d": 8.0, "rsi_14": 62.0,
+                 "last_close": 100.0, "fifty_two_week_high": 110.0},
+    )
+    card = pre_earnings_card(report, item)
+    assert card is not None
+    assert card["days_until"] == 2
+    assert card["eps_estimate"] == 1.25
+    assert card["revenue_estimate"] == 44_000_000_000.0
+    assert card["eps_revision_30d"] == 3.2
+    assert card["rsi"] == 62.0
+    assert card["overextended"] is False
+    assert card["questions"] == ["", "", ""]
+
+
+def test_pre_earnings_card_flags_overextended() -> None:
+    report, item = _pre_earnings_report(
+        date(2026, 4, 29),
+        metrics={"rsi_14": 78.0, "last_close": 109.0, "fifty_two_week_high": 110.0},
+    )
+    card = pre_earnings_card(report, item)
+    assert card is not None
+    assert card["overextended"] is True
+
+
+def test_pre_earnings_card_fills_question_slots_from_state() -> None:
+    report, item = _pre_earnings_report(
+        date(2026, 4, 28),
+        questions=["Data center growth?", "Margin trajectory?"],
+    )
+    card = pre_earnings_card(report, item)
+    assert card is not None
+    assert card["days_until"] == 0
+    assert card["questions"] == ["Data center growth?", "Margin trajectory?", ""]
+
+
+def test_pre_earnings_card_none_outside_window() -> None:
+    report, item = _pre_earnings_report(date(2026, 5, 10))
+    assert pre_earnings_card(report, item) is None
+    report_past, item_past = _pre_earnings_report(date(2026, 4, 27))
+    assert pre_earnings_card(report_past, item_past) is None
+
