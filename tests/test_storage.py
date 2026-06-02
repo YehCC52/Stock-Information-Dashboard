@@ -408,6 +408,59 @@ def test_research_state_plan_fields_roundtrip(tmp_path: Path) -> None:
     assert reimported.reduce_zone == "RSI > 80 with volume divergence"
 
 
+def test_earnings_card_fields_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+        ],
+        research_states={
+            "NVDA": TickerResearchState(
+                ticker="NVDA",
+                earnings_questions=["Data center growth?", "Margin trajectory?", "China exposure?"],
+            )
+        },
+        post_earnings_reviews={
+            "NVDA": PostEarningsReview(
+                ticker="NVDA",
+                earnings_date=date(2026, 4, 27),
+                eps="beat",
+                gross_margin_change="Up 120bps QoQ",
+                management_keywords="demand, backlog, pricing",
+                thesis_changed="no",
+            )
+        },
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, report)
+        state = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+        review = load_post_earnings_reviews(conn, ["NVDA"])["NVDA"]
+        payload = export_research_state_payload(conn)
+
+    assert state.earnings_questions == ["Data center growth?", "Margin trajectory?", "China exposure?"]
+    assert review.gross_margin_change == "Up 120bps QoQ"
+    assert review.management_keywords == "demand, backlog, pricing"
+    assert review.thesis_changed == "no"
+
+    with init_db(tmp_path / "import.sqlite3") as conn:
+        import_research_state_payload(conn, payload)
+        reimported_state = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+        reimported_review = load_post_earnings_reviews(conn, ["NVDA"])["NVDA"]
+
+    assert reimported_state.earnings_questions == ["Data center growth?", "Margin trajectory?", "China exposure?"]
+    assert reimported_review.gross_margin_change == "Up 120bps QoQ"
+    assert reimported_review.thesis_changed == "no"
+
+
 def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
     db_path = tmp_path / "stock.sqlite3"
     ticker = TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation")

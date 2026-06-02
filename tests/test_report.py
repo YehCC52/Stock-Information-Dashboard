@@ -38,6 +38,7 @@ from stock_daily_research.report import (
     pe_class,
     position_view,
     post_earnings_items,
+    pre_earnings_card,
     premarket_triage,
     priority_items,
     quality_of_move,
@@ -2178,4 +2179,77 @@ def test_event_clusters_confidence_medium_for_two_sources() -> None:
     assert len(clusters) == 1
     assert clusters[0]["confidence"] == "medium"
     assert "review" in clusters[0]["action"]
+
+
+def _pre_earnings_report(earnings_date, *, metrics=None, questions=None):
+    item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[], x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker="NVDA", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics=metrics or {},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+        earnings=EarningsDate(
+            ticker="NVDA", company_name="NVIDIA",
+            earnings_date=earnings_date, time_of_day="after_market",
+            fiscal_quarter="Q1", fiscal_year=2026,
+            eps_estimate=1.25, revenue_estimate=44_000_000_000.0, source="yfinance",
+            source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+    research_states = {}
+    if questions is not None:
+        research_states["NVDA"] = TickerResearchState(ticker="NVDA", earnings_questions=questions)
+    return DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[item],
+        research_states=research_states,
+    ), item
+
+
+def test_pre_earnings_card_within_window_surfaces_estimates() -> None:
+    report, item = _pre_earnings_report(
+        date(2026, 4, 30),
+        metrics={"fy1_eps_revision_30d": 3.2, "return_20d": 8.0, "rsi_14": 62.0,
+                 "last_close": 100.0, "fifty_two_week_high": 110.0},
+    )
+    card = pre_earnings_card(report, item)
+    assert card is not None
+    assert card["days_until"] == 2
+    assert card["eps_estimate"] == 1.25
+    assert card["revenue_estimate"] == 44_000_000_000.0
+    assert card["eps_revision_30d"] == 3.2
+    assert card["rsi"] == 62.0
+    assert card["overextended"] is False
+    assert card["questions"] == ["", "", ""]
+
+
+def test_pre_earnings_card_flags_overextended() -> None:
+    report, item = _pre_earnings_report(
+        date(2026, 4, 29),
+        metrics={"rsi_14": 78.0, "last_close": 109.0, "fifty_two_week_high": 110.0},
+    )
+    card = pre_earnings_card(report, item)
+    assert card is not None
+    assert card["overextended"] is True
+
+
+def test_pre_earnings_card_fills_question_slots_from_state() -> None:
+    report, item = _pre_earnings_report(
+        date(2026, 4, 28),
+        questions=["Data center growth?", "Margin trajectory?"],
+    )
+    card = pre_earnings_card(report, item)
+    assert card is not None
+    assert card["days_until"] == 0
+    assert card["questions"] == ["Data center growth?", "Margin trajectory?", ""]
+
+
+def test_pre_earnings_card_none_outside_window() -> None:
+    report, item = _pre_earnings_report(date(2026, 5, 10))
+    assert pre_earnings_card(report, item) is None
+    report_past, item_past = _pre_earnings_report(date(2026, 4, 27))
+    assert pre_earnings_card(report_past, item_past) is None
 

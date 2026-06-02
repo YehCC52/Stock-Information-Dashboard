@@ -1030,6 +1030,56 @@
       color: var(--info);
     }
     .post-earnings[open] > summary::before { content: "▾ "; }
+    .pre-earnings {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background: var(--warning-bg);
+      border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
+      border-radius: 6px;
+    }
+    .pre-earnings > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .pre-earnings > summary::-webkit-details-marker { display: none; }
+    .pre-earnings > summary::before { content: "▸ "; font-size: 10px; color: var(--warning); }
+    .pre-earnings[open] > summary::before { content: "▾ "; }
+    .pe-pill.pre { color: var(--warning); }
+    .pe-status.extended { color: var(--danger); margin-left: auto; }
+    .pre-earnings-body { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .pre-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      gap: 6px;
+    }
+    .pre-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px 6px;
+      background: var(--surface);
+      border-radius: 4px;
+    }
+    .pre-k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pre-v { font-size: 13px; font-weight: 700; }
+    .pre-questions { display: flex; flex-direction: column; gap: 4px; }
+    .pre-q-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pre-q-input {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      border-radius: 4px;
+      resize: vertical;
+    }
     .pe-pill {
       font-size: 10px;
       font-weight: 800;
@@ -1462,6 +1512,13 @@
     .badge.score-badge.score-down { background: var(--danger-bg); color: var(--danger); }
     .badge.score-badge.score-mixed { background: var(--warning-bg); color: var(--warning); opacity: 0.75; }
     .badge.score-badge.score-extended { background: var(--warning-bg); color: var(--warning); }
+    .badge.dq-medium { background: var(--warning-bg); color: var(--warning); font-weight: 700; }
+    .badge.dq-low { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
+    .dq-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .dq-table th, .dq-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+    .dq-table th.num, .dq-table td.num { text-align: right; }
+    .dq-flags { margin: 0; padding-left: 16px; color: var(--muted); }
+    .dq-flags li { margin: 1px 0; }
     .compare-table-wrap td.score-up { color: var(--good); font-weight: 700; }
     .compare-table-wrap td.score-down { color: var(--danger); font-weight: 700; }
     .compare-table-wrap td.score-mixed { color: var(--warning); }
@@ -1767,6 +1824,7 @@
       {% if overextended %}<a href="#overextended" class="toc-pill">Stretched {{ overextended|length }}</a>{% endif %}
       {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">Alerts {{ rule_alerts|length }}</a>{% endif %}
       {% if report.warnings %}<a href="#global-warnings" class="toc-pill">Warnings {{ report.warnings|length }}</a>{% endif %}
+      {% if data_quality.flagged %}<a href="#data-quality" class="toc-pill">Data {{ data_quality.flagged|length }}</a>{% endif %}
       {% if report.market_sentiment %}<a href="#market-sentiment">Sentiment</a>{% endif %}
       {% if report.market_context and report.market_context.rates %}<a href="#rates">Rates</a>{% endif %}
       {% if report.market_context and report.market_context.breadth %}<a href="#breadth">Breadth</a>{% endif %}
@@ -2465,6 +2523,37 @@
     </section>
     {% endif %}
 
+    <section id="data-quality" class="section section-secondary">
+      <h2>Data Quality
+        <span class="count">(avg confidence {{ data_quality.average }}/100 · {{ data_quality.checked }} tickers)</span>
+      </h2>
+      {% if data_quality.flagged %}
+      <table class="dq-table">
+        <thead>
+          <tr><th>Ticker</th><th class="num">Confidence</th><th>Tag</th><th>Flags</th></tr>
+        </thead>
+        <tbody>
+          {% for row in data_quality.flagged %}
+          <tr>
+            <td><a href="#{{ row.symbol|ticker_anchor }}">{{ row.symbol }}</a></td>
+            <td class="num">{{ row.score }}</td>
+            <td><span class="badge dq-{{ row.tag }}">{{ row.tag }}</span></td>
+            <td>
+              <ul class="dq-flags">
+                {% if row.fallback %}<li>Valuation fallback used</li>{% endif %}
+                {% if row.missing_fields %}<li>Missing: {{ row.missing_fields|join(", ") }}</li>{% endif %}
+                {% for flag in row.flags %}<li>{{ flag }}</li>{% endfor %}
+              </ul>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="section-empty">All tickers scored 80+ confidence — no data-quality flags this run.</div>
+      {% endif %}
+    </section>
+
     <section id="macro" class="section section-secondary">
       <h2>Macro Calendar <span class="count">(next events)</span></h2>
       {% if report.economic_events %}
@@ -2709,7 +2798,8 @@
         {% set fhigh = item|from_52w_high %}
         {% set pmchg = item|premarket_change %}
         {% set pos = item|position_view %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}">
+        {% set dq = item|data_quality %}
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
@@ -2732,6 +2822,7 @@
               {% elif state == "warm" %}<span class="badge good">Warm</span>
               {% else %}<span class="badge">Quiet</span>{% endif %}
               {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="Right-side score {{ insights.score.score }}/100">{{ insights.score.status }}</span>{% endif %}
+              {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="Data confidence {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ') }}{% endif %}">Data {{ dq.tag }}</span>{% endif %}
               <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
             </div>
           </div>
@@ -2867,6 +2958,51 @@
           </ul>
           {% endif %}
 
+          {% set pre_er = item|pre_earnings_card %}
+          {% if pre_er %}
+          <details class="pre-earnings" data-pre-earnings="{{ item.ticker.symbol }}" open>
+            <summary>
+              <span class="pe-pill pre">Pre-earnings setup</span>
+              <span class="pe-meta">reports in {{ pre_er.days_until }}d{% if pre_er.action %} · {{ pre_er.action }}{% endif %}</span>
+              {% if pre_er.overextended %}<span class="pe-status extended">Extended</span>{% endif %}
+            </summary>
+            <div class="pre-earnings-body">
+              <div class="pre-metrics">
+                <div class="pre-metric">
+                  <span class="pre-k">Consensus EPS</span>
+                  <span class="pre-v">{{ "%.2f"|format(pre_er.eps_estimate) if pre_er.eps_estimate is not none else "—" }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">Consensus rev</span>
+                  <span class="pre-v">{{ "{:,.0f}".format(pre_er.revenue_estimate) if pre_er.revenue_estimate is not none else "—" }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">FY1 EPS rev 30D</span>
+                  <span class="pre-v {{ pre_er.eps_revision_30d|change_class }}">{{ pre_er.eps_revision_30d|format_pct }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">20D move</span>
+                  <span class="pre-v {{ pre_er.move_30d|change_class }}">{{ pre_er.move_30d|format_pct }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">RSI 14</span>
+                  <span class="pre-v {{ pre_er.rsi|rsi_class }}">{{ "%.0f"|format(pre_er.rsi) if pre_er.rsi is not none else "—" }}</span>
+                </div>
+                <div class="pre-metric">
+                  <span class="pre-k">From 52W high</span>
+                  <span class="pre-v {{ pre_er.from_52w_high|change_class }}">{{ pre_er.from_52w_high|format_pct }}</span>
+                </div>
+              </div>
+              <div class="pre-questions">
+                <span class="pre-q-label">Key questions to resolve at the print</span>
+                {% for q in pre_er.questions %}
+                <textarea class="pre-q-input" data-eq-field="{{ loop.index0 }}" data-eq-symbol="{{ item.ticker.symbol }}" rows="1" placeholder="Question {{ loop.index }}">{{ q }}</textarea>
+                {% endfor %}
+              </div>
+            </div>
+          </details>
+          {% endif %}
+
           {% set post_er = item|post_earnings %}
           {% if post_er %}
           <details class="post-earnings" data-post-earnings="{{ item.ticker.symbol }}" data-earnings-date="{{ post_er.earnings_date.isoformat() }}">
@@ -2915,6 +3051,15 @@
               <div class="pe-row">
                 <label class="pe-label" for="fy1-rev-rev-after-{{ item.ticker.symbol }}">FY1 revenue revision after %</label>
                 <input id="fy1-rev-rev-after-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="fy1_revenue_revision_after" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="-1.0">
+              </div>
+              <textarea class="pe-text" data-pe-field="gross_margin_change" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Gross margin: direction vs prior quarter / guide"></textarea>
+              <textarea class="pe-text" data-pe-field="management_keywords" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Management keywords: demand, backlog, pricing, caution..."></textarea>
+              <div class="pe-row">
+                <label class="pe-label">Thesis changed?</label>
+                <div class="pe-buttons" data-pe-field="thesis_changed" data-pe-symbol="{{ item.ticker.symbol }}">
+                  <button type="button" data-pe-value="no">No</button>
+                  <button type="button" data-pe-value="yes">Yes</button>
+                </div>
               </div>
               <textarea class="pe-text" data-pe-field="conclusion" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Conclusion: thesis intact / cracked / pivoting"></textarea>
               <textarea class="pe-text" data-pe-field="next_step" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Next step: hold / add / trim / re-evaluate at $X"></textarea>
@@ -3103,6 +3248,7 @@
       var notes = readJson("stock-daily-draft-notes", mapNotes());
       var checklist = readJson("stock-daily-draft-checklist", mapState("checklist"));
       var plans = readJson("stock-daily-draft-plans", mapPlans());
+      var earningsQuestions = readJson("stock-daily-draft-earnings-questions", mapEarningsQuestions());
 
       var PLAN_FIELDS = ["bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"];
 
@@ -3135,6 +3281,15 @@
             entry[field] = (tickerState[sym] && tickerState[sym][field]) || "";
           });
           out[sym] = entry;
+        });
+        return out;
+      }
+
+      function mapEarningsQuestions() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          var value = tickerState[sym] && tickerState[sym].earnings_questions;
+          out[sym] = Array.isArray(value) ? value.slice() : [];
         });
         return out;
       }
@@ -3449,6 +3604,20 @@
             });
           });
           paintPlanSummary(card);
+
+          var eqInputs = Array.prototype.slice.call(card.querySelectorAll("[data-eq-field]"));
+          eqInputs.forEach(function (input) {
+            var idx = parseInt(input.dataset.eqField, 10);
+            var list = earningsQuestions[s] || [];
+            input.value = list[idx] || "";
+            input.addEventListener("input", function () {
+              var current = (earningsQuestions[s] || []).slice();
+              while (current.length <= idx) current.push("");
+              current[idx] = input.value;
+              earningsQuestions[s] = current;
+              writeJson("stock-daily-draft-earnings-questions", earningsQuestions);
+            });
+          });
         });
         updateReviewSummary();
       }
@@ -4093,6 +4262,7 @@
             add_zone: plan.add_zone || "",
             reduce_zone: plan.reduce_zone || "",
             stop_loss: plan.stop_loss || "",
+            earnings_questions: (earningsQuestions[sym] || []).filter(function (q) { return (q || "").trim(); }),
             post_earnings_review: (window.postEarningsState && window.postEarningsState[sym]) || {}
           };
         });

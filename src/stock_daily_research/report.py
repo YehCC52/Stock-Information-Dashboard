@@ -8,6 +8,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from .data_quality import confidence as data_quality_confidence
 from .models import DailyReport, MarketContext, NewsArticle, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
@@ -120,6 +121,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["eps_revision_class"] = eps_revision_class
     env.filters["source_reliability"] = source_reliability
     env.filters["post_earnings_defaults"] = lambda item: post_earnings_defaults(report, item)
+    env.filters["pre_earnings_card"] = lambda item: pre_earnings_card(report, item)
+    env.filters["data_quality"] = lambda item: data_quality_confidence(item, report.report_date)
     env.filters["format_pct"] = format_pct
     env.filters["change_class"] = change_class
     env.filters["format_ratio"] = format_ratio
@@ -152,6 +155,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         ticker_cards=sort_by_market_cap(report.ticker_reports),
         sectors=sectors_in_use(report),
         overextended=overextended_tickers(report),
+        data_quality=data_quality_overview(report),
         portfolio=portfolio_impact_summary(report),
         valuation_keys=[
             "last_close",
@@ -260,6 +264,7 @@ def research_payload(report: DailyReport) -> dict[str, object]:
             "add_zone": state.add_zone,
             "reduce_zone": state.reduce_zone,
             "stop_loss": state.stop_loss,
+            "earnings_questions": list(state.earnings_questions),
             "post_earnings_review": {
                 "earnings_date": review.earnings_date.isoformat() if review and review.earnings_date else "",
                 "eps": review.eps if review else "",
@@ -271,6 +276,9 @@ def research_payload(report: DailyReport) -> dict[str, object]:
                 "fy1_revenue_revision_after": review.fy1_revenue_revision_after if review else None,
                 "conclusion": review.conclusion if review else "",
                 "next_step": review.next_step if review else "",
+                "gross_margin_change": review.gross_margin_change if review else "",
+                "management_keywords": review.management_keywords if review else "",
+                "thesis_changed": review.thesis_changed if review else "",
             },
         }
     return {
@@ -977,6 +985,85 @@ def post_earnings_defaults(report: DailyReport, item: TickerReport) -> dict[str,
         "fy1_revenue_revision_after": review.fy1_revenue_revision_after if review and review.fy1_revenue_revision_after is not None else _metric_float(item, "fy1_revenue_revision_30d"),
         "conclusion": review.conclusion if review else "",
         "next_step": review.next_step if review else "",
+        "gross_margin_change": review.gross_margin_change if review else "",
+        "management_keywords": review.management_keywords if review else "",
+        "thesis_changed": review.thesis_changed if review else "",
+    }
+
+
+def pre_earnings_card(report: DailyReport, item: TickerReport) -> dict[str, object] | None:
+    """Pre-earnings briefing for tickers reporting within the next 0-7 days.
+
+    Surfaces consensus estimates, the 30D EPS-revision drift, the recent stock
+    move and RSI, plus an overextended flag, so the user can frame the setup
+    before the print. Returns None outside the 0-7 day window.
+    """
+    anchor = report.report_date
+    delta = earnings_delta(item, anchor)
+    if delta is None or not (0 <= delta <= 7):
+        return None
+    state = research_state_for(report, item.ticker.symbol)
+    questions = list(state.earnings_questions) if state else []
+    # Always render 3 slots so the UI is stable; fill known ones from state.
+    slots = [questions[i] if i < len(questions) else "" for i in range(3)]
+    return {
+        "symbol": item.ticker.symbol,
+        "company": item.ticker.company_name,
+        "days_until": delta,
+        "action": earnings_action(item, anchor),
+        "eps_estimate": item.earnings.eps_estimate if item.earnings else None,
+        "revenue_estimate": item.earnings.revenue_estimate if item.earnings else None,
+        "eps_revision_30d": _metric_float(item, "fy1_eps_revision_30d"),
+        "move_30d": _metric_float(item, "return_20d"),
+        "rsi": _metric_float(item, "rsi_14"),
+        "from_52w_high": from_52w_high_pct(item),
+        "overextended": _is_overextended(item),
+        "questions": slots,
+    }
+
+
+def _is_overextended(item: TickerReport) -> bool:
+    """Stretched setup heuristic: hot RSI or pinned to the 52-week high."""
+    rsi = _metric_float(item, "rsi_14")
+    from_high = from_52w_high_pct(item)
+    if rsi is not None and rsi >= 75:
+        return True
+    if from_high is not None and from_high >= -2.0:
+        return True
+    return False
+
+
+def data_quality_overview(report: DailyReport) -> dict[str, object]:
+    """Roll-up of per-ticker data-quality confidence for the dashboard section.
+
+    Returns the average confidence and the list of tickers scoring below 80
+    (with the flags that fired), so the user can spot questionable inputs at a
+    glance rather than auditing every card.
+    """
+    rows: list[dict[str, object]] = []
+    scores: list[int] = []
+    for item in report.ticker_reports:
+        result = data_quality_confidence(item, report.report_date)
+        score = int(result["score"])
+        scores.append(score)
+        if score < 80:
+            rows.append(
+                {
+                    "symbol": item.ticker.symbol,
+                    "company": item.ticker.company_name,
+                    "score": score,
+                    "tag": result["tag"],
+                    "flags": result["flags"],
+                    "missing_fields": result["missing_fields"],
+                    "fallback": result["fallback"],
+                }
+            )
+    rows.sort(key=lambda r: r["score"])  # type: ignore[index,arg-type]
+    average = round(sum(scores) / len(scores)) if scores else 100
+    return {
+        "average": average,
+        "checked": len(scores),
+        "flagged": rows,
     }
 
 

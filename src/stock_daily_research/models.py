@@ -306,6 +306,7 @@ class TickerResearchState:
     add_zone: str = ""
     reduce_zone: str = ""
     stop_loss: str = ""
+    earnings_questions: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -321,6 +322,9 @@ class PostEarningsReview:
     fy1_revenue_revision_after: float | None = None
     conclusion: str = ""
     next_step: str = ""
+    gross_margin_change: str = ""
+    management_keywords: str = ""
+    thesis_changed: str = ""
     updated_at: datetime | None = None
 
 

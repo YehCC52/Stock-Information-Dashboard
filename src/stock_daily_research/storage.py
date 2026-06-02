@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS ticker_research_state (
   entry_plan TEXT NOT NULL DEFAULT '',
   add_zone TEXT NOT NULL DEFAULT '',
   reduce_zone TEXT NOT NULL DEFAULT '',
-  stop_loss TEXT NOT NULL DEFAULT ''
+  stop_loss TEXT NOT NULL DEFAULT '',
+  earnings_questions_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS ticker_notes_history (
@@ -127,6 +128,9 @@ CREATE TABLE IF NOT EXISTS post_earnings_reviews (
   fy1_revenue_revision_after REAL,
   conclusion TEXT NOT NULL DEFAULT '',
   next_step TEXT NOT NULL DEFAULT '',
+  gross_margin_change TEXT NOT NULL DEFAULT '',
+  management_keywords TEXT NOT NULL DEFAULT '',
+  thesis_changed TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
 );
 
@@ -242,6 +246,9 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "ticker_research_state", "note", "TEXT NOT NULL DEFAULT ''")
     for plan_column in ("bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"):
         _ensure_column(conn, "ticker_research_state", plan_column, "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "ticker_research_state", "earnings_questions_json", "TEXT NOT NULL DEFAULT '[]'")
+    for pe_column in ("gross_margin_change", "management_keywords", "thesis_changed"):
+        _ensure_column(conn, "post_earnings_reviews", pe_column, "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
     _cleanup_earnings_duplicates(conn)
     _dedupe_news_daily_summary(conn)
@@ -494,7 +501,8 @@ def load_ticker_research_states(
     sql = """
         SELECT ticker, tag, thesis_state, thesis_trigger, note, checklist_json,
                revisit_date, pinned, review_status, last_reviewed_at, updated_at,
-               bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss
+               bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss,
+               earnings_questions_json
         FROM ticker_research_state
     """
     params: list[Any] = []
@@ -523,6 +531,7 @@ def load_ticker_research_states(
             add_zone=row[14] or "",
             reduce_zone=row[15] or "",
             stop_loss=row[16] or "",
+            earnings_questions=_loads_json_list(row[17]),
         )
         for row in rows
     }
@@ -535,7 +544,8 @@ def load_post_earnings_reviews(
     sql = """
         SELECT ticker, earnings_date, eps, revenue, guide, eps_surprise_pct,
                revenue_surprise_pct, fy1_eps_revision_after, fy1_revenue_revision_after,
-               conclusion, next_step, updated_at
+               conclusion, next_step, gross_margin_change, management_keywords,
+               thesis_changed, updated_at
         FROM post_earnings_reviews
     """
     params: list[Any] = []
@@ -558,7 +568,10 @@ def load_post_earnings_reviews(
             fy1_revenue_revision_after=row[8],
             conclusion=row[9] or "",
             next_step=row[10] or "",
-            updated_at=datetime.fromisoformat(row[11]) if row[11] else None,
+            gross_margin_change=row[11] or "",
+            management_keywords=row[12] or "",
+            thesis_changed=row[13] or "",
+            updated_at=datetime.fromisoformat(row[14]) if row[14] else None,
         )
         for row in rows
     }
@@ -586,8 +599,9 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
         INSERT INTO ticker_research_state
         (ticker, tag, thesis_state, thesis_trigger, note, checklist_json, revisit_date,
          pinned, review_status, last_reviewed_at, updated_at,
-         bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss,
+         earnings_questions_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ticker) DO UPDATE SET
           tag = excluded.tag,
           thesis_state = excluded.thesis_state,
@@ -604,7 +618,8 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
           entry_plan = excluded.entry_plan,
           add_zone = excluded.add_zone,
           reduce_zone = excluded.reduce_zone,
-          stop_loss = excluded.stop_loss
+          stop_loss = excluded.stop_loss,
+          earnings_questions_json = excluded.earnings_questions_json
         """,
         (
             state.ticker,
@@ -624,6 +639,7 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
             state.add_zone,
             state.reduce_zone,
             state.stop_loss,
+            json.dumps([str(q) for q in state.earnings_questions]),
         ),
     )
     if changed:
@@ -650,8 +666,9 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
         """
         INSERT INTO post_earnings_reviews
         (ticker, earnings_date, eps, revenue, guide, eps_surprise_pct, revenue_surprise_pct,
-         fy1_eps_revision_after, fy1_revenue_revision_after, conclusion, next_step, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         fy1_eps_revision_after, fy1_revenue_revision_after, conclusion, next_step,
+         gross_margin_change, management_keywords, thesis_changed, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ticker) DO UPDATE SET
           earnings_date = excluded.earnings_date,
           eps = excluded.eps,
@@ -663,6 +680,9 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
           fy1_revenue_revision_after = excluded.fy1_revenue_revision_after,
           conclusion = excluded.conclusion,
           next_step = excluded.next_step,
+          gross_margin_change = excluded.gross_margin_change,
+          management_keywords = excluded.management_keywords,
+          thesis_changed = excluded.thesis_changed,
           updated_at = excluded.updated_at
         """,
         (
@@ -677,6 +697,9 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
             review.fy1_revenue_revision_after,
             review.conclusion,
             review.next_step,
+            review.gross_margin_change,
+            review.management_keywords,
+            review.thesis_changed,
             updated_at.isoformat(),
         ),
     )
@@ -712,6 +735,7 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "add_zone": state.add_zone,
                 "reduce_zone": state.reduce_zone,
                 "stop_loss": state.stop_loss,
+                "earnings_questions": list(state.earnings_questions),
             })
         if review is not None:
             row["post_earnings_review"] = {
@@ -725,6 +749,9 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "fy1_revenue_revision_after": review.fy1_revenue_revision_after,
                 "conclusion": review.conclusion,
                 "next_step": review.next_step,
+                "gross_margin_change": review.gross_margin_change,
+                "management_keywords": review.management_keywords,
+                "thesis_changed": review.thesis_changed,
             }
         payload["tickers"][symbol] = row
     return payload
@@ -772,6 +799,7 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
             add_zone=str(row.get("add_zone") or ""),
             reduce_zone=str(row.get("reduce_zone") or ""),
             stop_loss=str(row.get("stop_loss") or ""),
+            earnings_questions=_import_questions(row.get("earnings_questions")),
         )
         upsert_ticker_research_state(conn, state)
 
@@ -791,6 +819,9 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
                     fy1_revenue_revision_after=_parse_float(review_row.get("fy1_revenue_revision_after")),
                     conclusion=str(review_row.get("conclusion") or ""),
                     next_step=str(review_row.get("next_step") or ""),
+                    gross_margin_change=str(review_row.get("gross_margin_change") or ""),
+                    management_keywords=str(review_row.get("management_keywords") or ""),
+                    thesis_changed=str(review_row.get("thesis_changed") or ""),
                     updated_at=datetime.now(timezone.utc),
                 ),
             )
@@ -1114,6 +1145,12 @@ def _loads_json_list(value: Any) -> list[str]:
     if not isinstance(loaded, list):
         return []
     return [str(item) for item in loaded if str(item)]
+
+
+def _import_questions(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return []
 
 
 def _coerce_metric_value(value: str | None) -> object:
