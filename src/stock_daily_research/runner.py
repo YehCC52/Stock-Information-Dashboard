@@ -114,16 +114,17 @@ def run_daily(
             import_research_state_file(conn, import_research_state_path)
         research_states = load_ticker_research_states(conn, ticker_symbols)
         research_states = _apply_plan_defaults(research_states, config.tickers)
+        tickers = _apply_position_overrides(config.tickers, research_states)
         post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
 
         news_provider = GoogleNewsRssProvider()
-        manual_x_signals = load_manual_x_signals(config.settings.x_signals.manual_file, config.tickers)
+        manual_x_signals = load_manual_x_signals(config.settings.x_signals.manual_file, tickers)
         signals_by_ticker: dict[str, list[XSignal]] = defaultdict(list)
         for signal in manual_x_signals:
             signals_by_ticker[signal.ticker].append(signal)
 
         ticker_reports = _fetch_all_tickers(
-            config.tickers,
+            tickers,
             news_provider=news_provider,
             signals_by_ticker=signals_by_ticker,
             fetch_news=fetch_news,
@@ -231,6 +232,44 @@ def _apply_plan_defaults(
             stop_loss=state.stop_loss or plan.stop_loss,
         )
     return merged
+
+
+def _apply_position_overrides(
+    tickers: list[TickerConfig],
+    research_states: dict[str, TickerResearchState],
+) -> list[TickerConfig]:
+    result: list[TickerConfig] = []
+    for ticker in tickers:
+        state = research_states.get(ticker.symbol)
+        override = state.position if state else None
+        if override is None:
+            result.append(ticker)
+            continue
+        base = ticker.position
+        result.append(
+            replace(
+                ticker,
+                position=replace(
+                    base,
+                    status=override.status or base.status,
+                    shares=override.shares if override.shares is not None else base.shares,
+                    avg_cost=override.avg_cost if override.avg_cost is not None else base.avg_cost,
+                    portfolio_weight=(
+                        override.portfolio_weight
+                        if override.portfolio_weight is not None
+                        else base.portfolio_weight
+                    ),
+                    position_size=(
+                        override.position_size
+                        if override.position_size is not None
+                        else base.position_size
+                    ),
+                    stop_loss=override.stop_loss if override.stop_loss is not None else base.stop_loss,
+                    sector=override.sector or base.sector,
+                ),
+            )
+        )
+    return result
 
 
 def _fetch_all_tickers(

@@ -156,6 +156,15 @@
       box-shadow: var(--shadow);
     }
     .tool-button { padding: 7px 10px; }
+    .tool-button-primary {
+      background: var(--info);
+      color: white;
+      border-color: var(--info);
+      font-weight: 800;
+    }
+    .tool-button-primary:hover { background: color-mix(in srgb, var(--info) 90%, black); border-color: var(--info); }
+    .tool-button-secondary { opacity: 0.75; }
+    .tool-button-secondary:hover { opacity: 1; }
     .icon-button {
       display: inline-flex;
       align-items: center;
@@ -1679,6 +1688,77 @@
       gap: 8px;
       margin-top: 8px;
     }
+    .position-editor {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      background: var(--surface-alt);
+    }
+    .position-editor label {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .position-editor input,
+    .position-editor select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .position-editor .position-wide { grid-column: span 2; }
+    .position-live {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      background: var(--surface-alt);
+      font-size: 12px;
+    }
+    .position-live span {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .position-live .label {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .position-live .value {
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .draft-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .draft-row .tag-select { flex: 1 1 150px; }
+    .draft-row .tool-button { white-space: nowrap; }
     .checklist {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -1770,6 +1850,55 @@
       .ticker-actions { max-width: 100%; }
     }
 
+    .news-read-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+      vertical-align: middle;
+      margin-right: 6px;
+      opacity: 0.5;
+      transition: opacity 0.15s, background 0.15s, color 0.15s;
+    }
+    .news-read-btn:hover {
+      opacity: 1;
+    }
+    .news-item.is-read .news-read-btn {
+      background: var(--good-bg, #d4edda);
+      border-color: var(--good, #28a745);
+      color: var(--good, #28a745);
+      opacity: 1;
+    }
+    .news-item.is-read {
+      opacity: 0.35;
+    }
+    .news-item.is-read .title a {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
+    .thesis-preview {
+      display: block;
+      margin-top: 4px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--accent, #0d6efd) 8%, transparent);
+      color: var(--muted);
+      font-size: 11px;
+      font-style: italic;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     @media print {
       :root { color-scheme: light; }
       body { background: white; }
@@ -1790,9 +1919,9 @@
         <div class="top-tools" aria-label="Dashboard tools">
           <input id="quick-search" class="search-box" type="search" placeholder="Search ticker or company" autocomplete="off">
           <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="Show only pinned tickers; everything else is hidden">Watchlist only</button>
-          <button id="export-watchlist" type="button" class="tool-button" title="TXT: ticker, state, earnings timing, tag">Export watchlist</button>
-          <button id="export-research" type="button" class="tool-button" title="JSON: current research state for CLI import back into SQLite">Export research</button>
-          <button id="export-earnings" type="button" class="tool-button" title="JSON: ticker, company, earnings timing">Export earnings</button>
+          <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">Export watchlist</button>
+          <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">Export research</button>
+          <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">Export earnings</button>
           <div id="export-status" class="export-status" aria-live="polite">Exports: watchlist TXT | research JSON | earnings JSON</div>
         </div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
@@ -2468,7 +2597,7 @@
 
     <section id="changes" class="section section-tertiary">
       <div class="section-header">
-        <h2>What Changed Since Last Run</h2>
+        <h2>What Changed Since Last Run <span class="count">{{ report.generated_at|twn_timestamp }}</span></h2>
       </div>
       <div id="changes-body" class="change-list">
         {% if history.changes_since_last_run %}
@@ -2630,7 +2759,8 @@
       <ul class="news-list">
         {% for item, article, tier in important_news %}
         {% set rationale = article|news_rationale %}
-        <li class="news-item tier-{{ tier }}{% if rationale %} has-why{% endif %} {% if loop.index <= 5 %}editor-pick{% else %}news-extra is-hidden{% endif %}">
+        <li class="news-item tier-{{ tier }}{% if rationale %} has-why{% endif %} {% if loop.index <= 5 %}editor-pick{% else %}news-extra is-hidden{% endif %}" data-article-url="{{ article.url }}">
+          <button type="button" class="news-read-btn" title="Mark as read" aria-label="Mark as read">&#10003;</button>
           <a class="symbol" href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a>
           <div class="title">
             <a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a>
@@ -2782,6 +2912,13 @@
           {% for sec in sectors %}<option value="{{ sec|lower }}">{{ sec }}</option>{% endfor %}
         </select>
         {% endif %}
+        {% if clusters %}
+        <label class="control-label" for="cluster-filter">Cluster</label>
+        <select id="cluster-filter" class="control-select">
+          <option value="all">All clusters</option>
+          {% for cluster in clusters %}<option value="{{ cluster|lower }}">{{ cluster }}</option>{% endfor %}
+        </select>
+        {% endif %}
         <label class="control-label checkbox"><input id="risk-filter" type="checkbox"> Risk only</label>
       </div>
       <div id="compare-panel" class="compare-panel is-hidden" aria-live="polite"></div>
@@ -2799,7 +2936,8 @@
         {% set pmchg = item|premarket_change %}
         {% set pos = item|position_view %}
         {% set dq = item|data_quality %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
+        {% set cluster = item|ticker_cluster %}
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
@@ -2880,6 +3018,13 @@
               {% endif %}
             </div>
           </details>
+
+          <div class="position-live" data-position-live="{{ item.ticker.symbol }}">
+            <span><span class="label">Live position</span><span class="value" data-position-live-status="{{ item.ticker.symbol }}">{{ pos.status }}</span></span>
+            <span><span class="label">Weight</span><span class="value" data-position-live-weight="{{ item.ticker.symbol }}">N/A</span></span>
+            <span><span class="label">P/L</span><span class="value change" data-position-live-pl="{{ item.ticker.symbol }}">N/A</span></span>
+            <span><span class="label">Impact</span><span class="value change" data-position-live-impact="{{ item.ticker.symbol }}">N/A</span></span>
+          </div>
 
           {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score %}
           <div class="insights">
@@ -3068,11 +3213,37 @@
           {% endif %}
 
           <div class="note-preview is-hidden" data-note-preview="{{ item.ticker.symbol }}"></div>
+          <div class="thesis-preview is-hidden" data-thesis-preview="{{ item.ticker.symbol }}"></div>
 
           <details class="user-tools-details">
             <summary>Manage</summary>
             <div class="user-tools">
               <label class="compare-label"><input type="checkbox" class="compare-check" value="{{ item.ticker.symbol }}"> Add to compare</label>
+              <div class="position-editor" data-position-editor="{{ item.ticker.symbol }}">
+                <label>Status
+                  <select data-position-field="status" data-position-symbol="{{ item.ticker.symbol }}">
+                    <option value="watchlist">Watchlist</option>
+                    <option value="holding">Holding</option>
+                    <option value="tracking">Tracking</option>
+                    <option value="avoid">Avoid</option>
+                  </select>
+                </label>
+                <label>Shares
+                  <input type="number" step="0.0001" min="0" data-position-field="shares" data-position-symbol="{{ item.ticker.symbol }}" placeholder="10">
+                </label>
+                <label>Avg cost
+                  <input type="number" step="0.01" min="0" data-position-field="avg_cost" data-position-symbol="{{ item.ticker.symbol }}" placeholder="120.00">
+                </label>
+                <label>Weight %
+                  <input type="number" step="0.01" min="0" data-position-field="portfolio_weight" data-position-symbol="{{ item.ticker.symbol }}" placeholder="5">
+                </label>
+                <label>Size $
+                  <input type="number" step="1" min="0" data-position-field="position_size" data-position-symbol="{{ item.ticker.symbol }}" placeholder="auto">
+                </label>
+                <label>Stop
+                  <input type="number" step="0.01" min="0" data-position-field="stop_loss" data-position-symbol="{{ item.ticker.symbol }}" placeholder="optional">
+                </label>
+              </div>
               <div class="tag-row">
                 <label class="control-label" for="tag-{{ item.ticker.symbol }}">Tag</label>
                 <select id="tag-{{ item.ticker.symbol }}" class="tag-select" data-tag="{{ item.ticker.symbol }}">
@@ -3087,14 +3258,17 @@
               </div>
               <div class="tag-row">
                 <label class="control-label" for="thesis-{{ item.ticker.symbol }}">Thesis</label>
-                <select id="thesis-{{ item.ticker.symbol }}" class="tag-select" data-thesis="{{ item.ticker.symbol }}">
-                  <option value="">Unmarked</option>
-                  <option value="watching">Watching</option>
-                  <option value="building">Building</option>
-                  <option value="active">Active</option>
-                  <option value="weakening">Weakening</option>
-                  <option value="broken">Broken</option>
-                </select>
+                <div class="draft-row">
+                  <select id="thesis-{{ item.ticker.symbol }}" class="tag-select" data-thesis="{{ item.ticker.symbol }}">
+                    <option value="">Unmarked</option>
+                    <option value="watching">Watching</option>
+                    <option value="building">Building</option>
+                    <option value="active">Active</option>
+                    <option value="weakening">Weakening</option>
+                    <option value="broken">Broken</option>
+                  </select>
+                  <button type="button" class="tool-button" data-thesis-draft="{{ item.ticker.symbol }}">Draft</button>
+                </div>
               </div>
               <div class="tag-row">
                 <label class="control-label" for="thesis-trigger-{{ item.ticker.symbol }}">Trigger</label>
@@ -3107,6 +3281,13 @@
                   <option value="macro">Macro</option>
                   <option value="execution">Execution</option>
                 </select>
+              </div>
+              <div class="tag-row">
+                <label class="control-label" for="thesis-text-{{ item.ticker.symbol }}">Thesis</label>
+                <input type="text" id="thesis-text-{{ item.ticker.symbol }}" class="control-input thesis-text-input"
+                  data-thesis-text="{{ item.ticker.symbol }}"
+                  placeholder="One-sentence thesis (e.g. AI capex → NVDA revenue beat)"
+                  maxlength="120">
               </div>
               <textarea class="note-input" rows="2" data-note="{{ item.ticker.symbol }}" placeholder="Notes: thesis, risk, what to watch"></textarea>
               <div class="revisit-row">
@@ -3231,6 +3412,7 @@
       var rsiFilter = document.getElementById("rsi-filter");
       var topicFilter = document.getElementById("topic-filter");
       var sectorFilter = document.getElementById("sector-filter");
+      var clusterFilter = document.getElementById("cluster-filter");
       var riskFilter = document.getElementById("risk-filter");
       var tickerCount = document.getElementById("ticker-count");
       var reviewedCount = document.getElementById("reviewed-count");
@@ -3249,6 +3431,8 @@
       var checklist = readJson("stock-daily-draft-checklist", mapState("checklist"));
       var plans = readJson("stock-daily-draft-plans", mapPlans());
       var earningsQuestions = readJson("stock-daily-draft-earnings-questions", mapEarningsQuestions());
+      var positions = readJson("stock-daily-draft-positions", mapPositions());
+      var thesisText = readJson("stock-daily-draft-thesis-text", mapThesisText());
 
       var PLAN_FIELDS = ["bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"];
 
@@ -3294,6 +3478,23 @@
         return out;
       }
 
+      function mapPositions() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          out[sym] = Object.assign({}, (tickerState[sym] && tickerState[sym].position) || {});
+        });
+        return out;
+      }
+
+      function mapThesisText() {
+        var out = {};
+        Object.keys(tickerState).forEach(function (sym) {
+          var value = tickerState[sym] && tickerState[sym].thesis_text;
+          if (value) out[sym] = value;
+        });
+        return out;
+      }
+
       function readJson(key, fallback) {
         try {
           var raw = localStorage.getItem(key);
@@ -3325,6 +3526,100 @@
         return n.toLocaleString();
       }
 
+      function formattedDollar(value) {
+        var n = numberOrNull(value);
+        if (n == null) return "N/A";
+        var sign = n < 0 ? "-" : "";
+        return sign + "$" + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      }
+
+      function formattedPrice(value) {
+        var n = numberOrNull(value);
+        return n == null ? "N/A" : "$" + n.toFixed(2);
+      }
+
+      function cleanPosition(rec) {
+        rec = rec || {};
+        var out = {};
+        var status = (rec.status || "").trim();
+        if (status) out.status = status;
+        ["shares", "avg_cost", "portfolio_weight", "position_size", "stop_loss"].forEach(function (field) {
+          var value = numberOrNull(rec[field]);
+          if (value != null) out[field] = value;
+        });
+        var sector = (rec.sector || "").trim();
+        if (sector) out.sector = sector;
+        return out;
+      }
+
+      function positionStateFor(card) {
+        var s = symbol(card);
+        var rec = Object.assign({}, positions[s] || {});
+        if (!rec.status) rec.status = card.dataset.positionStatus || "watchlist";
+        ["shares", "avg_cost", "portfolio_weight", "position_size", "stop_loss"].forEach(function (field) {
+          if (rec[field] == null || rec[field] === "") {
+            var key = {
+              shares: "positionShares",
+              avg_cost: "positionAvgCost",
+              portfolio_weight: "positionWeight",
+              position_size: "positionSize",
+              stop_loss: "positionStopLoss"
+            }[field];
+            rec[field] = numberOrNull(card.dataset[key]);
+          }
+        });
+        return rec;
+      }
+
+      function applyPositionToCard(card) {
+        var rec = positionStateFor(card);
+        var last = numberOrNull(card.dataset.lastClose);
+        var prev = numberOrNull(card.dataset.previousClose);
+        var shares = numberOrNull(rec.shares);
+        var avg = numberOrNull(rec.avg_cost);
+        var weight = numberOrNull(rec.portfolio_weight);
+        var size = numberOrNull(rec.position_size);
+        var stop = numberOrNull(rec.stop_loss);
+        if (size == null && shares != null && last != null) size = shares * last;
+
+        var plPct = null;
+        var plDollar = null;
+        if (avg != null && avg > 0 && last != null) {
+          plPct = (last - avg) / avg * 100;
+          if (shares != null) plDollar = (last - avg) * shares;
+        }
+        var impact = null;
+        if (weight != null && prev != null && prev !== 0 && last != null) {
+          impact = weight * ((last - prev) / prev);
+        }
+
+        card.dataset.positionStatus = rec.status || "watchlist";
+        card.dataset.positionShares = shares == null ? "" : String(shares);
+        card.dataset.positionAvgCost = avg == null ? "" : String(avg);
+        card.dataset.positionWeight = weight == null ? "" : String(weight);
+        card.dataset.positionSize = size == null ? "" : String(size);
+        card.dataset.positionStopLoss = stop == null ? "" : String(stop);
+        card.dataset.plPct = plPct == null ? "" : String(plPct);
+        card.dataset.bookImpact = impact == null ? "" : String(impact);
+
+        var statusEl = card.querySelector("[data-position-live-status]");
+        var weightEl = card.querySelector("[data-position-live-weight]");
+        var plEl = card.querySelector("[data-position-live-pl]");
+        var impactEl = card.querySelector("[data-position-live-impact]");
+        if (statusEl) statusEl.textContent = rec.status || "watchlist";
+        if (weightEl) weightEl.textContent = weight == null ? "N/A" : formattedPct(weight).replace(/^\+/, "");
+        if (plEl) {
+          plEl.textContent = plPct == null ? "N/A" : formattedPct(plPct) + (plDollar == null ? "" : " (" + formattedDollar(plDollar) + ")");
+          plEl.classList.remove("change-pos", "change-neg", "change-flat");
+          plEl.classList.add("change-" + signClass(plPct));
+        }
+        if (impactEl) {
+          impactEl.textContent = impact == null ? "N/A" : formattedPct(impact);
+          impactEl.classList.remove("change-pos", "change-neg", "change-flat");
+          impactEl.classList.add("change-" + signClass(impact));
+        }
+      }
+
       function symbol(card) { return card.dataset.symbol || ""; }
       function isPinned(card) { return pinned.indexOf(symbol(card)) >= 0; }
       function checklistValues(card) {
@@ -3354,6 +3649,94 @@
       }
       function thesisTrigger(card) {
         return thesisTriggers[symbol(card)] || "None";
+      }
+      function thesisTextFor(sym) {
+        return thesisText[sym] || "";
+      }
+      function buildThesisDraft(card) {
+        var s = symbol(card);
+        var plan = plans[s] || {};
+        var status = (card.dataset.positionStatus || "").toLowerCase();
+        var days = numberOrNull(card.dataset.earningsDays);
+        var risk = valuationRisk(card);
+        var top = topWatch(card);
+        var score = card.dataset.rightSideStatus || "";
+        var trend = card.dataset.trend || "";
+        var state = status === "holding" ? "active" : "watching";
+        if (risk === "High" || risk === "Extreme") state = status === "holding" ? "weakening" : "watching";
+        else if (days != null && days >= 0 && days <= 7) state = status === "holding" ? "active" : "building";
+
+        var trigger = "execution";
+        if (risk === "High" || risk === "Extreme") trigger = "valuation";
+        else if (days != null && days >= 0 && days <= 7) trigger = "guidance";
+        else if ((card.dataset.topics || "").indexOf("cloud") >= 0 || (card.dataset.topics || "").indexOf("ai") >= 0) trigger = "execution";
+
+        var bull = (plan.bull_case || "").trim();
+        var bear = (plan.bear_case || "").trim();
+        var setup = bull || [top, trend, score].filter(Boolean).join(" / ");
+        var caution = bear || (risk !== "None" ? risk + " valuation risk" : "watch revisions and news quality");
+        var note = s + " thesis: " + (setup || "watch current setup") + "; key risk: " + caution + ".";
+        return { state: state, trigger: trigger, note: note };
+      }
+      function thesisDraftPrompt(card, fallback) {
+        var s = symbol(card);
+        var plan = plans[s] || {};
+        var headlines = Array.prototype.slice.call(card.querySelectorAll("details ul li a"))
+          .map(function (el) { return el.textContent.trim(); })
+          .filter(Boolean)
+          .slice(0, 5);
+        var context = {
+          symbol: s,
+          company: card.dataset.company || "",
+          position_status: card.dataset.positionStatus || "watchlist",
+          valuation_risk: valuationRisk(card),
+          top_watch: topWatch(card),
+          trend: card.dataset.trend || "",
+          right_side_status: card.dataset.rightSideStatus || "",
+          rsi_14: card.dataset.rsi || "",
+          daily_change: card.dataset.dailyChange || "",
+          from_52w_high: card.dataset.fromHigh || "",
+          earnings_days: card.dataset.earningsDays || "",
+          bull_case: plan.bull_case || "",
+          bear_case: plan.bear_case || "",
+          existing_fallback: fallback,
+          headlines: headlines
+        };
+        return [
+          "Draft a concise stock thesis from the provided report context.",
+          "Return only minified JSON with keys state, trigger, note.",
+          "Allowed state values: watching, building, active, weakening, broken.",
+          "Allowed trigger values: guidance, valuation, execution, technicals, news, macro.",
+          "The note must be one sentence, specific, and use only supplied facts.",
+          JSON.stringify(context)
+        ].join("\n");
+      }
+      function normalizeThesisDraft(text, fallback) {
+        var data = null;
+        try {
+          var raw = String(text || "").trim();
+          var start = raw.indexOf("{");
+          var end = raw.lastIndexOf("}");
+          if (start >= 0 && end > start) data = JSON.parse(raw.slice(start, end + 1));
+        } catch (err) {
+          data = null;
+        }
+        var states = ["watching", "building", "active", "weakening", "broken"];
+        var triggers = ["guidance", "valuation", "execution", "technicals", "news", "macro"];
+        return {
+          state: data && states.indexOf(data.state) >= 0 ? data.state : fallback.state,
+          trigger: data && triggers.indexOf(data.trigger) >= 0 ? data.trigger : fallback.trigger,
+          note: data && data.note ? String(data.note).trim() : fallback.note
+        };
+      }
+      function requestThesisDraft(card) {
+        var fallback = buildThesisDraft(card);
+        if (!(window.claude && typeof window.claude.complete === "function")) {
+          return Promise.resolve(fallback);
+        }
+        return window.claude.complete(thesisDraftPrompt(card, fallback))
+          .then(function (text) { return normalizeThesisDraft(text, fallback); })
+          .catch(function () { return fallback; });
       }
       function isExtremeRisk(value) {
         return value === "Extreme" || value === "High";
@@ -3434,6 +3817,7 @@
         var rsi = rsiFilter ? rsiFilter.value : "all";
         var topic = topicFilter ? topicFilter.value : "all";
         var sector = sectorFilter ? sectorFilter.value : "all";
+        var cluster = clusterFilter ? clusterFilter.value : "all";
         var scoreStatus = scoreFilter ? scoreFilter.value : "all";
         var riskOnly = !!(riskFilter && riskFilter.checked);
         var watchlistOnly = document.body.classList.contains("watchlist-mode");
@@ -3444,10 +3828,11 @@
           var stateMatch = state === "all" ? (showQuiet || focus !== "all" || watchlistOnly || card.dataset.state !== "quiet") : card.dataset.state === state;
           var topicMatch = topic === "all" || (" " + (card.dataset.topics || "") + " ").indexOf(" " + topic + " ") >= 0;
           var sectorMatch = sector === "all" || (card.dataset.sector || "") === sector;
+          var clusterMatch = cluster === "all" || (card.dataset.cluster || "") === cluster;
           var scoreMatch = scoreStatus === "all" || (card.dataset.rightSideStatus || "") === scoreStatus;
           var riskMatch = !riskOnly || card.dataset.hasRisk === "1";
           var pinnedMatch = !watchlistOnly || card.classList.contains("is-pinned");
-          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && scoreMatch && riskMatch && workModeMatch(card);
+          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && clusterMatch && scoreMatch && riskMatch && workModeMatch(card);
           card.classList.toggle("is-hidden", !match);
           syncModeDetails(card, match);
           if (match) visible += 1;
@@ -3502,11 +3887,13 @@
           var tagSelect = card.querySelector("[data-tag]");
           var tagBadge = card.querySelector("[data-tag-badge]");
           var thesisSelect = card.querySelector("[data-thesis]");
+          var draftBtn = card.querySelector("[data-thesis-draft]");
           var triggerSelect = card.querySelector("[data-thesis-trigger]");
           var noteInput = card.querySelector("[data-note]");
           var revisitInput = card.querySelector("[data-revisit]");
           var details = card.querySelector(".user-tools-details");
           var boxes = Array.prototype.slice.call(card.querySelectorAll("[data-checklist] input"));
+          var positionInputs = Array.prototype.slice.call(card.querySelectorAll("[data-position-field]"));
           var noteState = notes[s] || {};
           if (details) {
             details.addEventListener("toggle", function () {
@@ -3555,6 +3942,39 @@
             });
           }
 
+          if (draftBtn) {
+            draftBtn.addEventListener("click", function () {
+              var originalLabel = draftBtn.textContent;
+              draftBtn.disabled = true;
+              draftBtn.textContent = "Drafting";
+              requestThesisDraft(card).then(function (draft) {
+                if (thesisSelect && !thesisSelect.value) {
+                  thesisSelect.value = draft.state;
+                  thesis[s] = draft.state;
+                  card.dataset.thesisState = draft.state;
+                  writeJson("stock-daily-draft-thesis", thesis);
+                }
+                if (triggerSelect && !triggerSelect.value) {
+                  triggerSelect.value = draft.trigger;
+                  thesisTriggers[s] = draft.trigger;
+                  card.dataset.thesisTrigger = draft.trigger;
+                  writeJson("stock-daily-draft-thesis-triggers", thesisTriggers);
+                }
+                if (noteInput && !noteInput.value.trim()) {
+                  noteInput.value = draft.note;
+                  notes[s] = Object.assign({}, notes[s], { note: draft.note });
+                  writeJson("stock-daily-draft-notes", notes);
+                  paintNotePreview(card);
+                }
+                enhanceFocusFromLocalState();
+                persistAndRenderChanges();
+                renderCompare();
+                draftBtn.disabled = false;
+                draftBtn.textContent = originalLabel;
+              });
+            });
+          }
+
           if (noteInput) {
             noteInput.value = noteState.note || "";
             noteInput.addEventListener("input", function () {
@@ -3566,6 +3986,21 @@
             });
             paintNotePreview(card);
           }
+
+          var thesisTextInput = card.querySelector("[data-thesis-text]");
+          if (thesisTextInput) {
+            thesisTextInput.value = thesisText[s] || "";
+            thesisTextInput.addEventListener("input", function () {
+              var val = thesisTextInput.value;
+              if (val) thesisText[s] = val;
+              else delete thesisText[s];
+              writeJson("stock-daily-draft-thesis-text", thesisText);
+              paintThesisPreview(card);
+              renderCompare();
+            });
+            paintThesisPreview(card);
+          }
+
           if (revisitInput) {
             revisitInput.value = noteState.revisit || "";
             revisitInput.addEventListener("change", function () {
@@ -3590,6 +4025,29 @@
             });
           });
           paintReviewStatus(card);
+
+          positionInputs.forEach(function (input) {
+            var field = input.dataset.positionField;
+            var rec = positionStateFor(card);
+            input.value = rec[field] == null ? "" : rec[field];
+            input.addEventListener("input", function () {
+              var current = Object.assign({}, positions[s] || positionStateFor(card));
+              current[field] = field === "status" ? input.value : input.value;
+              positions[s] = cleanPosition(current);
+              writeJson("stock-daily-draft-positions", positions);
+              applyPositionToCard(card);
+              renderCompare();
+            });
+            input.addEventListener("change", function () {
+              var current = Object.assign({}, positions[s] || positionStateFor(card));
+              current[field] = input.value;
+              positions[s] = cleanPosition(current);
+              writeJson("stock-daily-draft-positions", positions);
+              applyPositionToCard(card);
+              renderCompare();
+            });
+          });
+          applyPositionToCard(card);
 
           var planInputs = Array.prototype.slice.call(card.querySelectorAll("[data-plan-field]"));
           planInputs.forEach(function (input) {
@@ -3645,6 +4103,19 @@
           return;
         }
         preview.textContent = "Note: " + (note.length > 92 ? note.slice(0, 89) + "..." : note);
+        preview.classList.remove("is-hidden");
+      }
+
+      function paintThesisPreview(card) {
+        var preview = card.querySelector("[data-thesis-preview]");
+        if (!preview) return;
+        var text = (thesisText[symbol(card)] || "").trim();
+        if (!text) {
+          preview.classList.add("is-hidden");
+          preview.textContent = "";
+          return;
+        }
+        preview.textContent = text.length > 100 ? text.slice(0, 97) + "..." : text;
         preview.classList.remove("is-hidden");
       }
 
@@ -3752,12 +4223,15 @@
           return;
         }
         panel.classList.remove("is-hidden");
+        var hideWeightColumns = selected.every(function (c) { return !c.dataset.positionWeight; });
         var rows = selected.map(function (card) {
           var sym = symbol(card);
           var scoreVal = card.dataset.rightSideScore || "";
           var scoreStatus = (card.dataset.rightSideStatus || "").replace(/-/g, " ");
           var scoreTone = card.dataset.rightSideTone || "";
           var scoreCell = scoreVal ? scoreVal + "/100 — " + scoreStatus.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : "—";
+          var weightCells = hideWeightColumns ? "" : ("<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
+            "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>");
           return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
             "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
             "<td class=\"score-" + escapeHtml(scoreTone) + "\">" + escapeHtml(scoreCell) + "</td>" +
@@ -3767,7 +4241,7 @@
             "<td>" + earningsText(card.dataset.earningsDays) + "</td>" +
             "<td>" + escapeHtml(reviewStatusFor(sym)) + "</td>" +
             "<td>" + escapeHtml(tagFor(card)) + "</td>" +
-            "<td>" + escapeHtml(thesisState(card)) + "</td>" +
+            "<td>" + escapeHtml(thesisTextFor(sym) || thesisState(card)) + "</td>" +
             "<td>" + escapeHtml(thesisTrigger(card)) + "</td>" +
             "<td>" + escapeHtml(revisitFor(sym)) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.premarketChange) + "\">" + formattedPct(card.dataset.premarketChange) + "</td>" +
@@ -3779,8 +4253,7 @@
             "<td class=\"num change-" + signClass(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")) + "\">" + formattedPct(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")) + "</td>" +
             "<td class=\"num change-" + signClass(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")) + "\">" + formattedPct(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")) + "</td>" +
             "<td>" + escapeHtml(card.dataset.positionStatus || "watchlist") + "</td>" +
-            "<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
-            "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>" +
+            weightCells +
             "<td>" + escapeHtml(topWatch(card)) + "</td>" +
             "<td>" + escapeHtml(valuationRisk(card)) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.rsi) + "</td>" +
@@ -3788,11 +4261,13 @@
             "<td class=\"num\">" + formattedNumber(card.dataset.marketCap) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.forwardPe, "x") + "</td></tr>";
         }).join("");
+        var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">Weight</th><th class=\"num\">Book impact</th>";
         panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
           "<th>Ticker</th><th>State</th><th>Score</th><th>Trend</th><th class=\"num\">Daily %</th><th class=\"num\">From High</th>" +
           "<th>Next earnings</th><th>Review</th><th>User tag</th><th>Thesis</th><th>Trigger</th><th>Revisit</th>" +
-          "<th class=\"num\">Premarket</th><th class=\"num\">Gap</th><th class=\"num\">Vol/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS growth</th><th class=\"num\">EPS rev 30D</th><th class=\"num\">FY1 rev rev</th><th class=\"num\">NextQ rev rev</th><th>Position</th><th class=\"num\">Weight</th><th class=\"num\">Book impact</th>" +
+          "<th class=\"num\">Premarket</th><th class=\"num\">Gap</th><th class=\"num\">Vol/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS growth</th><th class=\"num\">EPS rev 30D</th><th class=\"num\">FY1 rev rev</th><th class=\"num\">NextQ rev rev</th><th>Position</th>" +
+          headerWeightCols +
           "<th>Top watch</th><th>Valuation risk</th><th class=\"num\">RSI 14</th><th class=\"num\">Top news</th>" +
           "<th class=\"num\">Market Cap</th><th class=\"num\">Forward P/E</th>" +
           "</tr></thead><tbody>" +
@@ -4250,6 +4725,7 @@
             tag: tags[sym] || "",
             thesis_state: thesis[sym] || "",
             thesis_trigger: thesisTriggers[sym] || "",
+            thesis_text: thesisTextFor(sym),
             note: (notes[sym] && notes[sym].note) || "",
             checklist: checklist[sym] || [],
             revisit_date: (notes[sym] && notes[sym].revisit) || "",
@@ -4263,6 +4739,7 @@
             reduce_zone: plan.reduce_zone || "",
             stop_loss: plan.stop_loss || "",
             earnings_questions: (earningsQuestions[sym] || []).filter(function (q) { return (q || "").trim(); }),
+            position: cleanPosition(positions[sym] || positionStateFor(card)),
             post_earnings_review: (window.postEarningsState && window.postEarningsState[sym]) || {}
           };
         });
@@ -4332,6 +4809,7 @@
           return;
         }
         panel.classList.remove("is-hidden");
+        var hideWeightColumns = selected.every(function (c) { return !c.dataset.positionWeight; });
         var rows = selected.map(function (card) {
           var sym = symbol(card);
           var revisions = [
@@ -4339,6 +4817,8 @@
             "FY1 rev " + formattedPct(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")),
             "NextQ rev " + formattedPct(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d"))
           ].join(" / ");
+          var weightCells = hideWeightColumns ? "" : ("<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
+            "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>");
           return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
             "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
             "<td>" + escapeHtml(thesisState(card)) + "</td>" +
@@ -4353,16 +4833,17 @@
             "<td class=\"num\">" + formattedNumber(card.dataset.attentionScore) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.premarketChange) + "\">" + formattedPct(card.dataset.premarketChange) + "</td>" +
             "<td>" + escapeHtml(card.dataset.positionStatus || "watchlist") + "</td>" +
-            "<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
-            "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>" +
+            weightCells +
             "<td>" + escapeHtml(tagFor(card)) + "</td>" +
             "<td>" + escapeHtml(revisitFor(sym)) + "</td></tr>";
         }).join("");
+        var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">Weight</th><th class=\"num\">Book impact</th>";
         panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
           "<th>Ticker</th><th>State</th><th>Thesis</th><th>Trigger</th><th>Review</th><th>Last reviewed</th>" +
           "<th>Next earnings</th><th class=\"num\">News burst</th><th class=\"num\">Top news</th><th>Valuation risk</th><th>30D revisions</th>" +
-          "<th class=\"num\">Attention</th><th class=\"num\">Premarket</th><th>Position</th><th class=\"num\">Weight</th><th class=\"num\">Book impact</th><th>User tag</th><th>Revisit</th>" +
+          "<th class=\"num\">Attention</th><th class=\"num\">Premarket</th><th>Position</th>" +
+          headerWeightCols + "<th>User tag</th><th>Revisit</th>" +
           "</tr></thead><tbody>" +
           rows + "</tbody></table></div>";
         var exportBtn = document.getElementById("export-compare");
@@ -4390,6 +4871,9 @@
             position_status: card.dataset.positionStatus || "watchlist",
             portfolio_weight: numberOrNull(card.dataset.positionWeight),
             book_impact: numberOrNull(card.dataset.bookImpact),
+            shares: numberOrNull(card.dataset.positionShares),
+            avg_cost: numberOrNull(card.dataset.positionAvgCost),
+            position_size: numberOrNull(card.dataset.positionSize),
             user_tag: tagFor(card),
             revisit_date: revisitFor(symbol(card)),
           };
@@ -4397,7 +4881,7 @@
         download("compare-{{ report.report_date.isoformat() }}.json", JSON.stringify(rows, null, 2), "application/json;charset=utf-8", "Exported compare JSON: " + rows.length + " selected tickers");
       }
 
-      [search, focusFilter, stateFilter, scoreFilter, earningsFilter, rsiFilter, topicFilter, sectorFilter, riskFilter].forEach(function (el) {
+      [search, focusFilter, stateFilter, scoreFilter, earningsFilter, rsiFilter, topicFilter, sectorFilter, clusterFilter, riskFilter].forEach(function (el) {
         if (!el) return;
         el.addEventListener(el === search ? "input" : "change", applyFilters);
       });
@@ -4426,6 +4910,38 @@
       enhanceFocusFromLocalState();
       renderRevisitDueToday();
       applyFilters();
+    })();
+
+    (function () {
+      var NEWS_READ_KEY = "stock-daily-read-news";
+      var readNews = (function () {
+        try { var raw = localStorage.getItem(NEWS_READ_KEY); return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
+      })();
+
+      function saveReadNews() {
+        try { localStorage.setItem(NEWS_READ_KEY, JSON.stringify(readNews)); } catch (e) {}
+      }
+
+      var items = Array.prototype.slice.call(document.querySelectorAll(".news-item[data-article-url]"));
+      items.forEach(function (li) {
+        var url = li.dataset.articleUrl;
+        if (!url) return;
+        if (readNews[url]) li.classList.add("is-read");
+        var btn = li.querySelector(".news-read-btn");
+        if (!btn) return;
+        btn.addEventListener("click", function (e) {
+          e.preventDefault();
+          var wasRead = li.classList.contains("is-read");
+          if (wasRead) {
+            li.classList.remove("is-read");
+            delete readNews[url];
+          } else {
+            li.classList.add("is-read");
+            readNews[url] = true;
+          }
+          saveReadNews();
+        });
+      });
     })();
   </script>
 </body>

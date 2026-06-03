@@ -7,6 +7,7 @@ from stock_daily_research.models import (
     EarningsDate,
     NewsArticle,
     PostEarningsReview,
+    PositionConfig,
     TickerConfig,
     TickerHistoryPoint,
     TickerResearchState,
@@ -406,6 +407,54 @@ def test_research_state_plan_fields_roundtrip(tmp_path: Path) -> None:
     assert reimported.bear_case == "Margin compression if Blackwell yield slips"
     assert reimported.add_zone == "20MA retest, >= 1.5x avg volume"
     assert reimported.reduce_zone == "RSI > 80 with volume divergence"
+
+
+def test_research_state_position_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA Corporation"),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+        ],
+        research_states={
+            "NVDA": TickerResearchState(
+                ticker="NVDA",
+                position=PositionConfig(
+                    status="holding",
+                    shares=12.5,
+                    avg_cost=100.0,
+                    portfolio_weight=6.25,
+                    position_size=1400.0,
+                    stop_loss=92.0,
+                ),
+            )
+        },
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, report)
+        loaded = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+        payload = export_research_state_payload(conn)
+
+    assert loaded.position is not None
+    assert loaded.position.status == "holding"
+    assert loaded.position.shares == 12.5
+    assert payload["tickers"]["NVDA"]["position"]["portfolio_weight"] == 6.25
+
+    with init_db(tmp_path / "import.sqlite3") as conn:
+        import_research_state_payload(conn, payload)
+        reimported = load_ticker_research_states(conn, ["NVDA"])["NVDA"]
+
+    assert reimported.position is not None
+    assert reimported.position.avg_cost == 100.0
+    assert reimported.position.stop_loss == 92.0
 
 
 def test_earnings_card_fields_roundtrip(tmp_path: Path) -> None:

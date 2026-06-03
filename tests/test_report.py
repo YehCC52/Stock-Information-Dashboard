@@ -103,6 +103,9 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "+4.00% on 1.8x volume" in output
     assert "5.26T" in output
     assert "Position &amp; book" in output
+    assert "What Changed Since Last Run" in output
+    assert "2026-04-28 15:00 TWN" in output
+    assert "window.claude.complete" in output
 
 
 def test_write_report_outputs_markdown_and_html(tmp_path) -> None:
@@ -1679,7 +1682,7 @@ def test_rsi_helpers_and_alerts_surface_technical_extremes() -> None:
         x_signals=[],
         valuation=ValuationSnapshot(
             ticker="ARM", as_of_date=today, source="yfinance",
-            metrics={"forward_pe": 130.0, "rsi_14": 78.0},
+            metrics={"forward_pe": 130.0, "rsi_14": 78.0, "last_close": 97.0, "fifty_two_week_high": 100.0},
             retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         ),
         earnings=None,
@@ -1696,6 +1699,7 @@ def test_rsi_helpers_and_alerts_surface_technical_extremes() -> None:
     assert len(alerts) == 1
     assert "overbought technicals" in alerts[0]["title"]
     assert "RSI 14 78" in alerts[0]["detail"]
+    assert "-3.00% from 52W high" in alerts[0]["detail"]
 
 
 def test_card_state_classifies_by_urgency() -> None:
@@ -2252,4 +2256,3 @@ def test_pre_earnings_card_none_outside_window() -> None:
     assert pre_earnings_card(report, item) is None
     report_past, item_past = _pre_earnings_report(date(2026, 4, 27))
     assert pre_earnings_card(report_past, item_past) is None
-
