@@ -13,6 +13,7 @@ from .models import (
     EarningsDate,
     NewsArticle,
     PostEarningsReview,
+    PositionConfig,
     TickerHistoryPoint,
     TickerResearchState,
     ValuationSnapshot,
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS ticker_research_state (
   tag TEXT NOT NULL DEFAULT '',
   thesis_state TEXT NOT NULL DEFAULT '',
   thesis_trigger TEXT NOT NULL DEFAULT '',
+  thesis_text TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT '',
   checklist_json TEXT NOT NULL DEFAULT '[]',
   revisit_date TEXT,
@@ -103,7 +105,8 @@ CREATE TABLE IF NOT EXISTS ticker_research_state (
   add_zone TEXT NOT NULL DEFAULT '',
   reduce_zone TEXT NOT NULL DEFAULT '',
   stop_loss TEXT NOT NULL DEFAULT '',
-  earnings_questions_json TEXT NOT NULL DEFAULT '[]'
+  earnings_questions_json TEXT NOT NULL DEFAULT '[]',
+  position_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS ticker_notes_history (
@@ -247,6 +250,8 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     for plan_column in ("bull_case", "bear_case", "entry_plan", "add_zone", "reduce_zone", "stop_loss"):
         _ensure_column(conn, "ticker_research_state", plan_column, "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "ticker_research_state", "earnings_questions_json", "TEXT NOT NULL DEFAULT '[]'")
+    _ensure_column(conn, "ticker_research_state", "thesis_text", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "ticker_research_state", "position_json", "TEXT NOT NULL DEFAULT '{}'")
     for pe_column in ("gross_margin_change", "management_keywords", "thesis_changed"):
         _ensure_column(conn, "post_earnings_reviews", pe_column, "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
@@ -499,10 +504,10 @@ def load_ticker_research_states(
     tickers: list[str] | None = None,
 ) -> dict[str, TickerResearchState]:
     sql = """
-        SELECT ticker, tag, thesis_state, thesis_trigger, note, checklist_json,
+        SELECT ticker, tag, thesis_state, thesis_trigger, thesis_text, note, checklist_json,
                revisit_date, pinned, review_status, last_reviewed_at, updated_at,
                bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss,
-               earnings_questions_json
+               earnings_questions_json, position_json
         FROM ticker_research_state
     """
     params: list[Any] = []
@@ -518,20 +523,22 @@ def load_ticker_research_states(
             tag=row[1] or "",
             thesis_state=row[2] or "",
             thesis_trigger=row[3] or "",
-            note=row[4] or "",
-            checklist=_loads_json_list(row[5]),
-            revisit_date=date.fromisoformat(row[6]) if row[6] else None,
-            pinned=bool(row[7]),
-            review_status=row[8] or "not-reviewed",
-            last_reviewed_at=datetime.fromisoformat(row[9]) if row[9] else None,
-            updated_at=datetime.fromisoformat(row[10]) if row[10] else None,
-            bull_case=row[11] or "",
-            bear_case=row[12] or "",
-            entry_plan=row[13] or "",
-            add_zone=row[14] or "",
-            reduce_zone=row[15] or "",
-            stop_loss=row[16] or "",
-            earnings_questions=_loads_json_list(row[17]),
+            thesis_text=row[4] or "",
+            note=row[5] or "",
+            checklist=_loads_json_list(row[6]),
+            revisit_date=date.fromisoformat(row[7]) if row[7] else None,
+            pinned=bool(row[8]),
+            review_status=row[9] or "not-reviewed",
+            last_reviewed_at=datetime.fromisoformat(row[10]) if row[10] else None,
+            updated_at=datetime.fromisoformat(row[11]) if row[11] else None,
+            bull_case=row[12] or "",
+            bear_case=row[13] or "",
+            entry_plan=row[14] or "",
+            add_zone=row[15] or "",
+            reduce_zone=row[16] or "",
+            stop_loss=row[17] or "",
+            earnings_questions=_loads_json_list(row[18]),
+            position=_load_position_json(row[19]),
         )
         for row in rows
     }
@@ -597,15 +604,16 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
     conn.execute(
         """
         INSERT INTO ticker_research_state
-        (ticker, tag, thesis_state, thesis_trigger, note, checklist_json, revisit_date,
+        (ticker, tag, thesis_state, thesis_trigger, thesis_text, note, checklist_json, revisit_date,
          pinned, review_status, last_reviewed_at, updated_at,
          bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss,
-         earnings_questions_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         earnings_questions_json, position_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ticker) DO UPDATE SET
           tag = excluded.tag,
           thesis_state = excluded.thesis_state,
           thesis_trigger = excluded.thesis_trigger,
+          thesis_text = excluded.thesis_text,
           note = excluded.note,
           checklist_json = excluded.checklist_json,
           revisit_date = excluded.revisit_date,
@@ -619,13 +627,15 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
           add_zone = excluded.add_zone,
           reduce_zone = excluded.reduce_zone,
           stop_loss = excluded.stop_loss,
-          earnings_questions_json = excluded.earnings_questions_json
+          earnings_questions_json = excluded.earnings_questions_json,
+          position_json = excluded.position_json
         """,
         (
             state.ticker,
             state.tag,
             state.thesis_state,
             state.thesis_trigger,
+            state.thesis_text,
             state.note,
             json.dumps(sorted(set(state.checklist))),
             state.revisit_date.isoformat() if state.revisit_date else None,
@@ -640,6 +650,7 @@ def upsert_ticker_research_state(conn: sqlite3.Connection, state: TickerResearch
             state.reduce_zone,
             state.stop_loss,
             json.dumps([str(q) for q in state.earnings_questions]),
+            json.dumps(_position_payload(state.position)),
         ),
     )
     if changed:
@@ -723,6 +734,7 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "tag": state.tag,
                 "thesis_state": state.thesis_state,
                 "thesis_trigger": state.thesis_trigger,
+                "thesis_text": state.thesis_text,
                 "note": state.note,
                 "checklist": list(state.checklist),
                 "revisit_date": state.revisit_date.isoformat() if state.revisit_date else None,
@@ -736,6 +748,7 @@ def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 "reduce_zone": state.reduce_zone,
                 "stop_loss": state.stop_loss,
                 "earnings_questions": list(state.earnings_questions),
+                "position": _position_payload(state.position),
             })
         if review is not None:
             row["post_earnings_review"] = {
@@ -786,6 +799,7 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
             tag=str(row.get("tag") or ""),
             thesis_state=str(row.get("thesis_state") or ""),
             thesis_trigger=str(row.get("thesis_trigger") or ""),
+            thesis_text=str(row.get("thesis_text") or ""),
             note=str(row.get("note") or ""),
             checklist=checklist_values,
             revisit_date=_parse_date(row.get("revisit_date")),
@@ -800,6 +814,7 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
             reduce_zone=str(row.get("reduce_zone") or ""),
             stop_loss=str(row.get("stop_loss") or ""),
             earnings_questions=_import_questions(row.get("earnings_questions")),
+            position=_position_from_payload(row.get("position")),
         )
         upsert_ticker_research_state(conn, state)
 
@@ -1151,6 +1166,53 @@ def _import_questions(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if str(item).strip()]
     return []
+
+
+def _position_payload(position: PositionConfig | None) -> dict[str, Any]:
+    if position is None:
+        return {}
+    return {
+        "status": position.status,
+        "shares": position.shares,
+        "avg_cost": position.avg_cost,
+        "portfolio_weight": position.portfolio_weight,
+        "position_size": position.position_size,
+        "stop_loss": position.stop_loss,
+        "sector": position.sector,
+    }
+
+
+def _load_position_json(value: Any) -> PositionConfig | None:
+    if not value:
+        return None
+    try:
+        payload = json.loads(str(value))
+    except json.JSONDecodeError:
+        return None
+    return _position_from_payload(payload)
+
+
+def _position_from_payload(value: Any) -> PositionConfig | None:
+    if not isinstance(value, dict):
+        return None
+    status = str(value.get("status") or "").strip()
+    shares = _parse_float(value.get("shares"))
+    avg_cost = _parse_float(value.get("avg_cost"))
+    portfolio_weight = _parse_float(value.get("portfolio_weight"))
+    position_size = _parse_float(value.get("position_size"))
+    stop_loss = _parse_float(value.get("stop_loss"))
+    sector = str(value.get("sector") or "").strip()
+    if not any((status, sector, shares is not None, avg_cost is not None, portfolio_weight is not None, position_size is not None, stop_loss is not None)):
+        return None
+    return PositionConfig(
+        status=status or "watchlist",
+        shares=shares,
+        avg_cost=avg_cost,
+        portfolio_weight=portfolio_weight,
+        position_size=position_size,
+        stop_loss=stop_loss,
+        sector=sector,
+    )
 
 
 def _coerce_metric_value(value: str | None) -> object:

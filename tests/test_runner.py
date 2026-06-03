@@ -1,8 +1,8 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PremarketSnapshot, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
-from stock_daily_research.runner import _apply_plan_defaults, run_daily
+from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PositionConfig, PremarketSnapshot, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
+from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, run_daily
 from stock_daily_research.storage import init_db, save_report
 
 
@@ -80,6 +80,29 @@ def test_apply_plan_defaults_ignores_empty_plan() -> None:
     merged = _apply_plan_defaults(states, tickers)
     assert merged["NVDA"].note == "keep me"
     assert merged["NVDA"].bull_case == ""
+
+
+def test_apply_position_overrides_merges_research_state_position() -> None:
+    tickers = [
+        TickerConfig(
+            symbol="NVDA",
+            company_name="NVIDIA Corporation",
+            position=PositionConfig(status="watchlist", portfolio_weight=2.0),
+        )
+    ]
+    states = {
+        "NVDA": TickerResearchState(
+            ticker="NVDA",
+            position=PositionConfig(status="holding", shares=10.0, avg_cost=120.0),
+        )
+    }
+
+    merged = _apply_position_overrides(tickers, states)
+
+    assert merged[0].position.status == "holding"
+    assert merged[0].position.shares == 10.0
+    assert merged[0].position.avg_cost == 120.0
+    assert merged[0].position.portfolio_weight == 2.0
 
 
 def test_run_daily_writes_report_and_db(tmp_path: Path, monkeypatch) -> None:

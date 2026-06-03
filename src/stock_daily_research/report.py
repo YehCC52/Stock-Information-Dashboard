@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from math import isfinite
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .data_quality import confidence as data_quality_confidence
-from .models import DailyReport, MarketContext, NewsArticle, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
+from .models import DailyReport, MarketContext, NewsArticle, PositionConfig, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
@@ -75,6 +76,7 @@ def _build_environment(template_dir: str | Path | None = None, *, autoescape_htm
     env.filters["metric_label"] = lambda value: METRIC_LABELS.get(value, value)
     env.filters["metric_value"] = format_metric_value
     env.filters["date_or_na"] = date_or_na
+    env.filters["twn_timestamp"] = format_twn_timestamp
     return env
 
 
@@ -116,6 +118,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["daily_change"] = daily_change_pct
     env.filters["from_52w_high"] = from_52w_high_pct
     env.filters["from_52w_low"] = from_52w_low_pct
+    env.filters["ticker_cluster"] = ticker_cluster
     env.filters["premarket_change"] = lambda item: premarket_change_pct(report, item.ticker.symbol)
     env.filters["position_view"] = position_view
     env.filters["eps_revision_class"] = eps_revision_class
@@ -157,6 +160,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         overextended=overextended_tickers(report),
         data_quality=data_quality_overview(report),
         portfolio=portfolio_impact_summary(report),
+        clusters=clusters_in_use(report),
         valuation_keys=[
             "last_close",
             "rsi_14",
@@ -252,6 +256,7 @@ def research_payload(report: DailyReport) -> dict[str, object]:
             "tag": state.tag,
             "thesis_state": state.thesis_state,
             "thesis_trigger": state.thesis_trigger,
+            "thesis_text": state.thesis_text,
             "note": state.note,
             "checklist": list(state.checklist),
             "revisit_date": state.revisit_date.isoformat() if state.revisit_date else "",
@@ -265,6 +270,7 @@ def research_payload(report: DailyReport) -> dict[str, object]:
             "reduce_zone": state.reduce_zone,
             "stop_loss": state.stop_loss,
             "earnings_questions": list(state.earnings_questions),
+            "position": position_payload(item.ticker.position),
             "post_earnings_review": {
                 "earnings_date": review.earnings_date.isoformat() if review and review.earnings_date else "",
                 "eps": review.eps if review else "",
@@ -285,6 +291,18 @@ def research_payload(report: DailyReport) -> dict[str, object]:
         "tickers": states,
         "history_days": int(report.history_overview.get("history_days", 30)) if report.history_overview else 30,
         "archive_dates": list(report.history_overview.get("archive_dates", [])) if report.history_overview else [],
+    }
+
+
+def position_payload(position: PositionConfig) -> dict[str, object]:
+    return {
+        "status": position.status,
+        "shares": position.shares,
+        "avg_cost": position.avg_cost,
+        "portfolio_weight": position.portfolio_weight,
+        "position_size": position.position_size,
+        "stop_loss": position.stop_loss,
+        "sector": position.sector,
     }
 
 
@@ -1700,6 +1718,15 @@ def format_pct(value: object, *, sign: bool = True) -> str:
     return fmt.format(value)
 
 
+def format_twn_timestamp(value: object) -> str:
+    """Format a report timestamp in Taiwan time for static HTML headers."""
+    if not isinstance(value, datetime):
+        return "N/A"
+    if value.tzinfo is not None:
+        value = value.astimezone(ZoneInfo("Asia/Taipei"))
+    return f"{value.strftime('%Y-%m-%d %H:%M')} TWN"
+
+
 def format_ratio(value: object) -> str:
     if not isinstance(value, (int, float)):
         return "N/A"
@@ -1815,6 +1842,26 @@ def sectors_in_use(report: DailyReport) -> list[str]:
             if isinstance(sector, str) and sector.strip():
                 seen.add(sector.strip())
     return sorted(seen)
+
+
+def clusters_in_use(report: DailyReport) -> list[str]:
+    """Distinct custom sector clusters for matching keywords."""
+    return [label for label, _ in SECTOR_GROUPS]
+
+
+def ticker_cluster(item: TickerReport) -> str | None:
+    """Which custom cluster does this ticker belong to (based on keywords)?"""
+    symbol = item.ticker.symbol.lower()
+    keywords_text = " ".join([
+        item.ticker.symbol.lower(),
+        item.ticker.company_name.lower(),
+        " ".join(item.ticker.keywords).lower(),
+    ])
+    for label, terms in SECTOR_GROUPS:
+        for term in terms:
+            if term.lower() in keywords_text or term.lower() in symbol:
+                return label.lower()
+    return None
 
 
 def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
@@ -2352,12 +2399,27 @@ def news_tier(article: object) -> str:
 def hero_items(report: DailyReport) -> list[dict[str, object]]:
     """The 1-3 most decision-pressing things today.
 
-    Priorities by tone (loudest first): imminent earnings cluster, imminent
-    macro event, valuation-watch list (tickers with stretched P/E), top news
-    fallback. Returns at most 3 cards.
+    Priorities by tone (loudest first): revisit dates due today, imminent
+    earnings cluster, imminent macro event, valuation-watch list (tickers
+    with stretched P/E), top news fallback. Returns at most 3 cards.
     """
     anchor = report.report_date
     items: list[dict[str, object]] = []
+
+    revisit_due = [
+        s
+        for s, state in report.research_states.items()
+        if state.revisit_date and state.revisit_date == anchor
+    ]
+    if revisit_due:
+        items.append({
+            "kind": "revisit",
+            "tone": "imminent",
+            "label": "Revisit due today",
+            "headline": ", ".join(sorted(revisit_due)),
+            "subtitle": f"{len(revisit_due)} ticker{'s' if len(revisit_due) != 1 else ''}",
+            "anchor": "#ticker-grid",
+        })
 
     earnings_by_day: dict[int, list[TickerReport]] = {}
     for tr in report.ticker_reports:
@@ -2615,9 +2677,9 @@ def rule_alerts(report: DailyReport) -> list[dict[str, object]]:
 
         if rsi is not None and rsi >= 70:
             if high_pe is not None and high_pe[1] >= 100:
-                add("overbought technicals", f"RSI 14 {rsi:.0f} with stretched valuation.", signal_rank=3)
+                add("overbought technicals", _overbought_detail(tr, rsi, "stretched valuation"), signal_rank=3)
             elif tr.articles and card_state(tr, report.report_date) == "hot":
-                add("hot but overbought", f"RSI 14 {rsi:.0f}; avoid chasing without a fresh catalyst.", signal_rank=2)
+                add("hot but overbought", _overbought_detail(tr, rsi, "avoid chasing without a fresh catalyst"), signal_rank=2)
 
         if rsi is not None and rsi <= 30 and earnings_soon_flag:
             add("oversold into earnings", f"RSI 14 {rsi:.0f}; review whether weakness is technical or thesis-related.", signal_rank=2)
@@ -2640,6 +2702,14 @@ def rule_alerts(report: DailyReport) -> list[dict[str, object]]:
 
     tone_rank = {"danger": 0, "warn": 1, "info": 2}
     return sorted(alerts, key=lambda item: (tone_rank.get(str(item["tone"]), 9), item["delta"], -item["rank"], str(item["symbol"])))
+
+
+def _overbought_detail(item: TickerReport, rsi: float, conclusion: str) -> str:
+    detail = f"RSI 14 {rsi:.0f}"
+    from_high = from_52w_high_pct(item)
+    if from_high is not None:
+        detail += f", {format_pct(from_high)} from 52W high"
+    return f"{detail}; {conclusion}."
 
 
 def topic_tags(item: TickerReport) -> list[str]:

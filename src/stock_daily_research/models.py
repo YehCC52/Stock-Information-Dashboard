@@ -293,6 +293,7 @@ class TickerResearchState:
     tag: str = ""
     thesis_state: str = ""
     thesis_trigger: str = ""
+    thesis_text: str = ""
     note: str = ""
     checklist: list[str] = field(default_factory=list)
     revisit_date: date | None = None
@@ -307,6 +308,7 @@ class TickerResearchState:
     reduce_zone: str = ""
     stop_loss: str = ""
     earnings_questions: list[str] = field(default_factory=list)
+    position: PositionConfig | None = None
 
 
 @dataclass(frozen=True)
