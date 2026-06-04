@@ -256,6 +256,8 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert "data-premarket-change=" in output
     assert "data-volume-x=" in output
     assert "data-position-weight=" in output
+    assert "from-high-chip" in output
+    assert "From high -5.45%" in output
     assert "data-revenue-rev-30d=" in output
     assert "data-next-q-revenue-rev-30d=" in output
     assert "enhanceFocusFromLocalState" in output
@@ -263,6 +265,8 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert "FY1 rev rev" in output
     assert "NextQ rev rev" in output
     assert "stock-daily-draft-post-earnings" in output
+    assert "data-local-revisit-hero" in output
+    assert "syncRevisitHero" in output
     assert "Manage" in output
     assert "Next earnings" in output
     assert "Valuation risk" in output
@@ -1634,6 +1638,41 @@ def test_rule_alerts_and_priority_items_surface_risk_workflow() -> None:
     assert priorities
 
 
+def test_rule_alerts_surface_stop_loss_distance() -> None:
+    today = date(2026, 4, 28)
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(
+                    symbol="NVDA",
+                    company_name="NVIDIA Corporation",
+                    position=PositionConfig(status="holding", portfolio_weight=8.0, stop_loss=100.0),
+                ),
+                articles=[],
+                x_signals=[],
+                valuation=ValuationSnapshot(
+                    ticker="NVDA",
+                    as_of_date=today,
+                    source="yfinance",
+                    metrics={"last_close": 101.0},
+                    retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                ),
+                earnings=None,
+            ),
+        ],
+    )
+
+    alerts = rule_alerts(report)
+
+    assert len(alerts) == 1
+    assert "stop-loss alert" in alerts[0]["title"]
+    assert "Last $101.00 is +1.00% from stop $100.00." in alerts[0]["detail"]
+    assert "8.00% weight" in alerts[0]["detail"]
+    assert alerts[0]["tone"] == "danger"
+
+
 def test_topic_tags_maps_watchlist_terms_to_dashboard_topics() -> None:
     item = TickerReport(
         ticker=TickerConfig(
@@ -1851,6 +1890,7 @@ def _sample_report() -> DailyReport:
                         "rsi_14": 62.5,
                         "last_close": 104.0,
                         "previous_close": 100.0,
+                        "fifty_two_week_high": 110.0,
                         "volume_vs_20d": 1.8,
                         "gap_percent": 3.5,
                         "atr_20_percent": 2.4,

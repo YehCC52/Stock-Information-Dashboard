@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from datetime import datetime
 
 import yaml
 
@@ -18,6 +18,7 @@ from .models import (
     NotificationSettings,
     PortfolioSettings,
     PositionConfig,
+    ResearchDefaults,
     TickerConfig,
     TelegramSettings,
     TrustedXAccount,
@@ -159,6 +160,7 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
         trusted_x_accounts=[_load_x_account(index, idx, account) for idx, account in enumerate(data.get("trusted_x_accounts", []))],
         position=_load_position(data.get("position", {})),
         plan=_load_plan(data.get("plan", {})),
+        research=_load_research_defaults(data.get("research", {})),
     )
 
 
@@ -187,6 +189,20 @@ def _load_position(data: dict[str, Any]) -> PositionConfig:
     )
 
 
+def _load_research_defaults(data: dict[str, Any]) -> ResearchDefaults:
+    if not isinstance(data, dict):
+        return ResearchDefaults()
+    return ResearchDefaults(
+        thesis_state=str(data.get("thesis_state", "") or ""),
+        thesis_trigger=str(data.get("thesis_trigger", "") or ""),
+        thesis_text=str(data.get("thesis_text", "") or ""),
+        note=str(data.get("note", "") or ""),
+        tag=str(data.get("tag", "") or ""),
+        review_status=str(data.get("review_status", "") or ""),
+        revisit_date=_optional_date(data.get("revisit_date")),
+    )
+
+
 def _load_portfolio_settings(data: dict[str, Any]) -> PortfolioSettings:
     return PortfolioSettings(
         total_value=_optional_float(data.get("total_value")),
@@ -203,6 +219,15 @@ def _optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Position field must be numeric, got {value!r}") from exc
+
+
+def _optional_date(value: Any) -> date | None:
+    if value is None or value == "":
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ValueError(f"Research date field must be YYYY-MM-DD, got {value!r}") from exc
 
 
 def _load_x_account(ticker_index: int, account_index: int, data: dict[str, Any]) -> TrustedXAccount:

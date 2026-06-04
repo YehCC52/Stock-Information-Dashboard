@@ -31,6 +31,10 @@ tickers:
       - GPU
       - AI chips
       - data center
+    research:
+      thesis_state: active
+      thesis_trigger: execution
+      thesis_text: "NVDA thesis: data-center AI demand and CUDA ecosystem keep execution quality central; watch margins, supply, and hyperscaler capex durability."
     trusted_news_domains:
       - reuters.com
       - cnbc.com
@@ -158,6 +162,10 @@ tickers:
       - semiconductor IP
       - CPU architecture
       - licensing
+    research:
+      thesis_state: watching
+      thesis_trigger: valuation
+      thesis_text: "ARM thesis: architecture licensing remains strategically valuable, but valuation and smartphone/AI royalty growth need confirmation before chasing."
     trusted_news_domains:
       - reuters.com
       - cnbc.com
@@ -192,6 +200,10 @@ tickers:
       - custom silicon
       - VMware
       - AI infrastructure
+    research:
+      thesis_state: building
+      thesis_trigger: execution
+      thesis_text: "AVGO thesis: custom AI silicon, networking, and VMware integration can support durable cash flow if margins and backlog execution stay clean."
     trusted_news_domains:
       - reuters.com
       - cnbc.com

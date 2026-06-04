@@ -1967,7 +1967,6 @@
     </nav>
 
     <section class="command-center" aria-label="Today">
-      {% if hero %}
       <div id="hero" class="command-hero">
         {% for item in hero %}
         <a class="hero-card {{ item.tone }} hero-kind-{{ item.kind }}" href="{{ item.anchor }}">
@@ -1996,7 +1995,6 @@
         </a>
         {% endfor %}
       </div>
-      {% endif %}
       <aside class="command-side" id="summary">
         <div class="mode-bar" role="group" aria-label="Today work mode">
           <button type="button" class="tool-button mode-button" data-mode="overview" aria-pressed="true">Overview</button>
@@ -2959,6 +2957,7 @@
               {% elif state == "warn" %}<span class="badge warn">Warn</span>
               {% elif state == "warm" %}<span class="badge good">Warm</span>
               {% else %}<span class="badge">Quiet</span>{% endif %}
+              {% if fhigh is not none %}<span class="badge from-high-chip change change-{{ fhigh|change_class }}" title="Distance from 52-week high">From high {{ fhigh|format_pct }}</span>{% endif %}
               {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="Right-side score {{ insights.score.score }}/100">{{ insights.score.status }}</span>{% endif %}
               {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="Data confidence {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ') }}{% endif %}">Data {{ dq.tag }}</span>{% endif %}
               <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
@@ -4136,7 +4135,6 @@
 
       function renderRevisitDueToday() {
         var list = document.getElementById("revisit-due-list");
-        if (!list) return;
         var due = cards
           .map(function (card) {
             var s = symbol(card);
@@ -4145,6 +4143,8 @@
           })
           .filter(function (row) { return row.revisit && row.revisit <= reportDate; })
           .sort(function (a, b) { return a.revisit.localeCompare(b.revisit) || a.symbol.localeCompare(b.symbol); });
+        syncRevisitHero(due);
+        if (!list) return;
         if (!due.length) {
           list.innerHTML = "<li><span class=\"muted\">No revisit dates due today.</span><span></span></li>";
           return;
@@ -4152,6 +4152,24 @@
         list.innerHTML = due.slice(0, 10).map(function (row) {
           return "<li><a href=\"#" + row.card.id + "\">" + escapeHtml(row.symbol) + "</a><span>" + escapeHtml(row.revisit) + "</span></li>";
         }).join("");
+      }
+
+      function syncRevisitHero(due) {
+        var hero = document.getElementById("hero");
+        if (!hero) return;
+        var existing = hero.querySelector("[data-local-revisit-hero]");
+        if (!due.length) {
+          if (existing) existing.remove();
+          return;
+        }
+        var symbols = due.slice(0, 5).map(function (row) { return row.symbol; }).join(", ");
+        var subtitle = due.length + " ticker" + (due.length === 1 ? "" : "s");
+        var markup = "<a class=\"hero-card imminent hero-kind-revisit\" data-local-revisit-hero=\"1\" href=\"#research-queue\">" +
+          "<span class=\"hero-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><line x1=\"12\" y1=\"7\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"16\" x2=\"12.01\" y2=\"16\"/></svg></span>" +
+          "<div class=\"hero-body\"><span class=\"hero-label\">Revisit due</span><span class=\"hero-headline\">" + escapeHtml(symbols) + "</span><span class=\"hero-sub\">" + escapeHtml(subtitle) + "</span></div>" +
+          "</a>";
+        if (existing) existing.outerHTML = markup;
+        else hero.insertAdjacentHTML("afterbegin", markup);
       }
 
       function paintTag(select, badge) {

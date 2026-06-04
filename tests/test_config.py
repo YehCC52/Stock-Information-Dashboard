@@ -79,6 +79,29 @@ tickers:
     assert config.settings.macro.manual_events[0].event_datetime.isoformat() == "2026-05-12T20:30:00+08:00"
 
 
+def test_load_config_reads_research_defaults(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: nvda
+    company_name: NVIDIA Corporation
+    research:
+      thesis_state: active
+      thesis_trigger: execution
+      thesis_text: AI demand remains the core thesis.
+      revisit_date: "2026-06-04"
+""",
+    )
+
+    config = load_config(config_path)
+
+    assert config.tickers[0].research.thesis_state == "active"
+    assert config.tickers[0].research.thesis_trigger == "execution"
+    assert config.tickers[0].research.thesis_text == "AI demand remains the core thesis."
+    assert config.tickers[0].research.revisit_date.isoformat() == "2026-06-04"
+
+
 def test_load_config_rejects_invalid_timezone(tmp_path: Path) -> None:
     config_path = _write(
         tmp_path / "watchlist.yaml",
