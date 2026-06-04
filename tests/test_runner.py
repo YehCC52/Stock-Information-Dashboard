@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PositionConfig, PremarketSnapshot, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
+from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PositionConfig, PremarketSnapshot, ResearchDefaults, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
 from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, run_daily
 from stock_daily_research.storage import init_db, save_report
 
@@ -59,19 +59,42 @@ def test_apply_plan_defaults_seeds_from_yaml() -> None:
     assert merged["NVDA"].bear_case == ""
 
 
+def test_apply_plan_defaults_seeds_research_defaults_from_yaml() -> None:
+    tickers = [
+        TickerConfig(
+            symbol="NVDA",
+            company_name="NVIDIA Corporation",
+            research=ResearchDefaults(
+                thesis_state="active",
+                thesis_trigger="execution",
+                thesis_text="AI data-center execution.",
+                revisit_date=date(2026, 6, 4),
+            ),
+        )
+    ]
+    merged = _apply_plan_defaults({}, tickers)
+    assert merged["NVDA"].thesis_state == "active"
+    assert merged["NVDA"].thesis_trigger == "execution"
+    assert merged["NVDA"].thesis_text == "AI data-center execution."
+    assert merged["NVDA"].revisit_date == date(2026, 6, 4)
+
+
 def test_apply_plan_defaults_db_overrides_yaml() -> None:
     tickers = [
         TickerConfig(
             symbol="NVDA",
             company_name="NVIDIA Corporation",
             plan=InvestmentPlan(bull_case="YAML bull", bear_case="YAML bear"),
+            research=ResearchDefaults(thesis_state="active", thesis_trigger="execution"),
         )
     ]
-    states = {"NVDA": TickerResearchState(ticker="NVDA", bull_case="DB bull")}
+    states = {"NVDA": TickerResearchState(ticker="NVDA", bull_case="DB bull", thesis_state="weakening")}
     merged = _apply_plan_defaults(states, tickers)
     # Non-empty DB field wins; empty DB field falls back to YAML.
     assert merged["NVDA"].bull_case == "DB bull"
     assert merged["NVDA"].bear_case == "YAML bear"
+    assert merged["NVDA"].thesis_state == "weakening"
+    assert merged["NVDA"].thesis_trigger == "execution"
 
 
 def test_apply_plan_defaults_ignores_empty_plan() -> None:

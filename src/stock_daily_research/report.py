@@ -2684,6 +2684,11 @@ def rule_alerts(report: DailyReport) -> list[dict[str, object]]:
         if rsi is not None and rsi <= 30 and earnings_soon_flag:
             add("oversold into earnings", f"RSI 14 {rsi:.0f}; review whether weakness is technical or thesis-related.", signal_rank=2)
 
+        stop_alert = _stop_loss_alert(tr)
+        if stop_alert is not None:
+            detail, alert_tone, alert_rank = stop_alert
+            add("stop-loss alert", detail, signal_tone=alert_tone, signal_rank=alert_rank)
+
         if tr.warnings:
             add("data warnings", f"{len(tr.warnings)} data warning(s).", signal_rank=1)
 
@@ -2710,6 +2715,24 @@ def _overbought_detail(item: TickerReport, rsi: float, conclusion: str) -> str:
     if from_high is not None:
         detail += f", {format_pct(from_high)} from 52W high"
     return f"{detail}; {conclusion}."
+
+
+def _stop_loss_alert(item: TickerReport) -> tuple[str, str, int] | None:
+    pos = item.ticker.position
+    if pos.status != "holding" or pos.stop_loss is None or pos.stop_loss <= 0:
+        return None
+    last = _as_float(item.valuation.metrics.get("last_close")) if item.valuation else None
+    if last is None:
+        return None
+    distance_pct = (last - pos.stop_loss) / pos.stop_loss * 100.0
+    if distance_pct > 5.0:
+        return None
+    tone = "danger" if distance_pct <= 2.0 else "warn"
+    rank = 4 if tone == "danger" else 3
+    detail = f"Last ${last:.2f} is {format_pct(distance_pct)} from stop ${pos.stop_loss:.2f}."
+    if pos.portfolio_weight is not None:
+        detail += f" {format_pct(pos.portfolio_weight, sign=False)} weight."
+    return detail, tone, rank
 
 
 def topic_tags(item: TickerReport) -> list[str]:

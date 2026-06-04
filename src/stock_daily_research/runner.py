@@ -209,21 +209,30 @@ def _apply_plan_defaults(
     research_states: dict[str, TickerResearchState],
     tickers: list[TickerConfig],
 ) -> dict[str, TickerResearchState]:
-    """Fill plan fields from YAML defaults; a non-empty DB value always wins.
+    """Fill research fields from YAML defaults; a non-empty DB value always wins.
 
-    YAML `plan:` is the baseline playbook; the DB row (edited in the UI and
-    round-tripped via export/import) overrides it field-by-field. An empty DB
-    field falls back to YAML so a freshly-seeded ticker shows its plan.
+    YAML `research:` and `plan:` are the baseline review state/playbook; the DB
+    row (edited in the UI and round-tripped via export/import) overrides it
+    field-by-field. An empty DB field falls back to YAML so a freshly-seeded
+    ticker shows its thesis and plan.
     """
     merged = dict(research_states)
     for ticker in tickers:
         plan = ticker.plan
-        if plan.is_empty:
+        research = ticker.research
+        if plan.is_empty and research.is_empty:
             continue
         symbol = ticker.symbol
         state = merged.get(symbol) or TickerResearchState(ticker=symbol)
         merged[symbol] = replace(
             state,
+            tag=state.tag or research.tag,
+            thesis_state=state.thesis_state or research.thesis_state,
+            thesis_trigger=state.thesis_trigger or research.thesis_trigger,
+            thesis_text=state.thesis_text or research.thesis_text,
+            note=state.note or research.note,
+            revisit_date=state.revisit_date or research.revisit_date,
+            review_status=state.review_status if state.review_status != "not-reviewed" else (research.review_status or state.review_status),
             bull_case=state.bull_case or plan.bull_case,
             bear_case=state.bear_case or plan.bear_case,
             entry_plan=state.entry_plan or plan.entry_plan,

@@ -56,6 +56,32 @@ class InvestmentPlan:
 
 
 @dataclass(frozen=True)
+class ResearchDefaults:
+    """YAML-backed starting point for review/thesis fields."""
+    thesis_state: str = ""
+    thesis_trigger: str = ""
+    thesis_text: str = ""
+    note: str = ""
+    tag: str = ""
+    review_status: str = ""
+    revisit_date: date | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        return not any(
+            (
+                self.thesis_state,
+                self.thesis_trigger,
+                self.thesis_text,
+                self.note,
+                self.tag,
+                self.review_status,
+                self.revisit_date,
+            )
+        )
+
+
+@dataclass(frozen=True)
 class TickerConfig:
     symbol: str
     company_name: str
@@ -65,6 +91,7 @@ class TickerConfig:
     trusted_x_accounts: list[TrustedXAccount] = field(default_factory=list)
     position: PositionConfig = field(default_factory=PositionConfig)
     plan: InvestmentPlan = field(default_factory=InvestmentPlan)
+    research: ResearchDefaults = field(default_factory=ResearchDefaults)
 
     @property
     def search_terms(self) -> list[str]:
