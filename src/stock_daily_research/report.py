@@ -77,6 +77,9 @@ def _build_environment(template_dir: str | Path | None = None, *, autoescape_htm
     env.filters["metric_value"] = format_metric_value
     env.filters["date_or_na"] = date_or_na
     env.filters["twn_timestamp"] = format_twn_timestamp
+    env.filters["twn_datetime"] = format_twn_datetime
+    env.filters["utc_timestamp"] = format_utc_timestamp
+    env.filters["et_timestamp"] = format_et_timestamp
     return env
 
 
@@ -125,7 +128,11 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["source_reliability"] = source_reliability
     env.filters["post_earnings_defaults"] = lambda item: post_earnings_defaults(report, item)
     env.filters["pre_earnings_card"] = lambda item: pre_earnings_card(report, item)
-    env.filters["data_quality"] = lambda item: data_quality_confidence(item, report.report_date)
+    env.filters["data_quality"] = lambda item: data_quality_confidence(
+        item,
+        report.report_date,
+        premarket_move=premarket_move_for(report, item.ticker.symbol),
+    )
     env.filters["format_pct"] = format_pct
     env.filters["change_class"] = change_class
     env.filters["format_ratio"] = format_ratio
@@ -148,6 +155,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         post_earnings_items=post_earnings_items(report),
         macro_risk=macro_risk_meter(report.market_context),
         todays_focus=todays_focus(report),
+        capital_allocation=capital_allocation_queue(report),
         book_today=book_today_summary(report),
         book_impact=book_impact_ranking(report),
         sector_leadership=sector_leadership(report),
@@ -1061,7 +1069,11 @@ def data_quality_overview(report: DailyReport) -> dict[str, object]:
     rows: list[dict[str, object]] = []
     scores: list[int] = []
     for item in report.ticker_reports:
-        result = data_quality_confidence(item, report.report_date)
+        result = data_quality_confidence(
+            item,
+            report.report_date,
+            premarket_move=premarket_move_for(report, item.ticker.symbol),
+        )
         score = int(result["score"])
         scores.append(score)
         if score < 80:
@@ -1101,6 +1113,15 @@ def premarket_change_pct(report: DailyReport, symbol: str) -> float | None:
     for move in report.premarket.watchlist_movers:
         if move.symbol == symbol:
             return move.change_pct
+    return None
+
+
+def premarket_move_for(report: DailyReport, symbol: str) -> object | None:
+    if not report.premarket:
+        return None
+    for move in report.premarket.watchlist_movers:
+        if move.symbol == symbol:
+            return move
     return None
 
 
@@ -1397,10 +1418,11 @@ def todays_catalysts(report: DailyReport) -> dict[str, list[object]]:
 
 
 def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
-    """Condense the morning dashboard into direct action buckets."""
+    """Condense the morning dashboard into direct trading-status buckets."""
     review_candidates: list[tuple[float, TickerReport, list[str]]] = []
-    do_not_chase: list[tuple[float, TickerReport, list[str]]] = []
-    pullback: list[tuple[float, TickerReport, list[str]]] = []
+    no_action_before_event: list[tuple[float, TickerReport, list[str]]] = []
+    pullback_setup: list[tuple[float, TickerReport, list[str]]] = []
+    avoid_chase: list[tuple[float, TickerReport, list[str]]] = []
 
     alert_ranks = {str(alert["symbol"]): float(alert.get("rank", 0)) for alert in rule_alerts(report)}
     gaps = {m.symbol: abs(m.change_pct or 0.0) for m in report.premarket.gap_movers} if report.premarket else {}
@@ -1413,6 +1435,7 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
         score = alert_ranks.get(symbol, 0.0)
 
         delta = earnings_delta(item, report.report_date)
+        event_blocked = delta is not None and 0 <= delta <= 1
         if delta == 0:
             reasons.append("earnings today")
             score += 8
@@ -1484,6 +1507,18 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
         if score > 0:
             review_candidates.append((score, item, reasons))
 
+        if event_blocked:
+            event_reasons = [
+                "event risk",
+                "no action before earnings review" if delta == 0 else "no action before event review",
+            ]
+            if pmove is not None and abs(pmove) >= 2.0:
+                event_reasons.append(f"premarket {format_pct(pmove)}")
+            if top_count:
+                event_reasons.append(f"{top_count} top headline{'s' if top_count != 1 else ''}")
+            no_action_before_event.append((score + abs(pmove or 0), item, event_reasons))
+            continue
+
         overextended = valuation_risk_label(item) in ("High", "Extreme")
         rsi = rsi_value(item)
         q = quality_of_move(item)
@@ -1498,7 +1533,7 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
             if q:
                 chase_reasons.extend(q[:1])
             if len(chase_reasons) >= 2:
-                do_not_chase.append((len(chase_reasons) + abs(pmove or 0), item, chase_reasons))
+                avoid_chase.append((len(chase_reasons) + abs(pmove or 0), item, chase_reasons))
 
         from_high = from_52w_high_pct(item)
         if from_high is not None and -12.0 <= from_high <= -3.0:
@@ -1507,9 +1542,9 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
                 pb_reasons.append(f"{len(item.articles)} headline{'s' if len(item.articles) != 1 else ''}")
             if valuation_risk_label(item) in ("None", "Elevated"):
                 pb_reasons.append("less stretched")
-            pullback.append((100 + from_high + len(item.articles), item, pb_reasons))
+            pullback_setup.append((100 + from_high + len(item.articles), item, pb_reasons))
         elif symbol in gaps and (pmove := premarket_change_pct(report, symbol)) is not None and pmove < -2.0:
-            pullback.append((abs(pmove), item, [f"premarket pullback {format_pct(pmove)}"]))
+            pullback_setup.append((abs(pmove), item, [f"premarket pullback {format_pct(pmove)}"]))
 
     def pack(rows: list[tuple[float, TickerReport, list[str]]]) -> list[dict[str, object]]:
         return [
@@ -1519,9 +1554,73 @@ def todays_focus(report: DailyReport) -> dict[str, list[dict[str, object]]]:
 
     return {
         "review_first": pack(review_candidates),
-        "do_not_chase": pack(do_not_chase),
-        "watch_pullback": pack(pullback),
+        "no_action_before_event": pack(no_action_before_event),
+        "pullback_setup": pack(pullback_setup),
+        "avoid_chase": pack(avoid_chase),
+        "do_not_chase": pack(avoid_chase),
+        "watch_pullback": pack(pullback_setup),
     }
+
+
+def capital_allocation_queue(report: DailyReport) -> dict[str, list[dict[str, object]]]:
+    """Rank tickers by deployable-capital action buckets."""
+    benchmarks = report.market_context.benchmark_returns if report.market_context else {}
+    buckets: dict[str, list[dict[str, object]]] = {grade: [] for grade in ("A", "B", "C", "D", "E")}
+
+    for item in report.ticker_reports:
+        symbol = item.ticker.symbol
+        state = research_state_for(report, symbol)
+        score = right_side_score(item, benchmarks) or {}
+        score_value = int(score.get("score", 0) or 0)
+        status = str(score.get("status", "Unscored"))
+        eps_revision = _metric_float(item, "fy1_eps_revision_30d")
+        rsi = rsi_value(item)
+        delta = earnings_delta(item, report.report_date)
+        thesis = state.thesis_state or "unmarked"
+        reasons: list[str] = []
+
+        if thesis != "unmarked":
+            reasons.append(f"thesis {thesis}")
+        if score_value:
+            reasons.append(f"score {score_value}")
+        if eps_revision is not None:
+            reasons.append(f"EPS rev {format_pct(eps_revision)}")
+        if rsi is not None:
+            reasons.append(f"RSI {rsi:.0f}")
+        if delta is not None and 0 <= delta <= 1:
+            reasons.append("event window")
+
+        overhot = (rsi is not None and rsi >= 70) or status == "Extended, do not chase" or _is_overextended(item)
+        eps_up = eps_revision is not None and eps_revision > 0.5
+        eps_down = eps_revision is not None and eps_revision < -0.5
+
+        if thesis in {"weakening", "broken"} or eps_down:
+            grade, action = "E", "Do not add / consider trim"
+        elif delta is not None and 0 <= delta <= 1:
+            grade, action = "C", "Review only before event"
+        elif overhot:
+            grade, action = "D", "No chase"
+        elif thesis == "active" and score_value > 70 and eps_up:
+            grade, action = "A", "Priority add candidate"
+        elif thesis == "active" and score_value >= 60:
+            grade, action = "B", "Wait for pullback"
+        else:
+            grade, action = "C", "Watch / no fresh capital"
+
+        buckets[grade].append(
+            {
+                "grade": grade,
+                "action": action,
+                "item": item,
+                "score": score_value,
+                "status": status,
+                "reasons": reasons[:5],
+            }
+        )
+
+    for rows in buckets.values():
+        rows.sort(key=lambda row: (-int(row["score"]), row["item"].ticker.symbol))
+    return buckets
 
 
 def book_impact_ranking(report: DailyReport) -> list[dict[str, object]]:
@@ -1724,7 +1823,34 @@ def format_twn_timestamp(value: object) -> str:
         return "N/A"
     if value.tzinfo is not None:
         value = value.astimezone(ZoneInfo("Asia/Taipei"))
-    return f"{value.strftime('%Y-%m-%d %H:%M')} TWN"
+    return f"{value.strftime('%Y-%m-%d %H:%M')} TWN / UTC+8"
+
+
+def format_twn_datetime(value: object) -> str:
+    """Format as Taiwan Time with an explicit UTC+8 label."""
+    if not isinstance(value, datetime):
+        return "N/A"
+    if value.tzinfo is not None:
+        value = value.astimezone(ZoneInfo("Asia/Taipei"))
+    return f"{value.strftime('%Y-%m-%d %H:%M')} Taiwan Time (UTC+8)"
+
+
+def format_utc_timestamp(value: object) -> str:
+    """Format as an unambiguous UTC timestamp."""
+    if not isinstance(value, datetime):
+        return "N/A"
+    if value.tzinfo is not None:
+        value = value.astimezone(ZoneInfo("UTC"))
+    return f"{value.strftime('%Y-%m-%d %H:%M')} UTC"
+
+
+def format_et_timestamp(value: object) -> str:
+    """Format as US Eastern time with ET rather than ambiguous zone names."""
+    if not isinstance(value, datetime):
+        return "N/A"
+    if value.tzinfo is not None:
+        value = value.astimezone(ZoneInfo("America/New_York"))
+    return f"{value.strftime('%Y-%m-%d %H:%M')} ET"
 
 
 def format_ratio(value: object) -> str:
@@ -2450,7 +2576,7 @@ def hero_items(report: DailyReport) -> list[dict[str, object]]:
                 "tone": "imminent" if delta == 0 else "soon",
                 "label": f"Macro {when}",
                 "headline": ev.name,
-                "subtitle": ev.event_datetime.strftime("%H:%M %Z"),
+                "subtitle": f"{format_twn_timestamp(ev.event_datetime)} / {format_et_timestamp(ev.event_datetime)}",
                 "anchor": "#macro",
             })
             break

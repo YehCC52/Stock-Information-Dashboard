@@ -1,6 +1,6 @@
 # Daily Stock Research - {{ report.report_date.isoformat() }}
 
-Generated at: {{ report.generated_at.isoformat() }}
+Generated: {{ report.generated_at|twn_datetime }}
 
 {% if report.warnings %}
 ## Global Warnings
@@ -12,6 +12,8 @@ Generated at: {{ report.generated_at.isoformat() }}
 
 {% if report.premarket %}
 ## Overnight / Premarket
+
+Market data timestamp: {{ report.premarket.retrieved_at|utc_timestamp }}
 
 {% if report.premarket.benchmarks %}
 ### Benchmarks
@@ -54,7 +56,7 @@ No watchlist earnings scheduled for today.
 
 {% if report.economic_events %}
 {% for event in report.economic_events %}
-- **{{ event.name }}** ({{ event.category }}) - {{ event.event_datetime.strftime("%Y-%m-%d %H:%M %Z") }}
+- **{{ event.name }}** ({{ event.category }}) - {{ event.event_datetime|twn_timestamp }} / {{ event.event_datetime|et_timestamp }}
   - Source: {{ event.source }}
   - {{ event.source_url }}
 {% if event.notes %}  - {{ event.notes }}

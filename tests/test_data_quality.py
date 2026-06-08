@@ -3,13 +3,17 @@ from datetime import date, datetime, timezone
 from stock_daily_research.data_quality import (
     confidence,
     detect_market_cap_drift,
+    detect_market_cap_price_mismatch,
     detect_news_overflow,
     detect_pe_anomaly,
+    detect_google_redirect_source,
+    detect_premarket_label_inconsistency,
     detect_price_anomaly,
     detect_stale_data,
 )
 from stock_daily_research.models import (
     NewsArticle,
+    PremarketMove,
     TickerConfig,
     TickerReport,
     ValuationSnapshot,
@@ -75,7 +79,7 @@ def test_detect_news_overflow() -> None:
 def test_confidence_high_when_clean() -> None:
     item = _item(
         {"last_close": 100.0, "previous_close": 99.0, "market_cap": 1e12, "forward_pe": 30.0},
-        articles=4,
+        articles=1,
     )
     result = confidence(item, date(2026, 4, 28))
     assert result["score"] == 100
@@ -103,5 +107,45 @@ def test_confidence_medium_band() -> None:
         articles=20,                                                         # overflow → -20
     )
     result = confidence(item, date(2026, 4, 28))
-    assert result["score"] == 70
+    assert result["score"] == 65
     assert result["tag"] == "medium"
+
+
+def test_confidence_deducts_lighter_source_quality_flags() -> None:
+    item = _item(
+        {
+            "last_close": 100.0,
+            "previous_close": 99.5,
+            "market_cap": 130.0,
+            "previous_market_cap": 100.0,
+            "forward_pe": -5.0,
+        },
+        articles=1,
+    )
+    google_article = NewsArticle(
+        ticker="NVDA",
+        title="Nvidia headline",
+        source="Google News",
+        domain="google.com",
+        published_at=None,
+        url="https://news.google.com/rss/articles/x",
+        summary="",
+        event_type="general",
+        importance_score=0.5,
+    )
+    item = TickerReport(
+        ticker=item.ticker,
+        articles=[google_article],
+        x_signals=[],
+        valuation=item.valuation,
+        earnings=item.earnings,
+        warnings=[],
+    )
+    move = PremarketMove("NVDA", "NVIDIA", 100.0, 99.5, 0.5, "after-hours quote")
+
+    result = confidence(item, date(2026, 4, 28), premarket_move=move)
+
+    assert result["score"] == 65
+    assert detect_market_cap_price_mismatch(item.valuation.metrics) is not None
+    assert detect_google_redirect_source(item) is not None
+    assert detect_premarket_label_inconsistency(move) is not None

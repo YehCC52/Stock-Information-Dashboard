@@ -12,10 +12,11 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
-from .models import TickerReport, ValuationSnapshot
+from .models import PremarketMove, TickerReport, ValuationSnapshot
 
 PRICE_ANOMALY_PCT = 20.0
 MARKET_CAP_DRIFT_PCT = 10.0
+MARKET_CAP_PRICE_SYNC_PCT = 2.0
 PE_CEILING = 1000.0
 STALE_HOURS = 36
 NEWS_OVERFLOW_COUNT = 12
@@ -54,6 +55,40 @@ def detect_market_cap_drift(
     drift = abs(today - prior) / prior * 100.0
     if drift > MARKET_CAP_DRIFT_PCT:
         return f"Market cap shifted {drift:.0f}% day-over-day — verify share count"
+    return None
+
+
+def detect_market_cap_price_mismatch(
+    today_metrics: dict[str, Any], prior_metrics: dict[str, Any] | None = None
+) -> str | None:
+    """Flag a market-cap jump that is not confirmed by price movement."""
+    prior_metrics = prior_metrics or {}
+    today_mc = _as_float(today_metrics.get("market_cap"))
+    prior_mc = _as_float(
+        prior_metrics.get("market_cap")
+        or today_metrics.get("previous_market_cap")
+        or today_metrics.get("market_cap_previous")
+    )
+    if today_mc is None or prior_mc is None or prior_mc == 0:
+        return None
+    mc_drift = abs(today_mc - prior_mc) / prior_mc * 100.0
+    if mc_drift <= MARKET_CAP_DRIFT_PCT:
+        return None
+
+    last = _as_float(today_metrics.get("last_close"))
+    prior_price = _as_float(
+        prior_metrics.get("last_close")
+        or today_metrics.get("previous_close")
+        or today_metrics.get("previous_last_close")
+    )
+    if last is None or prior_price is None or prior_price == 0:
+        return None
+    price_move = abs(last - prior_price) / prior_price * 100.0
+    if price_move <= MARKET_CAP_PRICE_SYNC_PCT:
+        return (
+            f"Market cap shifted {mc_drift:.0f}% while price moved {price_move:.1f}% — "
+            "verify share count/feed"
+        )
     return None
 
 
@@ -99,6 +134,52 @@ def detect_news_overflow(item: TickerReport) -> str | None:
     return None
 
 
+def detect_earnings_source_risk(item: TickerReport) -> str | None:
+    """Flag earnings dates that only come from yfinance-style feeds."""
+    if not item.earnings:
+        return None
+    source = (item.earnings.source or "").lower()
+    if "yfinance" in source or "yahoo" in source:
+        return "Earnings date from yfinance only — verify with company IR or Nasdaq"
+    return None
+
+
+def detect_premarket_label_inconsistency(move: PremarketMove | None) -> str | None:
+    """Flag premarket rows whose source/note looks like after-hours data."""
+    if move is None:
+        return None
+    text = f"{move.source} {move.note}".lower()
+    if any(term in text for term in ("post-market", "post market", "after-hours", "after hours", "after_market")):
+        return "Premarket row carries post-market/after-hours label — verify session tag"
+    return None
+
+
+def detect_google_redirect_source(item: TickerReport) -> str | None:
+    """Flag unresolved Google News redirect URLs instead of original sources."""
+    for article in item.articles:
+        domain = (article.domain or "").lower()
+        url = (article.url or "").lower()
+        if "google." in domain or "news.google." in url:
+            return "Google News RSS redirect unresolved — verify original source"
+    return None
+
+
+def detect_duplicate_event_articles(item: TickerReport) -> str | None:
+    """Flag repeated same-event headlines inside one ticker."""
+    seen: set[str] = set()
+    duplicates = 0
+    for article in item.articles:
+        key = " ".join((article.title or "").lower().split())
+        if not key:
+            continue
+        if key in seen:
+            duplicates += 1
+        seen.add(key)
+    if duplicates:
+        return f"{duplicates} duplicate headline(s) — check event clustering"
+    return None
+
+
 def _is_fallback_valuation(item: TickerReport) -> bool:
     return any("fallback" in (w or "").lower() for w in item.warnings)
 
@@ -108,6 +189,7 @@ def confidence(
     anchor_date: date,
     *,
     prior_metrics: dict[str, Any] | None = None,
+    premarket_move: PremarketMove | None = None,
 ) -> dict[str, Any]:
     """Aggregate anomaly flags into a 0-100 confidence score + high/med/low tag.
 
@@ -115,27 +197,35 @@ def confidence(
     core fields, and stale data; clamp to [0, 100].
     """
     flags: list[str] = []
-    for detector in (
-        detect_price_anomaly(item),
-        detect_pe_anomaly(item),
-        detect_news_overflow(item),
-    ):
-        if detector:
-            flags.append(detector)
+    penalties: list[int] = []
 
-    if prior_metrics is not None and item.valuation is not None:
-        drift = detect_market_cap_drift(item.valuation.metrics, prior_metrics)
-        if drift:
-            flags.append(drift)
+    def add(flag: str | None, penalty: int) -> None:
+        if flag:
+            flags.append(flag)
+            penalties.append(penalty)
+
+    add(detect_price_anomaly(item), 20)
+    add(detect_pe_anomaly(item), 10)
+    add(detect_news_overflow(item), 20)
+    add(detect_earnings_source_risk(item), 10)
+    add(detect_premarket_label_inconsistency(premarket_move), 10)
+    add(detect_google_redirect_source(item), 5)
+    add(detect_duplicate_event_articles(item), 5)
+
+    if item.valuation is not None:
+        mismatch = detect_market_cap_price_mismatch(item.valuation.metrics, prior_metrics)
+        if mismatch:
+            add(mismatch, 10)
+        elif prior_metrics is not None:
+            add(detect_market_cap_drift(item.valuation.metrics, prior_metrics), 20)
 
     stale = detect_stale_data(item.valuation, anchor_date)
-    if stale:
-        flags.append(stale)
+    add(stale, 20)
 
     score = 100
     if _is_fallback_valuation(item):
         score -= 20
-    score -= 20 * len(flags)
+    score -= sum(penalties)
 
     metrics = item.valuation.metrics if item.valuation else {}
     missing = [
