@@ -23,6 +23,7 @@ from stock_daily_research.models import (
 from stock_daily_research.report import (
     build_summary,
     book_today_summary,
+    capital_allocation_queue,
     card_state,
     days_until,
     earnings_delta,
@@ -70,6 +71,8 @@ def test_render_markdown_report_includes_all_sections() -> None:
     assert "Nvidia revenue beats" in output
     assert "5.26T" in output
     assert "Trailing P/E" in output
+    assert "Generated: 2026-04-28 15:00 Taiwan Time (UTC+8)" in output
+    assert "Market data timestamp: 2026-04-28 11:00 UTC" in output
     assert "global warn" in output
     assert "news flake" in output
 
@@ -104,7 +107,12 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "5.26T" in output
     assert "Position &amp; book" in output
     assert "What Changed Since Last Run" in output
-    assert "2026-04-28 15:00 TWN" in output
+    assert "Generated: 2026-04-28 15:00 Taiwan Time (UTC+8)" in output
+    assert "2026-04-28 15:00 TWN / UTC+8" in output
+    assert "Market data timestamp: 2026-04-28 11:00 UTC" in output
+    assert "Capital Allocation Queue" in output
+    assert "No action before event" in output
+    assert "Avoid chase" in output
     assert "window.claude.complete" in output
 
 
@@ -1237,7 +1245,61 @@ def test_todays_focus_combines_alerts_premarket_and_positions() -> None:
 
     assert focus["review_first"][0]["item"].ticker.symbol == "NVDA"
     assert any("EPS rev" in reason for reason in focus["review_first"][0]["reasons"])
-    assert focus["do_not_chase"][0]["item"].ticker.symbol == "NVDA"
+    assert focus["no_action_before_event"][0]["item"].ticker.symbol == "NVDA"
+    assert any("no action before earnings review" in reason for reason in focus["no_action_before_event"][0]["reasons"])
+    assert focus["avoid_chase"] == []
+
+
+def test_capital_allocation_queue_grades_trade_actions() -> None:
+    today = date(2026, 4, 28)
+
+    def item(symbol: str, metrics: dict[str, float], earnings=None) -> TickerReport:
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=symbol),
+            articles=[],
+            x_signals=[],
+            valuation=ValuationSnapshot(
+                ticker=symbol,
+                as_of_date=today,
+                source="yfinance",
+                metrics=metrics,
+                retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            ),
+            earnings=earnings,
+        )
+
+    earnings = EarningsDate(
+        ticker="EVT", company_name="EVT",
+        earnings_date=today, time_of_day="unknown",
+        fiscal_quarter=None, fiscal_year=None,
+        eps_estimate=None, revenue_estimate=None,
+        source="yfinance",
+        source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[
+            item("ADD", {
+                "last_close": 110.0, "sma_20": 100.0, "sma_60": 95.0, "sma_120": 90.0,
+                "volume_vs_20d": 1.8, "fy1_eps_revision_30d": 3.0, "rsi_14": 60.0,
+                "forward_pe": 30.0, "fifty_two_week_high": 140.0,
+            }),
+            item("EVT", {"last_close": 100.0, "fy1_eps_revision_30d": 2.0, "rsi_14": 55.0}, earnings),
+            item("CUT", {"last_close": 100.0, "fy1_eps_revision_30d": -2.0, "rsi_14": 55.0}),
+        ],
+        research_states={
+            "ADD": TickerResearchState(ticker="ADD", thesis_state="active"),
+            "EVT": TickerResearchState(ticker="EVT", thesis_state="active"),
+            "CUT": TickerResearchState(ticker="CUT", thesis_state="weakening"),
+        },
+    )
+
+    queue = capital_allocation_queue(report)
+
+    assert queue["A"][0]["item"].ticker.symbol == "ADD"
+    assert queue["C"][0]["item"].ticker.symbol == "EVT"
+    assert queue["E"][0]["item"].ticker.symbol == "CUT"
 
 
 def test_sector_leadership_and_premarket_triage() -> None:

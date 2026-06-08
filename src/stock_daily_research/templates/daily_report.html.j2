@@ -1913,7 +1913,7 @@
     <header class="header">
       <div>
         <h1>Daily Stock Research</h1>
-        <div class="muted">{{ report.report_date.isoformat() }} | Generated {{ report.generated_at.strftime("%Y-%m-%d %H:%M %Z") }}</div>
+        <div class="muted">{{ report.report_date.isoformat() }} | Generated: {{ report.generated_at|twn_datetime }}</div>
       </div>
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
@@ -1939,9 +1939,10 @@
     </header>
 
     <nav class="toc" aria-label="Sections">
-      {% if hero %}<a href="#hero">Today</a>{% endif %}
+      <a href="#hero">Today</a>
       <a href="#summary">Summary</a>
       <a href="#todays-focus">Focus</a>
+      <a href="#capital-allocation">Capital</a>
       <a href="#research-queue">Research</a>
       {% if book_today %}<a href="#book-today">My Book</a>{% endif %}
       {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">My Book ({{ portfolio.holdings|length }})</a>{% endif %}
@@ -2051,25 +2052,69 @@
           {% else %}<div class="section-empty">No urgent review queue.</div>{% endif %}
         </div>
         <div class="focus-column chase">
-          <h3><span class="focus-icon">!</span>Do not chase</h3>
-          {% if todays_focus.do_not_chase %}
+          <h3><span class="focus-icon">E</span>No action before event</h3>
+          {% if todays_focus.no_action_before_event %}
           <ul class="focus-list">
-            {% for row in todays_focus.do_not_chase %}
+            {% for row in todays_focus.no_action_before_event %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No obvious chase-risk names.</div>{% endif %}
+          {% else %}<div class="section-empty">No event-window names blocking action.</div>{% endif %}
         </div>
         <div class="focus-column pullback">
-          <h3><span class="focus-icon">P</span>Watch for pullback</h3>
-          {% if todays_focus.watch_pullback %}
+          <h3><span class="focus-icon">P</span>Pullback setup</h3>
+          {% if todays_focus.pullback_setup %}
           <ul class="focus-list">
-            {% for row in todays_focus.watch_pullback %}
+            {% for row in todays_focus.pullback_setup %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">No clean pullback watch.</div>{% endif %}
         </div>
+        <div class="focus-column chase">
+          <h3><span class="focus-icon">!</span>Avoid chase</h3>
+          {% if todays_focus.avoid_chase %}
+          <ul class="focus-list">
+            {% for row in todays_focus.avoid_chase %}
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="section-empty">No obvious chase-risk names.</div>{% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section id="capital-allocation" class="section section-primary">
+      <div class="section-header">
+        <h2>Capital Allocation Queue</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Grade</th>
+              <th>Ticker</th>
+              <th>Action</th>
+              <th class="num">Score</th>
+              <th>Status</th>
+              <th>Reasons</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for grade, rows in capital_allocation.items() %}
+              {% for row in rows[:5] %}
+              <tr>
+                <td><span class="badge">{{ grade }}</span></td>
+                <td class="symbol-cell"><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a></td>
+                <td>{{ row.action }}</td>
+                <td class="num">{{ row.score }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ row.reasons|join(' | ') }}</td>
+              </tr>
+              {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -2189,7 +2234,7 @@
     {% if report.premarket %}
     <section id="premarket" class="section section-primary">
       <div class="section-header">
-        <h2>Overnight / Premarket <span class="count">({{ report.premarket.retrieved_at.strftime("%H:%M UTC") }})</span></h2>
+        <h2>Overnight / Premarket <span class="count">Market data timestamp: {{ report.premarket.retrieved_at|utc_timestamp }}</span></h2>
       </div>
       {% if report.premarket.benchmarks %}
       <div class="morning-grid" aria-label="Premarket benchmarks">
@@ -2283,7 +2328,7 @@
           {% if todays_catalysts.macro %}
           <ul class="catalyst-list">
             {% for event in todays_catalysts.macro %}
-            <li><a href="{{ event.source_url }}" target="_blank" rel="noopener">{{ event.name }}</a><span>{{ event.event_datetime.strftime("%H:%M %Z") }}</span></li>
+            <li><a href="{{ event.source_url }}" target="_blank" rel="noopener">{{ event.name }}</a><span>{{ event.event_datetime|twn_timestamp }} / {{ event.event_datetime|et_timestamp }}</span></li>
             {% endfor %}
           </ul>
           {% else %}<span class="sub">No tracked macro event today.</span>{% endif %}
@@ -2688,7 +2733,7 @@
         {% for event in report.economic_events %}
         <a class="macro-card {{ event.category }}" href="{{ event.source_url }}" target="_blank" rel="noopener">
           <span class="name">{{ event.name }}</span>
-          <span class="time">{{ event.event_datetime.strftime("%Y-%m-%d %H:%M %Z") }}</span>
+          <span class="time">{{ event.event_datetime|twn_timestamp }}</span>
           <span class="note">{{ event.source }}{% if event.source_time_label %} / {{ event.source_time_label }}{% endif %}</span>
           {% if event.notes %}<span class="note long" title="{{ event.notes }}">{{ event.notes }}</span>{% endif %}
         </a>
