@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from stock_daily_research.models import (
@@ -18,6 +18,7 @@ from stock_daily_research.storage import (
     export_research_state_payload,
     import_research_state_payload,
     init_db,
+    load_fresh_valuation_snapshot,
     load_latest_valuation_snapshot,
     load_ticker_history,
     load_ticker_research_states,
@@ -560,3 +561,76 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
     assert history[0].daily_change_pct == 10.0
     assert history[0].earnings_days == 23
     assert history[1].thesis_state == "building"
+
+
+def _insert_valuation_row(conn, ticker: str, retrieved_at: datetime, last_close: float | None = 150.0) -> None:
+    as_of = retrieved_at.date().isoformat()
+    ts = retrieved_at.isoformat()
+    rows = [
+        (ticker, as_of, "yfinance", ts, "last_close", last_close),
+        (ticker, as_of, "yfinance", ts, "market_cap", 1_000_000.0),
+    ]
+    conn.executemany(
+        "INSERT OR IGNORE INTO valuation_snapshots (ticker, as_of_date, source, retrieved_at, metric_name, metric_value) VALUES (?,?,?,?,?,?)",
+        rows,
+    )
+    conn.commit()
+
+
+def test_load_fresh_valuation_snapshot_returns_fresh(tmp_path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    now = datetime.now(timezone.utc)
+    fresh_at = now.replace(microsecond=0) - timedelta(hours=1)
+    with init_db(db_path) as conn:
+        _insert_valuation_row(conn, "NVDA", fresh_at)
+        result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is not None
+    assert result.ticker == "NVDA"
+    assert result.metrics["last_close"] == 150.0
+
+
+def test_load_fresh_valuation_snapshot_returns_none_for_stale(tmp_path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    now = datetime.now(timezone.utc)
+    stale_at = now.replace(microsecond=0) - timedelta(hours=5)
+    with init_db(db_path) as conn:
+        _insert_valuation_row(conn, "NVDA", stale_at)
+        result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is None
+
+
+def test_load_fresh_valuation_snapshot_returns_none_when_empty(tmp_path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    with init_db(db_path) as conn:
+        result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is None
+
+
+def test_load_fresh_valuation_snapshot_skips_all_null_metrics(tmp_path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    ts = now.isoformat()
+    as_of = now.date().isoformat()
+    with init_db(db_path) as conn:
+        conn.execute(
+            "INSERT INTO valuation_snapshots (ticker, as_of_date, source, retrieved_at, metric_name, metric_value) VALUES (?,?,?,?,?,?)",
+            ("NVDA", as_of, "yfinance", ts, "market_cap", None),
+        )
+        conn.commit()
+        result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is None
+
+
+def test_load_fresh_valuation_snapshot_requires_last_close(tmp_path) -> None:
+    db_path = tmp_path / "test.sqlite3"
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    ts = now.isoformat()
+    as_of = now.date().isoformat()
+    with init_db(db_path) as conn:
+        conn.execute(
+            "INSERT INTO valuation_snapshots (ticker, as_of_date, source, retrieved_at, metric_name, metric_value) VALUES (?,?,?,?,?,?)",
+            ("NVDA", as_of, "yfinance", ts, "market_cap", 1_000_000.0),
+        )
+        conn.commit()
+        result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is None

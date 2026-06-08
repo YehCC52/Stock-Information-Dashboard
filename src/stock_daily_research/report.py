@@ -140,6 +140,12 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["rsi_label"] = rsi_label
     env.filters["research_state"] = lambda item: research_state_for(report, item.ticker.symbol)
     env.filters["history_points"] = lambda item: report.ticker_history.get(item.ticker.symbol, [])
+    env.globals["ticker_delta"] = lambda symbol: ticker_delta(report, symbol)
+    env.globals["ticker_sparkline"] = lambda symbol: ticker_sparkline(report, symbol)
+    plan_triggers_by_symbol: dict[str, list[dict[str, object]]] = {}
+    for trigger in plan_triggers(report):
+        plan_triggers_by_symbol.setdefault(str(trigger["ticker"]), []).append(trigger)
+    env.globals["plan_triggers_for"] = lambda symbol: plan_triggers_by_symbol.get(symbol, [])
     template = env.get_template("daily_report.html.j2")
     return template.render(
         report=report,
@@ -151,6 +157,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         important_news=important_news(report),
         news_clusters=event_clusters(report),
         hero=morning_briefing_cards(report),
+        morning_actions=morning_actions(report),
         todays_catalysts=todays_catalysts(report),
         post_earnings_items=post_earnings_items(report),
         macro_risk=macro_risk_meter(report.market_context),
@@ -1150,6 +1157,50 @@ def _window_history_point(report: DailyReport, symbol: str, days: int) -> Ticker
         if point.report_date <= cutoff:
             return point
     return points[-1] if len(points) > 1 else None
+
+
+_VALUATION_RISK_ORDER: dict[str, int] = {"None": 0, "Elevated": 1, "High": 2, "Extreme": 3}
+
+
+def _valuation_risk_direction(prev: str | None, curr: str | None) -> str:
+    po = _VALUATION_RISK_ORDER.get(prev or "", -1)
+    co = _VALUATION_RISK_ORDER.get(curr or "", -1)
+    if po < 0 or co < 0 or po == co:
+        return "same"
+    return "up" if co > po else "down"
+
+
+@dataclass(frozen=True)
+class TickerDelta:
+    attention_score_delta: float | None
+    rsi_delta: float | None
+    news_count_delta: int | None
+    valuation_risk_direction: str  # "up" | "down" | "same"
+
+
+def ticker_delta(report: DailyReport, symbol: str) -> TickerDelta | None:
+    curr = _current_history_point(report, symbol)
+    prev = _previous_history_point(report, symbol)
+    if curr is None or prev is None:
+        return None
+    return TickerDelta(
+        attention_score_delta=(
+            round(curr.attention_score - prev.attention_score, 1)
+            if curr.attention_score is not None and prev.attention_score is not None
+            else None
+        ),
+        rsi_delta=(
+            round(curr.rsi - prev.rsi, 1)
+            if curr.rsi is not None and prev.rsi is not None
+            else None
+        ),
+        news_count_delta=(
+            curr.news_count - prev.news_count
+            if curr.news_count is not None and prev.news_count is not None
+            else None
+        ),
+        valuation_risk_direction=_valuation_risk_direction(prev.valuation_risk, curr.valuation_risk),
+    )
 
 
 def _checklist_review_status(checklist: list[str]) -> str:
@@ -2859,6 +2910,211 @@ def _stop_loss_alert(item: TickerReport) -> tuple[str, str, int] | None:
     if pos.portfolio_weight is not None:
         detail += f" {format_pct(pos.portfolio_weight, sign=False)} weight."
     return detail, tone, rank
+
+
+_PRICE_TOKEN_RE = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
+
+_PLAN_KIND_LABELS = {
+    "entry": "Entry zone",
+    "add": "Add zone",
+    "reduce": "Reduce zone",
+    "stop": "Plan stop",
+}
+
+
+def _parse_price_levels(text: str) -> list[float]:
+    """Pull positive numeric price tokens out of free-text plan fields."""
+    if not text:
+        return []
+    levels: list[float] = []
+    for token in _PRICE_TOKEN_RE.findall(text):
+        try:
+            value = float(token.replace(",", ""))
+        except ValueError:
+            continue
+        if value > 0:
+            levels.append(value)
+    return sorted(set(levels))
+
+
+def _plausible_levels(levels: list[float], last_close: float | None) -> list[float]:
+    """Drop tokens that are implausible as a price near the current close.
+
+    Guards against stray numbers in plan text (e.g. "hold 30 days") by keeping
+    only values within 0.3x–3x of the last close.
+    """
+    if last_close is None or last_close <= 0:
+        return levels
+    lo, hi = last_close * 0.3, last_close * 3.0
+    return [level for level in levels if lo <= level <= hi]
+
+
+def _evaluate_zone(direction: str, last: float, lo: float, hi: float) -> tuple[str, str] | None:
+    """Return (status, tone) if the price triggers the zone, else None."""
+    if direction == "buy":
+        if last <= hi:
+            return ("in_zone" if last >= lo else "below_zone"), "good"
+        return None
+    if direction == "sell":
+        if last >= lo:
+            return ("in_zone" if last <= hi else "above_zone"), "info"
+        return None
+    if direction == "stop":
+        if last <= hi:
+            return "breached", "danger"
+        return None
+    return None
+
+
+def plan_triggers(report: DailyReport) -> list[dict[str, object]]:
+    """Live triggers where the current price has reached a plan zone.
+
+    Parses the free-text investment-plan fields into numeric levels and compares
+    them against last_close, so written plans become actionable signals.
+    """
+    triggers: list[dict[str, object]] = []
+    for tr in report.ticker_reports:
+        symbol = tr.ticker.symbol
+        last = _as_float(tr.valuation.metrics.get("last_close")) if tr.valuation else None
+        if last is None:
+            continue
+        state = research_state_for(report, symbol)
+        anchor = f"#ticker-{symbol.lower()}"
+        for kind, text, direction in (
+            ("entry", state.entry_plan, "buy"),
+            ("add", state.add_zone, "buy"),
+            ("reduce", state.reduce_zone, "sell"),
+            ("stop", state.stop_loss, "stop"),
+        ):
+            levels = _plausible_levels(_parse_price_levels(text), last)
+            if not levels:
+                continue
+            lo, hi = levels[0], levels[-1]
+            evaluated = _evaluate_zone(direction, last, lo, hi)
+            if evaluated is None:
+                continue
+            status, tone = evaluated
+            label = _PLAN_KIND_LABELS[kind]
+            if kind == "stop":
+                headline = f"{symbol} broke plan stop ${hi:,.2f}"
+            else:
+                zone = f"${lo:,.2f}" if lo == hi else f"${lo:,.2f}–${hi:,.2f}"
+                verb = {"in_zone": "entered", "below_zone": "below", "above_zone": "above"}[status]
+                headline = f"{symbol} {verb} {label.lower()} {zone}"
+            triggers.append(
+                {
+                    "ticker": symbol,
+                    "kind": kind,
+                    "label": label,
+                    "headline": headline,
+                    "detail": f"Last ${last:,.2f}.",
+                    "anchor": anchor,
+                    "tone": tone,
+                    "status": status,
+                    "low": lo,
+                    "high": hi,
+                    "last_close": last,
+                }
+            )
+    return triggers
+
+
+def _sparkline_svg(values: list[float | None], *, width: int = 64, height: int = 18) -> str:
+    """Render a tiny inline SVG trend line from a numeric series (oldest→newest)."""
+    points = [float(v) for v in values if isinstance(v, (int, float)) and v == v]
+    if len(points) < 2:
+        return ""
+    lo, hi = min(points), max(points)
+    span = (hi - lo) or 1.0
+    count = len(points)
+    coords = []
+    for index, value in enumerate(points):
+        x = index / (count - 1) * (width - 2) + 1
+        y = (height - 1) - (value - lo) / span * (height - 2)
+        coords.append(f"{x:.1f},{y:.1f}")
+    color = "var(--good)" if points[-1] >= points[0] else "var(--danger)"
+    return (
+        f'<svg class="sparkline" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">'
+        f'<polyline points="{" ".join(coords)}" fill="none" stroke="{color}" '
+        f'stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>'
+    )
+
+
+def ticker_sparkline(report: DailyReport, symbol: str) -> str:
+    """Attention-score trend sparkline for a ticker (stored history, oldest→newest)."""
+    points = report.ticker_history.get(symbol, [])
+    if len(points) < 2:
+        return ""
+    series = [point.attention_score for point in reversed(points)]
+    return _sparkline_svg(series)
+
+
+def morning_actions(report: DailyReport) -> list[dict[str, object]]:
+    """Deduped, prioritized 'what must I decide today' list for the very top.
+
+    Consolidates plan-zone triggers, stop-loss proximity, imminent earnings,
+    thesis cracks, and large overnight gaps — only items that need a decision.
+    """
+    actions: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(symbol: str, label: str, headline: str, detail: str, anchor: str, tone: str, rank: int) -> None:
+        key = (symbol, label)
+        if key in seen:
+            return
+        seen.add(key)
+        actions.append(
+            {
+                "ticker": symbol,
+                "label": label,
+                "headline": headline,
+                "detail": detail,
+                "anchor": anchor,
+                "tone": tone,
+                "rank": rank,
+            }
+        )
+
+    for trigger in plan_triggers(report):
+        kind = str(trigger["kind"])
+        rank = 6 if kind == "stop" else (4 if kind == "reduce" else 3)
+        add(
+            str(trigger["ticker"]),
+            str(trigger["label"]),
+            str(trigger["headline"]),
+            str(trigger["detail"]),
+            str(trigger["anchor"]),
+            str(trigger["tone"]),
+            rank,
+        )
+
+    for tr in report.ticker_reports:
+        symbol = tr.ticker.symbol
+        anchor = f"#ticker-{symbol.lower()}"
+
+        stop_alert = _stop_loss_alert(tr)
+        if stop_alert is not None:
+            detail, tone, _ = stop_alert
+            add(symbol, "Stop nearby", f"{symbol} near stop-loss", detail, anchor, tone, 5)
+
+        delta = earnings_delta(tr, report.report_date)
+        if delta is not None and 0 <= delta <= 1:
+            when = days_until(tr.earnings.earnings_date, report.report_date) if tr.earnings else "soon"
+            tone = "danger" if delta == 0 else "warn"
+            add(symbol, "Earnings", f"{symbol} reports {when}", "Finalize stance before the print.", anchor, tone, 4)
+
+        state = research_state_for(report, symbol)
+        if state.thesis_state in {"weakening", "broken"}:
+            add(symbol, "Thesis", f"{symbol} thesis {state.thesis_state}", "Revisit the case before adding.", anchor, "danger", 3)
+
+        gap = premarket_change_pct(report, symbol)
+        if gap is not None and abs(gap) >= 3.0:
+            tone = "warn" if gap < 0 else "good"
+            add(symbol, "Gap", f"{symbol} gapped {format_pct(gap)} pre-market", "Check the overnight driver.", anchor, tone, 2)
+
+    actions.sort(key=lambda item: item["rank"], reverse=True)
+    return actions[:6]
 
 
 def topic_tags(item: TickerReport) -> list[str]:

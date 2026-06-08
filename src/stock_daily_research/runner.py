@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
@@ -26,6 +27,7 @@ from .storage import (
     export_research_state_file,
     import_research_state_file,
     init_db,
+    load_fresh_valuation_snapshot,
     load_latest_valuation_snapshot,
     load_post_earnings_reviews,
     load_report_dates,
@@ -41,6 +43,8 @@ from .x_signals import load_manual_x_signals
 logger = logging.getLogger(__name__)
 
 DEFAULT_FETCH_WORKERS = 6
+VALUATION_CACHE_TTL_HOURS = 4
+_VALUATION_MAX_RETRIES = 3
 
 
 def run_daily(
@@ -123,6 +127,15 @@ def run_daily(
         for signal in manual_x_signals:
             signals_by_ticker[signal.ticker].append(signal)
 
+        prefetched_valuations: dict[str, object] = {}
+        if fetch_valuation:
+            for tc in tickers:
+                cached = load_fresh_valuation_snapshot(
+                    conn, tc.symbol, max_age_hours=VALUATION_CACHE_TTL_HOURS
+                )
+                if cached is not None:
+                    prefetched_valuations[tc.symbol] = cached
+
         ticker_reports = _fetch_all_tickers(
             tickers,
             news_provider=news_provider,
@@ -133,6 +146,7 @@ def run_daily(
             max_articles=config.settings.news.max_articles_per_ticker,
             max_workers=max(1, max_workers),
             progress=progress,
+            prefetched_valuations=prefetched_valuations,
         )
         economic_events = []
         if fetch_macro and config.settings.macro.enabled:
@@ -292,6 +306,7 @@ def _fetch_all_tickers(
     max_articles: int,
     max_workers: int,
     progress: bool,
+    prefetched_valuations: dict[str, object] | None = None,
 ) -> list[TickerReport]:
     total = len(tickers)
     if progress:
@@ -306,6 +321,7 @@ def _fetch_all_tickers(
             fetch_valuation=fetch_valuation,
             lookback_days=lookback_days,
             max_articles=max_articles,
+            cached_valuation=(prefetched_valuations or {}).get(ticker.symbol),
         )
 
     results: dict[str, TickerReport] = {}
@@ -400,7 +416,7 @@ def _fill_revision_metric(
 
 
 def _has_usable_valuation(metrics: dict[str, object]) -> bool:
-    return any(value is not None for value in metrics.values())
+    return metrics.get("last_close") is not None
 
 
 def _fetch_one_ticker(
@@ -412,6 +428,7 @@ def _fetch_one_ticker(
     fetch_valuation: bool,
     lookback_days: int,
     max_articles: int,
+    cached_valuation: object = None,
 ) -> TickerReport:
     warnings: list[str] = []
     articles = []
@@ -427,11 +444,29 @@ def _fetch_one_ticker(
         warnings.extend(news_warnings)
 
     if fetch_valuation:
-        try:
-            valuation = fetch_yfinance_valuation(ticker)
-        except Exception as exc:
-            logger.warning("Valuation fetch failed for %s", ticker.symbol, exc_info=True)
-            warnings.append(f"Valuation fetch failed: {exc}")
+        if cached_valuation is not None:
+            valuation = cached_valuation
+        else:
+            last_exc: Exception | None = None
+            for attempt in range(_VALUATION_MAX_RETRIES + 1):
+                try:
+                    valuation = fetch_yfinance_valuation(ticker)
+                    last_exc = None
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt < _VALUATION_MAX_RETRIES:
+                        time.sleep(2 ** attempt)
+            if last_exc is not None:
+                logger.warning(
+                    "Valuation fetch failed for %s after %d attempts",
+                    ticker.symbol,
+                    _VALUATION_MAX_RETRIES + 1,
+                    exc_info=True,
+                )
+                warnings.append(
+                    f"Valuation fetch failed after {_VALUATION_MAX_RETRIES + 1} attempts: {last_exc}"
+                )
 
         try:
             earnings = fetch_yfinance_earnings_date(ticker)

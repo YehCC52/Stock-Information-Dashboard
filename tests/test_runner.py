@@ -1,8 +1,10 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from unittest.mock import patch
+
 from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PositionConfig, PremarketSnapshot, ResearchDefaults, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
-from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, run_daily
+from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, _has_usable_valuation, run_daily
 from stock_daily_research.storage import init_db, save_report
 
 
@@ -275,7 +277,7 @@ def test_run_daily_derives_revenue_revisions_from_valuation_history(tmp_path: Pa
             ticker="NVDA",
             as_of_date=date(2026, 4, 28),
             source="yfinance",
-            metrics={"next_fy_revenue": 110.0, "next_q_revenue": 55.0},
+            metrics={"last_close": 900.0, "next_fy_revenue": 110.0, "next_q_revenue": 55.0},
             retrieved_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
         )
 
@@ -316,3 +318,75 @@ def test_run_daily_records_skipped_fetches_as_global_warnings(tmp_path: Path) ->
     assert "News fetching skipped by --no-news." in report.warnings
     assert "Valuation and earnings fetching skipped by --no-valuation." in report.warnings
     assert "Macro calendar fetching skipped by --no-macro." in report.warnings
+
+
+def test_has_usable_valuation_requires_last_close() -> None:
+    assert _has_usable_valuation({"last_close": 150.0, "trailing_pe": None}) is True
+    assert _has_usable_valuation({"last_close": None, "trailing_pe": 25.0}) is False
+    assert _has_usable_valuation({"last_close": None}) is False
+    assert _has_usable_valuation({}) is False
+
+
+def test_valuation_retry_succeeds_on_third_attempt(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_config(tmp_path)
+    db_path = tmp_path / "stock.sqlite3"
+    attempts = {"count": 0}
+
+    def flaky_valuation(_ticker):
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RuntimeError("transient error")
+        return ValuationSnapshot(
+            ticker="NVDA",
+            as_of_date=date(2026, 4, 28),
+            source="yfinance",
+            metrics={"last_close": 900.0},
+            retrieved_at=datetime(2026, 4, 28, 8, 0, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", flaky_valuation)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", lambda _: None)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_market_sentiment", _sentiment)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_market_context", _market_context)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_overnight_premarket", lambda *_a, **_k: _premarket())
+    monkeypatch.setattr("stock_daily_research.runner.time.sleep", lambda _: None)
+
+    report = run_daily(
+        config_path=config_path,
+        report_date=date(2026, 4, 28),
+        output_dir=tmp_path / "reports",
+        db_path=db_path,
+        fetch_news=False,
+        fetch_valuation=True,
+        fetch_macro=False,
+    )
+
+    assert attempts["count"] == 3
+    assert report.ticker_reports[0].valuation is not None
+    warnings_text = " ".join(report.ticker_reports[0].warnings)
+    assert "failed" not in warnings_text
+
+
+def test_valuation_all_retries_exhausted_produces_warning(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_config(tmp_path)
+    db_path = tmp_path / "stock.sqlite3"
+
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", lambda _: (_ for _ in ()).throw(RuntimeError("always fails")))
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", lambda _: None)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_market_sentiment", _sentiment)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_market_context", _market_context)
+    monkeypatch.setattr("stock_daily_research.runner.fetch_overnight_premarket", lambda *_a, **_k: _premarket())
+    monkeypatch.setattr("stock_daily_research.runner.time.sleep", lambda _: None)
+
+    report = run_daily(
+        config_path=config_path,
+        report_date=date(2026, 4, 28),
+        output_dir=tmp_path / "reports",
+        db_path=db_path,
+        fetch_news=False,
+        fetch_valuation=True,
+        fetch_macro=False,
+    )
+
+    warnings_text = " ".join(report.ticker_reports[0].warnings)
+    assert "failed after 4 attempts" in warnings_text
