@@ -499,6 +499,56 @@ def load_latest_valuation_snapshot(
     )
 
 
+def load_fresh_valuation_snapshot(
+    conn: sqlite3.Connection,
+    ticker: str,
+    *,
+    max_age_hours: int = 4,
+) -> ValuationSnapshot | None:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    row = conn.execute(
+        """
+        SELECT vs.as_of_date, vs.source, vs.retrieved_at
+        FROM valuation_snapshots AS vs
+        WHERE vs.ticker = ?
+          AND vs.retrieved_at >= ?
+          AND EXISTS (
+              SELECT 1
+              FROM valuation_snapshots AS lc
+              WHERE lc.ticker = vs.ticker
+                AND lc.as_of_date = vs.as_of_date
+                AND lc.source = vs.source
+                AND lc.retrieved_at = vs.retrieved_at
+                AND lc.metric_name = 'last_close'
+                AND lc.metric_value IS NOT NULL
+          )
+        GROUP BY vs.as_of_date, vs.source, vs.retrieved_at
+        ORDER BY retrieved_at DESC
+        LIMIT 1
+        """,
+        (ticker, cutoff),
+    ).fetchone()
+    if not row:
+        return None
+    as_of_date_text, source, retrieved_at_text = row
+    metric_rows = conn.execute(
+        """
+        SELECT metric_name, metric_value FROM valuation_snapshots
+        WHERE ticker = ? AND as_of_date = ? AND source = ? AND retrieved_at = ?
+        ORDER BY metric_name
+        """,
+        (ticker, as_of_date_text, source, retrieved_at_text),
+    ).fetchall()
+    metrics = {name: _coerce_metric_value(value) for name, value in metric_rows}
+    return ValuationSnapshot(
+        ticker=ticker,
+        as_of_date=date.fromisoformat(as_of_date_text),
+        source=source,
+        metrics=metrics,
+        retrieved_at=datetime.fromisoformat(retrieved_at_text),
+    )
+
+
 def load_ticker_research_states(
     conn: sqlite3.Connection,
     tickers: list[str] | None = None,

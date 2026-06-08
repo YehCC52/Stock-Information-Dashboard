@@ -38,6 +38,8 @@ from stock_daily_research.report import (
     news_tier,
     pe_class,
     position_view,
+    ticker_delta,
+    _valuation_risk_direction,
     post_earnings_items,
     pre_earnings_card,
     premarket_triage,
@@ -58,6 +60,11 @@ from stock_daily_research.report import (
     ticker_insights,
     valuation_risk_label,
     write_report,
+    plan_triggers,
+    morning_actions,
+    ticker_sparkline,
+    _parse_price_levels,
+    _plausible_levels,
 )
 
 
@@ -2358,3 +2365,236 @@ def test_pre_earnings_card_none_outside_window() -> None:
     assert pre_earnings_card(report, item) is None
     report_past, item_past = _pre_earnings_report(date(2026, 4, 27))
     assert pre_earnings_card(report_past, item_past) is None
+
+
+def _make_history_point(
+    report_date: date,
+    attention_score: float = 0.0,
+    rsi: float | None = None,
+    news_count: int = 0,
+    valuation_risk: str = "None",
+) -> TickerHistoryPoint:
+    return TickerHistoryPoint(
+        report_date=report_date,
+        generated_at=datetime(report_date.year, report_date.month, report_date.day, tzinfo=timezone.utc),
+        ticker="NVDA",
+        thesis_state="watching",
+        review_status="not-reviewed",
+        news_count=news_count,
+        top_news_count=0,
+        valuation_risk=valuation_risk,
+        rsi=rsi,
+        daily_change_pct=None,
+        premarket_change_pct=None,
+        earnings_days=None,
+        warning_count=0,
+        attention_score=attention_score,
+        news_burst_score=0.0,
+    )
+
+
+def _delta_report(curr: TickerHistoryPoint, prev: TickerHistoryPoint) -> DailyReport:
+    return DailyReport(
+        report_date=curr.report_date,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={"NVDA": [curr, prev]},
+    )
+
+
+def test_ticker_delta_happy_path() -> None:
+    curr = _make_history_point(date(2026, 4, 28), attention_score=14.0, rsi=65.0, news_count=5, valuation_risk="High")
+    prev = _make_history_point(date(2026, 4, 27), attention_score=9.0, rsi=62.0, news_count=3, valuation_risk="Elevated")
+    report = _delta_report(curr, prev)
+    result = ticker_delta(report, "NVDA")
+    assert result is not None
+    assert result.attention_score_delta == 5.0
+    assert result.rsi_delta == 3.0
+    assert result.news_count_delta == 2
+    assert result.valuation_risk_direction == "up"
+
+
+def test_ticker_delta_returns_none_with_no_history() -> None:
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={},
+    )
+    assert ticker_delta(report, "NVDA") is None
+
+
+def test_ticker_delta_returns_none_with_only_one_point() -> None:
+    curr = _make_history_point(date(2026, 4, 28), attention_score=10.0)
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={"NVDA": [curr]},
+    )
+    assert ticker_delta(report, "NVDA") is None
+
+
+def test_ticker_delta_rsi_none_when_either_missing() -> None:
+    curr = _make_history_point(date(2026, 4, 28), rsi=None)
+    prev = _make_history_point(date(2026, 4, 27), rsi=60.0)
+    report = _delta_report(curr, prev)
+    result = ticker_delta(report, "NVDA")
+    assert result is not None
+    assert result.rsi_delta is None
+
+
+def test_valuation_risk_direction_up() -> None:
+    assert _valuation_risk_direction("None", "High") == "up"
+    assert _valuation_risk_direction("Elevated", "Extreme") == "up"
+
+
+def test_valuation_risk_direction_down() -> None:
+    assert _valuation_risk_direction("High", "Elevated") == "down"
+    assert _valuation_risk_direction("Extreme", "None") == "down"
+
+
+def test_valuation_risk_direction_same() -> None:
+    assert _valuation_risk_direction("Elevated", "Elevated") == "same"
+    assert _valuation_risk_direction(None, "High") == "same"
+    assert _valuation_risk_direction("Unknown", "High") == "same"
+
+
+def _plan_report(
+    symbol: str = "NVDA",
+    last_close: float = 800.0,
+    *,
+    entry_plan: str = "",
+    add_zone: str = "",
+    reduce_zone: str = "",
+    stop_loss_text: str = "",
+    thesis_state: str = "",
+    position: PositionConfig | None = None,
+    earnings_date: date | None = None,
+) -> DailyReport:
+    earnings = None
+    if earnings_date is not None:
+        earnings = EarningsDate(
+            ticker=symbol, company_name=f"{symbol} Inc",
+            earnings_date=earnings_date, time_of_day="after_market",
+            fiscal_quarter="Q1", fiscal_year=2026,
+            eps_estimate=None, revenue_estimate=None, source="yfinance",
+            source_retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        )
+    item = TickerReport(
+        ticker=TickerConfig(symbol=symbol, company_name=f"{symbol} Inc", position=position or PositionConfig()),
+        articles=[],
+        x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker=symbol, as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={"last_close": last_close},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+        earnings=earnings,
+    )
+    state = TickerResearchState(
+        ticker=symbol,
+        entry_plan=entry_plan, add_zone=add_zone, reduce_zone=reduce_zone,
+        stop_loss=stop_loss_text, thesis_state=thesis_state,
+    )
+    return DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[item],
+        research_states={symbol: state},
+    )
+
+
+def test_parse_price_levels_extracts_numbers() -> None:
+    assert _parse_price_levels("buy 800-820") == [800.0, 820.0]
+    assert _parse_price_levels("add below $1,250.50") == [1250.5]
+    assert _parse_price_levels("") == []
+    assert _parse_price_levels("no numbers here") == []
+
+
+def test_plausible_levels_filters_outliers() -> None:
+    # last_close 800 → keep 240..2400; drop 30 ("hold 30 days") and 5000
+    assert _plausible_levels([30.0, 800.0, 5000.0], 800.0) == [800.0]
+    assert _plausible_levels([700.0, 900.0], 800.0) == [700.0, 900.0]
+
+
+def test_plan_triggers_add_zone_in_zone() -> None:
+    report = _plan_report(last_close=810.0, add_zone="800-820")
+    triggers = plan_triggers(report)
+    assert len(triggers) == 1
+    assert triggers[0]["kind"] == "add"
+    assert triggers[0]["status"] == "in_zone"
+    assert triggers[0]["tone"] == "good"
+
+
+def test_plan_triggers_reduce_zone_not_reached() -> None:
+    # price 810 below reduce zone 900-950 → no trigger
+    report = _plan_report(last_close=810.0, reduce_zone="900-950")
+    assert plan_triggers(report) == []
+
+
+def test_plan_triggers_reduce_zone_reached() -> None:
+    report = _plan_report(last_close=920.0, reduce_zone="900-950")
+    triggers = plan_triggers(report)
+    assert len(triggers) == 1
+    assert triggers[0]["kind"] == "reduce"
+    assert triggers[0]["status"] == "in_zone"
+
+
+def test_plan_triggers_stop_breached() -> None:
+    report = _plan_report(last_close=740.0, stop_loss_text="stop 750")
+    triggers = plan_triggers(report)
+    assert len(triggers) == 1
+    assert triggers[0]["kind"] == "stop"
+    assert triggers[0]["tone"] == "danger"
+
+
+def test_plan_triggers_none_without_last_close() -> None:
+    report = _plan_report(add_zone="800-820")
+    report.ticker_reports[0].valuation.metrics["last_close"] = None
+    assert plan_triggers(report) == []
+
+
+def test_morning_actions_includes_plan_trigger_and_earnings() -> None:
+    report = _plan_report(
+        last_close=740.0,
+        stop_loss_text="stop 750",
+        earnings_date=date(2026, 4, 28),
+    )
+    actions = morning_actions(report)
+    labels = {a["label"] for a in actions}
+    assert "Plan stop" in labels
+    assert "Earnings" in labels
+    # stop (rank 6) should sort before earnings (rank 4)
+    assert actions[0]["label"] == "Plan stop"
+
+
+def test_morning_actions_empty_when_quiet() -> None:
+    report = _plan_report(last_close=810.0)  # no plan, no earnings, no thesis crack
+    assert morning_actions(report) == []
+
+
+def test_morning_actions_thesis_crack() -> None:
+    report = _plan_report(last_close=810.0, thesis_state="broken")
+    actions = morning_actions(report)
+    assert any(a["label"] == "Thesis" for a in actions)
+
+
+def test_ticker_sparkline_renders_svg_with_history() -> None:
+    curr = _make_history_point(date(2026, 4, 28), attention_score=14.0)
+    prev = _make_history_point(date(2026, 4, 27), attention_score=9.0)
+    report = _delta_report(curr, prev)
+    svg = ticker_sparkline(report, "NVDA")
+    assert svg.startswith("<svg")
+    assert "polyline" in svg
+
+
+def test_ticker_sparkline_empty_with_one_point() -> None:
+    curr = _make_history_point(date(2026, 4, 28), attention_score=14.0)
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={"NVDA": [curr]},
+    )
+    assert ticker_sparkline(report, "NVDA") == ""

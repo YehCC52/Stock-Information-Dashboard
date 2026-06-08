@@ -4,9 +4,9 @@ Personal stock research dashboard with daily HTML report generation. Features te
 
 ## Project Status
 
-**Latest iteration (2026-06-02)**: Features #1 (Investment Plan) and #2 (Right-side Trading Score) planning complete; Features #3 (Event Pre/Post-earnings) and #4 (Data Quality) implemented; recently completed Feature A (News Read Markers) and Feature B (Thesis Manual Fill).
+**Latest iteration (2026-06-08)**: Completed Features C–G — Day-over-Day Delta Badges (C), Valuation Retry + TTL Cache (D), Plan Triggers (E), Morning Actions decision block (F), and Attention Sparkline (G). Earlier: Features #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill).
 
-**Test Suite**: 183 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`.
+**Test Suite**: 215 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`.
 
 ## Quick Commands
 
@@ -65,6 +65,34 @@ python -m stock_daily_research.cli --import-research-state research-state-2026-0
 - Compare table: Thesis column shows thesis_text if set, else thesis_state
 - localStorage: `stock-daily-draft-thesis-text`
 - Full export/import support
+
+### Feature C: Day-over-Day Delta Badges
+- Inline ±delta badges on each ticker card: attention score, RSI, news count, valuation risk direction
+- `ticker_delta(report, symbol)` in `report.py` diffs today vs yesterday using `_current_history_point` / `_previous_history_point`
+- Reuses stored `news_daily_summary` history; renders nothing on first day (no prior point) and suppresses zero-deltas
+- CSS: `.delta-up` (green) / `.delta-down` (red)
+
+### Feature D: Valuation Retry + TTL Cache (robustness)
+- `load_fresh_valuation_snapshot(conn, ticker, max_age_hours=4)` in `storage.py`: serves a SQLite snapshot <4h old, skipping the network call
+- `runner.py`: pre-fetches cache in the main thread (thread-safe) before the `ThreadPoolExecutor`; uncached tickers get 3 exponential-backoff retries (1s/2s/4s)
+- Stricter `_has_usable_valuation()` now requires `last_close` (not just any non-None field) before accepting a fetch
+- Constants: `VALUATION_CACHE_TTL_HOURS = 4`, `_VALUATION_MAX_RETRIES = 3`
+
+### Feature E: Plan Triggers (live plan-vs-price signals)
+- `plan_triggers(report)` in `report.py` parses numeric levels out of free-text plan fields (`entry_plan`, `add_zone`, `reduce_zone`, `stop_loss`) and compares against `last_close`
+- `_parse_price_levels()` extracts price tokens; `_plausible_levels()` filters outliers (keeps 0.3x–3x of last close) to ignore stray numbers
+- Emits actionable signals: "NVDA entered add zone $800–820", "broke plan stop", etc.; rendered as colored chips on the card
+- Turns the static investment plan (Feature #1) into morning signals — no manual price math needed
+
+### Feature F: Morning Actions (30-sec decision block)
+- `morning_actions(report)` consolidates plan triggers + stop-loss proximity + imminent earnings (≤1d) + thesis cracks (weakening/broken) + large overnight gaps (±3%)
+- Deduped by (ticker, label), prioritized by severity (stop 6 > earnings 4 > thesis 3 > gap 2), capped at 6
+- Renders as the first section of the report (`#morning-actions`) with a red "Actions N" TOC pill; hidden entirely when nothing needs a decision
+
+### Feature G: Attention Sparkline
+- `ticker_sparkline(report, symbol)` renders an inline SVG trend line (zero dependencies) of the stored attention-score history (oldest→newest)
+- Green if rising, red if falling; needs ≥2 days of history, otherwise renders nothing
+- Shown next to the Attn Score metric on each card
 
 ## Data Model Highlights
 
@@ -152,6 +180,8 @@ thesis_changed: str               # Feature #3: Y/N
 | `ticker_insights` | dict with setup/risk/watch lists |
 | `right_side_score` | Score object (planned Feature #2) |
 
+Jinja globals (registered in `render_html_report`): `ticker_delta(symbol)` (Feature C), `ticker_sparkline(symbol)` (Feature G), `plan_triggers_for(symbol)` (Feature E). `morning_actions` is passed via render context (Feature F).
+
 ## Testing
 
 ```bash
@@ -198,4 +228,4 @@ Valuation fallback → Look for "Valuation fallback used" in warnings. Data Qual
 
 ---
 
-Last updated: 2026-06-02 (Features A & B completed, #1/#2/#3/#4 design locked)
+Last updated: 2026-06-08 (Features C–G completed: delta badges, valuation retry/cache, plan triggers, morning actions, sparkline)

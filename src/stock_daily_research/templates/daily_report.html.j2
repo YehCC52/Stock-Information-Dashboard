@@ -806,6 +806,33 @@
     .rsi-low, .rsi-extreme-low { color: var(--info); font-weight: 700; }
     .rsi-extreme, .rsi-extreme-low { background: var(--info-bg); padding: 1px 6px; border-radius: 4px; }
     .rsi-extreme { background: var(--danger-bg); }
+    .delta-up   { color: var(--good, #16a34a); font-size: 0.75rem; margin-left: 3px; }
+    .delta-down { color: var(--danger, #dc2626); font-size: 0.75rem; margin-left: 3px; }
+
+    .morning-actions { border: 1px solid var(--border); border-left: 4px solid var(--danger); }
+    .morning-actions-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .morning-action a {
+      display: grid; grid-template-columns: minmax(90px, auto) 1fr auto; gap: 10px;
+      align-items: baseline; padding: 8px 12px; border-radius: 6px;
+      text-decoration: none; color: var(--text); background: var(--surface-alt, var(--surface));
+      border-left: 3px solid var(--border);
+    }
+    .morning-action a:hover { background: var(--info-bg); }
+    .morning-action.tone-danger a { border-left-color: var(--danger); }
+    .morning-action.tone-warn a   { border-left-color: #d97706; }
+    .morning-action.tone-good a   { border-left-color: var(--good, #16a34a); }
+    .morning-action.tone-info a   { border-left-color: var(--info, #2563eb); }
+    .ma-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+    .ma-headline { font-weight: 600; }
+    .ma-detail { font-size: 0.8rem; color: var(--muted); }
+    .plan-trigger-chip { font-size: 0.72rem; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); margin-left: 4px; }
+    .plan-trigger-chip.tone-danger { color: var(--danger); border-color: var(--danger); }
+    .plan-trigger-chip.tone-good   { color: var(--good, #16a34a); border-color: var(--good, #16a34a); }
+    .plan-trigger-chip.tone-info   { color: var(--info, #2563eb); border-color: var(--info, #2563eb); }
+    .sparkline { vertical-align: middle; }
+    @media (max-width: 640px) {
+      .morning-action a { grid-template-columns: 1fr; gap: 2px; }
+    }
 
     .sentiment-panel {
       display: grid;
@@ -1939,6 +1966,7 @@
     </header>
 
     <nav class="toc" aria-label="Sections">
+      {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">Actions {{ morning_actions|length }}</a>{% endif %}
       <a href="#hero">Today</a>
       <a href="#summary">Summary</a>
       <a href="#todays-focus">Focus</a>
@@ -1966,6 +1994,25 @@
       <a href="#valuation">Valuation</a>
       <a href="#tickers">Tickers ({{ report.ticker_reports|length }})</a>
     </nav>
+
+    {% if morning_actions %}
+    <section id="morning-actions" class="section morning-actions" aria-label="Morning actions">
+      <div class="section-header">
+        <h2>Morning Actions <span class="muted">— decide these first</span></h2>
+      </div>
+      <ul class="morning-actions-list">
+        {% for action in morning_actions %}
+        <li class="morning-action tone-{{ action.tone }}">
+          <a href="{{ action.anchor }}">
+            <span class="ma-label">{{ action.label }}</span>
+            <span class="ma-headline">{{ action.headline }}</span>
+            <span class="ma-detail">{{ action.detail }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
 
     <section class="command-center" aria-label="Today">
       <div id="hero" class="command-hero">
@@ -2972,6 +3019,7 @@
         {% set research = item|research_state %}
         {% set history_points = item|history_points %}
         {% set history_current = history_points[0] if history_points else None %}
+        {% set tdelta = ticker_delta(item.ticker.symbol) %}
         {% set delta = item|earnings_delta %}
         {% set sector = item.valuation.metrics.get("sector") if item.valuation else None %}
         {% set dchg = item|daily_change %}
@@ -3006,6 +3054,7 @@
               {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="Right-side score {{ insights.score.score }}/100">{{ insights.score.status }}</span>{% endif %}
               {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="Data confidence {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ') }}{% endif %}">Data {{ dq.tag }}</span>{% endif %}
               <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
+              {% for trig in plan_triggers_for(item.ticker.symbol) %}<span class="plan-trigger-chip tone-{{ trig.tone }}" title="{{ trig.headline }} — {{ trig.detail }}">{{ trig.label }}</span>{% endfor %}
             </div>
           </div>
 
@@ -3025,8 +3074,24 @@
             <div class="metric">
               {% set rsi = item.valuation.metrics.get("rsi_14") if item.valuation else None %}
               <span class="metric-label">RSI 14</span>
-              <span class="metric-value rsi-{{ rsi|rsi_class }}" title="{{ rsi|rsi_label }}">{{ rsi|metric_value if item.valuation else "N/A" }}</span>
+              <span class="metric-value rsi-{{ rsi|rsi_class }}" title="{{ rsi|rsi_label }}">{{ rsi|metric_value if item.valuation else "N/A" }}{% if tdelta and tdelta.rsi_delta and tdelta.rsi_delta != 0 %}<span class="{{ 'delta-up' if tdelta.rsi_delta > 0 else 'delta-down' }}">{{ '+' if tdelta.rsi_delta > 0 else '' }}{{ tdelta.rsi_delta }}</span>{% endif %}</span>
             </div>
+            {% if tdelta %}
+            <div class="metric">
+              <span class="metric-label">News</span>
+              <span class="metric-value">{{ item.articles|length }}{% if tdelta.news_count_delta is not none and tdelta.news_count_delta != 0 %}<span class="{{ 'delta-up' if tdelta.news_count_delta > 0 else 'delta-down' }}">{{ '+' if tdelta.news_count_delta > 0 else '' }}{{ tdelta.news_count_delta }}</span>{% endif %}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Attn Score</span>
+              <span class="metric-value">{% if history_current %}{{ history_current.attention_score }}{% else %}N/A{% endif %}{% if tdelta.attention_score_delta is not none and tdelta.attention_score_delta != 0 %}<span class="{{ 'delta-up' if tdelta.attention_score_delta > 0 else 'delta-down' }}">{{ '+' if tdelta.attention_score_delta > 0 else '' }}{{ tdelta.attention_score_delta }}</span>{% endif %}{{ ticker_sparkline(item.ticker.symbol)|safe }}</span>
+            </div>
+            {% if tdelta.valuation_risk_direction != 'same' %}
+            <div class="metric">
+              <span class="metric-label">Val Risk</span>
+              <span class="metric-value"><span class="{{ 'delta-down' if tdelta.valuation_risk_direction == 'up' else 'delta-up' }}">{{ '↑' if tdelta.valuation_risk_direction == 'up' else '↓' }}</span> {{ item|valuation_risk }}</span>
+            </div>
+            {% endif %}
+            {% endif %}
           </div>
 
           <details class="card-secondary position-details">
@@ -3046,7 +3111,7 @@
               </div>
               <div class="position-chip">
                 <span class="label">P/L</span>
-                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}{% if pos.pl_dollar is not none %} ({{ "$%+,.0f"|format(pos.pl_dollar) }}){% endif %}</span>
+                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}{% if pos.pl_dollar is not none %} (${{ "{:+,.0f}".format(pos.pl_dollar) }}){% endif %}</span>
               </div>
               {% if pos.stop_loss is not none %}
               <div class="position-chip tone-{{ pos.stop_distance_tone }}" title="Distance from stop-loss">
