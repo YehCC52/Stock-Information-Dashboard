@@ -3015,17 +3015,17 @@
     <section id="tickers" class="section section-primary">
       <div class="section-header">
         <h2>個股卡片 <span class="count" id="ticker-count">({{ report.ticker_reports|length }})</span></h2>
-        <button id="toggle-quiet" type="button" class="tool-button">顯示安靜</button>
+        <button id="toggle-quiet" type="button" class="tool-button">顯示平穩股</button>
       </div>
       <div class="sort-hint">依市值排序（由大到小）</div>
       <div class="legend" aria-label="Card state legend">
         <span class="badge danger">熱點</span> 今日財報或 2 則以上重點新聞
         <span class="legend-sep">|</span>
-        <span class="badge good">關注</span> 有新聞或 7 天內財報
+        <span class="badge good">留意</span> 有新聞或 7 天內財報
         <span class="legend-sep">|</span>
         <span class="badge warn">警示</span> 資料警示
         <span class="legend-sep">|</span>
-        <span class="badge">安靜</span> 無主要催化
+        <span class="badge">平穩</span> 無明顯催化
       </div>
       <div class="ticker-controls">
         <label class="control-label" for="focus-filter" data-i18n="label_focus">焦點</label>
@@ -3037,15 +3037,15 @@
         </select>
         <label class="control-label" for="state-filter" data-i18n="label_state">狀態</label>
         <select id="state-filter" class="control-select">
-          <option value="all" data-i18n="option_all_active">全部活躍</option>
+          <option value="all" data-i18n="option_all_active">全部狀態</option>
           <option value="hot" data-i18n="option_hot">熱點</option>
-          <option value="warm" data-i18n="option_warm">溫和</option>
+          <option value="warm" data-i18n="option_warm">留意</option>
           <option value="warn" data-i18n="option_warn">警示</option>
-          <option value="quiet" data-i18n="option_quiet">安靜</option>
+          <option value="quiet" data-i18n="option_quiet">平穩</option>
         </select>
         <label class="control-label" for="score-filter">分數</label>
         <select id="score-filter" class="control-select">
-          <option value="all">任意分數</option>
+          <option value="all">不限分數</option>
           <option value="breakout-confirmed">突破確認</option>
           <option value="pullback-buy-zone">回檔買點區</option>
           <option value="extended-do-not-chase">已延伸，避免追高</option>
@@ -3055,14 +3055,14 @@
         </select>
         <label class="control-label" for="earnings-filter">財報</label>
         <select id="earnings-filter" class="control-select">
-          <option value="all">任意日期</option>
+          <option value="all">不限日期</option>
           <option value="today">今日</option>
           <option value="tomorrow">明日</option>
           <option value="7d">7 天內</option>
         </select>
         <label class="control-label" for="rsi-filter">RSI</label>
         <select id="rsi-filter" class="control-select">
-          <option value="all">任意 RSI</option>
+          <option value="all">不限 RSI</option>
           <option value="oversold">超賣 &lt;=30</option>
           <option value="neutral">中性 30-70</option>
           <option value="overbought">過熱 &gt;=70</option>
@@ -3089,7 +3089,7 @@
           {% for cluster in clusters %}<option value="{{ cluster|lower }}">{{ cluster }}</option>{% endfor %}
         </select>
         {% endif %}
-        <label class="control-label checkbox"><input id="risk-filter" type="checkbox"> 僅看風險</label>
+        <label class="control-label checkbox"><input id="risk-filter" type="checkbox"> 只看風險股</label>
       </div>
       <div id="compare-panel" class="compare-panel is-hidden" aria-live="polite"></div>
       <div class="ticker-grid" id="ticker-grid">
@@ -3834,9 +3834,9 @@
       }
       function cardStateLabel(state) {
         if (state === "hot") return "熱點";
-        if (state === "warm") return "關注";
+        if (state === "warm") return "留意";
         if (state === "warn") return "警示";
-        return "安靜";
+        return "平穩";
       }
       function valuationRiskLabel(value) {
         if (value === "Extreme") return "極高";
@@ -4637,7 +4637,7 @@
         if (toggleQuiet) {
           toggleQuiet.addEventListener("click", function () {
             showQuiet = !showQuiet;
-            toggleQuiet.textContent = showQuiet ? "隱藏安靜" : "顯示安靜";
+            toggleQuiet.textContent = showQuiet ? "隱藏平穩股" : "顯示平穩股";
             applyFilters();
           });
         }
@@ -5289,11 +5289,11 @@
           "option_watchlist": "釘選項目",
           "option_reviewed": "已檢視",
           "option_unreviewed": "未檢視",
-          "option_all_active": "全部活躍",
+          "option_all_active": "全部狀態",
           "option_hot": "熱點",
-          "option_warm": "溫和",
+          "option_warm": "留意",
           "option_warn": "警示",
-          "option_quiet": "安靜",
+          "option_quiet": "平穩",
           "table_grade": "評分",
           "table_ticker": "代碼",
           "table_action": "操作",

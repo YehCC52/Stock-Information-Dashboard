@@ -757,9 +757,9 @@ def review_status_label(value: object) -> str:
 def card_state_label(value: object) -> str:
     labels = {
         "hot": "熱點",
-        "warm": "關注",
+        "warm": "留意",
         "warn": "警示",
-        "quiet": "安靜",
+        "quiet": "平穩",
     }
     text = str(value or "")
     return labels.get(text, text.title())
