@@ -116,7 +116,7 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "Nvidia revenue beats" in output
     assert "+4.00% on 1.8x volume" in output
     assert "5.26T" in output
-    assert "部位與帳面" in output
+    assert "持股與損益" in output
     assert "What Changed Since Last Run" in output
     assert "Generated: 2026-04-28 15:00 Taiwan Time (UTC+8)" in output
     assert "2026-04-28 15:00 TWN / UTC+8" in output
@@ -289,7 +289,7 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert "管理" in output
     assert "下次財報" in output
     assert "估值風險" in output
-    assert "監看清單 TXT" in output
+    assert "觀察清單 TXT" in output
     assert "Research Queue" in output
     assert "What Changed in 30d" in output
 
@@ -369,7 +369,7 @@ def test_render_html_report_seeds_sqlite_backed_research_state_and_history() -> 
     assert '"history_days": 45' in output
     assert "Thesis state changed" in output
     assert "Research memory" in output
-    assert "已複核" in output
+    assert "已檢視" in output
 
 
 def test_render_html_report_marks_imminent_earnings() -> None:
