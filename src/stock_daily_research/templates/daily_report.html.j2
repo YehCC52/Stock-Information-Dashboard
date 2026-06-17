@@ -1145,7 +1145,7 @@
     }
     .pe-meta { color: var(--muted); font-size: 11px; }
     .pe-status { color: var(--good); font-size: 11px; font-weight: 700; margin-left: auto; }
-    .pe-status:empty::before { content: "尚未複核"; color: var(--warning); font-weight: 600; }
+    .pe-status:empty::before { content: "尚未檢視"; color: var(--warning); font-weight: 600; }
     .post-earnings-form {
       display: flex;
       flex-direction: column;
@@ -1978,13 +1978,13 @@
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
           <input id="quick-search" class="search-box" type="search" placeholder="搜尋代碼或公司名稱" autocomplete="off" data-i18n="label_search">
-          <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="Show only pinned tickers; everything else is hidden">僅監看清單</button>
-          <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">匯出監看清單</button>
+          <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="只顯示釘選的股票">只看釘選</button>
+          <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">匯出觀察清單</button>
           <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">匯出研究狀態</button>
           <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">匯出財報數據</button>
           <button id="save-to-db" type="button" class="tool-button tool-button-success" title="儲存所有變更到資料庫" style="background: var(--good); color: white; border-color: var(--good);">儲存到資料庫</button>
           <div id="save-status" class="export-status" aria-live="polite"></div>
-          <div id="export-status" class="export-status" aria-live="polite">匯出項目：監看清單 TXT | 研究狀態 JSON | 財報數據 JSON</div>
+          <div id="export-status" class="export-status" aria-live="polite">匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON</div>
         </div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
@@ -2010,9 +2010,9 @@
       <a href="#todays-focus">焦點</a>
       <a href="#capital-allocation">資金</a>
       <a href="#research-queue">研究</a>
-      {% if book_today %}<a href="#book-today">我的部位</a>{% endif %}
-      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">我的部位 ({{ portfolio.holdings|length }})</a>{% endif %}
-      {% if book_impact %}<a href="#book-impact">部位影響</a>{% endif %}
+      {% if book_today %}<a href="#book-today">我的持股</a>{% endif %}
+      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">我的持股 ({{ portfolio.holdings|length }})</a>{% endif %}
+      {% if book_impact %}<a href="#book-impact">持股影響</a>{% endif %}
       {% if report.premarket %}<a href="#premarket">盤前</a>{% endif %}
       <a href="#today-catalysts">催化</a>
       {% if sector_leadership %}<a href="#sector-leadership">產業</a>{% endif %}
@@ -2084,7 +2084,7 @@
       <aside class="command-side" id="summary">
         <div class="mode-bar" role="group" aria-label="Today work mode">
           <button type="button" class="tool-button mode-button" data-mode="overview" aria-pressed="true">概覽</button>
-          <button type="button" class="tool-button mode-button" data-mode="review" aria-pressed="false">複核模式</button>
+          <button type="button" class="tool-button mode-button" data-mode="review" aria-pressed="false">檢視模式</button>
           <button type="button" class="tool-button mode-button" data-mode="prep" aria-pressed="false">準備模式</button>
           <span id="mode-hint" class="mode-hint">完整儀表板視圖</span>
         </div>
@@ -2094,7 +2094,7 @@
           <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">財報 <=7 天</span></div>
           <div class="stat {% if summary.economic_event_count %}alert{% endif %}" title="Tracked macro events"><span class="stat-value">{{ summary.economic_event_count }}</span><span class="stat-label">宏觀</span></div>
           <div class="stat"><span class="stat-value">{{ summary.ticker_count }}</span><span class="stat-label">代碼</span></div>
-          <div class="stat" title="Research review status loaded from SQLite-backed state"><span class="stat-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="stat-label">已複核</span></div>
+          <div class="stat" title="Research review status loaded from SQLite-backed state"><span class="stat-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="stat-label">已檢視</span></div>
           {% if report.market_sentiment %}
           <div class="stat {% if report.market_sentiment.score <= 24 or report.market_sentiment.score >= 76 %}alert danger{% elif report.market_sentiment.score <= 44 or report.market_sentiment.score >= 56 %}alert{% endif %}" title="Free yfinance proxy, not a proprietary index"><span class="stat-value">{{ report.market_sentiment.score }}</span><span class="stat-label">{{ report.market_sentiment.label }}</span></div>
           {% endif %}
@@ -2127,7 +2127,7 @@
       </div>
       <div class="focus-grid">
         <div class="focus-column review">
-          <h3><span class="focus-icon">R</span>優先複核</h3>
+          <h3><span class="focus-icon">R</span>優先檢視</h3>
           {% if todays_focus.review_first %}
           <ul class="focus-list">
             {% for row in todays_focus.review_first %}
@@ -2295,7 +2295,7 @@
             <tr>
               <th data-i18n="table_ticker">代碼</th>
               <th class="num" data-i18n="table_move">漲跌幅</th>
-              <th class="num" data-i18n="table_weight">配置比例</th>
+              <th class="num" data-i18n="table_weight">持股比重</th>
               <th class="num" data-i18n="table_book_impact">帳面影響</th>
               <th data-i18n="table_action">操作</th>
             </tr>
@@ -2446,7 +2446,7 @@
               <th class="num">FY1 EPS rev</th>
               <th class="num">FY1 revenue rev</th>
               <th class="num">Price reaction</th>
-              <th>複核</th>
+              <th>檢視</th>
             </tr>
           </thead>
           <tbody>
@@ -2464,7 +2464,7 @@
               <td class="num change change-{{ pe_default.fy1_eps_revision_after|change_class }}" data-pe-score-field="fy1_eps_revision_after" data-default="{% if pe_default.fy1_eps_revision_after is not none %}{{ pe_default.fy1_eps_revision_after }}{% endif %}">{{ pe_default.fy1_eps_revision_after|format_pct }}</td>
               <td class="num change change-{{ pe_default.fy1_revenue_revision_after|change_class }}" data-pe-score-field="fy1_revenue_revision_after" data-default="{% if pe_default.fy1_revenue_revision_after is not none %}{{ pe_default.fy1_revenue_revision_after }}{% endif %}">{{ pe_default.fy1_revenue_revision_after|format_pct }}</td>
               <td class="num change change-{{ row.reaction|change_class }}">{{ row.reaction|format_pct }}</td>
-              <td><span class="scoreboard-status{% if pe_default.conclusion or pe_default.next_step %} partial{% endif %}" data-pe-score-field="review">{% if pe_default.conclusion or pe_default.next_step %}已複核{% else %}未複核{% endif %}</span></td>
+              <td><span class="scoreboard-status{% if pe_default.conclusion or pe_default.next_step %} partial{% endif %}" data-pe-score-field="review">{% if pe_default.conclusion or pe_default.next_step %}已檢視{% else %}未檢視{% endif %}</span></td>
             </tr>
             {% endfor %}
           </tbody>
@@ -3031,9 +3031,9 @@
         <label class="control-label" for="focus-filter" data-i18n="label_focus">焦點</label>
         <select id="focus-filter" class="control-select">
           <option value="all" data-i18n="option_all">全部</option>
-          <option value="watchlist" data-i18n="option_watchlist">我的監看清單</option>
-          <option value="reviewed" data-i18n="option_reviewed">已複核</option>
-          <option value="unreviewed" data-i18n="option_unreviewed">未複核</option>
+          <option value="watchlist" data-i18n="option_watchlist">釘選項目</option>
+          <option value="reviewed" data-i18n="option_reviewed">已檢視</option>
+          <option value="unreviewed" data-i18n="option_unreviewed">未檢視</option>
         </select>
         <label class="control-label" for="state-filter" data-i18n="label_state">狀態</label>
         <select id="state-filter" class="control-select">
@@ -3051,7 +3051,7 @@
           <option value="extended-do-not-chase">已延伸，避免追高</option>
           <option value="mixed-neutral">中性</option>
           <option value="thesis-weakening">投資論點轉弱</option>
-          <option value="avoid">避開</option>
+          <option value="avoid">暫避</option>
         </select>
         <label class="control-label" for="earnings-filter">財報</label>
         <select id="earnings-filter" class="control-select">
@@ -3117,15 +3117,15 @@
               {% if research.thesis_state or research.last_reviewed_at %}
               <div class="ticker-sector">
                 {% if research.thesis_state %}投資論點：{{ research.thesis_state|zh_text }}{% endif %}
-                {% if research.last_reviewed_at %}{% if research.thesis_state %} | {% endif %}上次複核 {{ research.last_reviewed_at.date().isoformat() }}{% endif %}
+                {% if research.last_reviewed_at %}{% if research.thesis_state %} | {% endif %}上次檢視 {{ research.last_reviewed_at.date().isoformat() }}{% endif %}
               </div>
               {% endif %}
               {% if item.earnings and item.earnings.earnings_date %}<div class="countdown" data-countdown="{{ item.earnings.earnings_date.isoformat() }}" data-time-of-day="{{ item.earnings.time_of_day }}"></div>{% endif %}
             </div>
             <div class="ticker-actions">
               <button type="button" class="icon-button pin-button" aria-label="釘選 {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">釘選</button>
-              <button type="button" class="icon-button quick-done" aria-label="標記所有複核項目完成" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已複核">完成</button>
-              <button type="button" class="icon-button quick-revisit" aria-label="複核日期延後一天" data-quick-revisit="{{ item.ticker.symbol }}" title="把複核日期設為今天 +1 天，或將既有日期往後推一天">+1天</button>
+              <button type="button" class="icon-button quick-done" aria-label="標記所有檢視項目完成" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已檢視">完成</button>
+              <button type="button" class="icon-button quick-revisit" aria-label="檢視日期延後一天" data-quick-revisit="{{ item.ticker.symbol }}" title="把檢視日期設為今天 +1 天，或將既有日期往後推一天">+1天</button>
               {% if state == "hot" %}<span class="badge danger">{{ state|card_state_label }}</span>
               {% elif state == "warn" %}<span class="badge warn">{{ state|card_state_label }}</span>
               {% elif state == "warm" %}<span class="badge good">{{ state|card_state_label }}</span>
@@ -3175,14 +3175,14 @@
           </div>
 
           <details class="card-secondary position-details">
-            <summary>部位與帳面</summary>
+            <summary>持股與損益</summary>
             <div class="position-row">
               <div class="position-chip">
-                <span class="label">部位</span>
+                <span class="label">狀態</span>
                 <span class="value">{{ pos.status|position_status_label }}{% if pos.sector %} · {{ pos.sector }}{% endif %}</span>
               </div>
               <div class="position-chip">
-                <span class="label">權重 / 影響</span>
+                <span class="label">持股比重 / 影響</span>
                 <span class="value">{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight|format_pct(sign=False) }}{% else %}N/A{% endif %}{% if pos.book_impact is not none %} / {{ pos.book_impact|format_pct }}{% endif %}</span>
               </div>
               <div class="position-chip">
@@ -3201,7 +3201,7 @@
               {% endif %}
               {% if pos.position_size is not none %}
               <div class="position-chip">
-                <span class="label">金額</span>
+                <span class="label">持股金額</span>
                 <span class="value">${{ "{:,.0f}".format(pos.position_size) }}</span>
               </div>
               {% endif %}
@@ -3209,8 +3209,8 @@
           </details>
 
           <div class="position-live" data-position-live="{{ item.ticker.symbol }}">
-            <span><span class="label">即時部位</span><span class="value" data-position-live-status="{{ item.ticker.symbol }}">{{ pos.status|position_status_label }}</span></span>
-            <span><span class="label">權重</span><span class="value" data-position-live-weight="{{ item.ticker.symbol }}">N/A</span></span>
+            <span><span class="label">持股狀態</span><span class="value" data-position-live-status="{{ item.ticker.symbol }}">{{ pos.status|position_status_label }}</span></span>
+            <span><span class="label">持股比重</span><span class="value" data-position-live-weight="{{ item.ticker.symbol }}">N/A</span></span>
             <span><span class="label">P/L</span><span class="value change" data-position-live-pl="{{ item.ticker.symbol }}">N/A</span></span>
             <span><span class="label">影響</span><span class="value change" data-position-live-impact="{{ item.ticker.symbol }}">N/A</span></span>
           </div>
@@ -3261,7 +3261,7 @@
                   <tr>
                     <th>日期</th>
                     <th>投資論點</th>
-                    <th>複核</th>
+                    <th>檢視</th>
                     <th class="num">重點新聞</th>
                     <th>估值</th>
                     <th class="num">財報</th>
@@ -3411,10 +3411,10 @@
               <div class="position-editor" data-position-editor="{{ item.ticker.symbol }}">
                 <label>狀態
                   <select data-position-field="status" data-position-symbol="{{ item.ticker.symbol }}">
-                    <option value="watchlist">監看中</option>
-                    <option value="holding">持有部位</option>
+                    <option value="watchlist">觀察中</option>
+                    <option value="holding">已持有</option>
                     <option value="tracking">追蹤中</option>
-                    <option value="avoid">迴避</option>
+                    <option value="avoid">暫不考慮</option>
                   </select>
                 </label>
                 <label>股數
@@ -3423,7 +3423,7 @@
                 <label>均價
                   <input type="number" step="0.01" min="0" data-position-field="avg_cost" data-position-symbol="{{ item.ticker.symbol }}" placeholder="120.00">
                 </label>
-                <label>配置比例 %
+                <label>持股比重 %
                   <input type="number" step="0.01" min="0" data-position-field="portfolio_weight" data-position-symbol="{{ item.ticker.symbol }}" placeholder="5">
                 </label>
                 <label>金額 $
@@ -3440,7 +3440,7 @@
                   <option value="High conviction">高度確信</option>
                   <option value="Watch closely">密切關注</option>
                   <option value="Overvalued">高估</option>
-                  <option value="Post-earnings review">財報後複核</option>
+                  <option value="Post-earnings review">財報後檢視</option>
                   <option value="Do not chase">勿追</option>
                 </select>
                 <span class="badge info tag-badge" data-tag-badge="{{ item.ticker.symbol }}"></span>
@@ -3480,7 +3480,7 @@
               </div>
               <textarea class="note-input" rows="2" data-note="{{ item.ticker.symbol }}" placeholder="Notes: thesis, risk, what to watch"></textarea>
               <div class="revisit-row">
-                <label class="control-label" for="revisit-{{ item.ticker.symbol }}">複核日期</label>
+                <label class="control-label" for="revisit-{{ item.ticker.symbol }}">下次檢視</label>
                 <input id="revisit-{{ item.ticker.symbol }}" class="revisit-input" type="date" data-revisit="{{ item.ticker.symbol }}">
               </div>
               <div class="checklist" data-checklist="{{ item.ticker.symbol }}">
@@ -3822,15 +3822,15 @@
         return "not-reviewed";
       }
       function reviewLabel(state) {
-        if (state === "reviewed") return "已複核";
-        if (state === "in-progress") return "複核中";
-        return "未複核";
+        if (state === "reviewed") return "已檢視";
+        if (state === "in-progress") return "檢視中";
+        return "未檢視";
       }
       function positionStatusLabel(state) {
-        if (state === "holding") return "持有部位";
+        if (state === "holding") return "已持有";
         if (state === "tracking") return "追蹤中";
-        if (state === "avoid") return "避開";
-        return "監看中";
+        if (state === "avoid") return "暫不考慮";
+        return "觀察中";
       }
       function cardStateLabel(state) {
         if (state === "hot") return "熱點";
@@ -3870,7 +3870,7 @@
         if (normalized === "extended do not chase") return "已延伸，避免追高";
         if (normalized === "mixed-neutral" || normalized === "mixed neutral") return "中性";
         if (normalized === "thesis weakening") return "投資論點轉弱";
-        if (normalized === "avoid") return "避開";
+        if (normalized === "avoid") return "暫避";
         return value;
       }
       function phraseLabel(value) {
@@ -4461,7 +4461,7 @@
       function reviewStatusFor(sym) {
         var values = checklist[sym] || [];
         if (!values.length) return "—";
-        if (values.length >= 4) return "已複核";
+        if (values.length >= 4) return "已檢視";
         return values.length + "/5";
       }
 
@@ -4532,8 +4532,8 @@
         panel.innerHTML = "<h3>比較模式 <button id=\"export-compare\" type=\"button\" class=\"tool-button\">匯出比較</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
           "<th>代碼</th><th>狀態</th><th>分數</th><th>趨勢</th><th class=\"num\">今日 %</th><th class=\"num\">距高點</th>" +
-          "<th>下次財報</th><th>複核</th><th>標籤</th><th>投資論點</th><th>觸發因素</th><th>複核日期</th>" +
-          "<th class=\"num\">盤前</th><th class=\"num\">缺口</th><th class=\"num\">量/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS 成長</th><th class=\"num\">EPS 30D修正</th><th class=\"num\">FY1營收修正</th><th class=\"num\">下季營收修正</th><th>部位</th>" +
+          "<th>下次財報</th><th>檢視</th><th>標籤</th><th>投資論點</th><th>觸發因素</th><th>下次檢視</th>" +
+          "<th class=\"num\">盤前</th><th class=\"num\">缺口</th><th class=\"num\">量/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS 成長</th><th class=\"num\">EPS 30D修正</th><th class=\"num\">FY1營收修正</th><th class=\"num\">下季營收修正</th><th>持股狀態</th>" +
           headerWeightCols +
           "<th>觀察重點</th><th>估值風險</th><th class=\"num\">RSI 14</th><th class=\"num\">重點新聞</th>" +
           "<th class=\"num\">市值</th><th class=\"num\">預估 P/E</th>" +
@@ -4749,7 +4749,7 @@
               var cell = row.querySelector("[data-pe-score-field=\"" + field + "\"]");
               return !!rec[field] || !!(cell && cell.dataset.default);
             }).length;
-            review.textContent = done >= 5 ? "已複核" : done > 0 ? done + "/7" : "未複核";
+            review.textContent = done >= 5 ? "已檢視" : done > 0 ? done + "/7" : "未檢視";
             review.classList.remove("done", "partial");
             if (done >= 5) review.classList.add("done");
             else if (done > 0) review.classList.add("partial");
@@ -4841,7 +4841,7 @@
         function apply() {
           document.body.classList.toggle("watchlist-mode", active);
           btn.setAttribute("aria-pressed", active ? "true" : "false");
-          btn.textContent = active ? "離開監看" : "僅監看清單";
+          btn.textContent = active ? "離開釘選" : "只看釘選";
           // Force-open user-tools details for pinned cards in watchlist mode
           if (active) {
             cards.forEach(function (card) {
@@ -5107,10 +5107,10 @@
         var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">權重</th><th class=\"num\">帳面影響</th>";
         panel.innerHTML = "<h3>比較模式 <button id=\"export-compare\" type=\"button\" class=\"tool-button\">匯出比較</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
-          "<th>代碼</th><th>狀態</th><th>投資論點</th><th>觸發因素</th><th>複核</th><th>上次複核</th>" +
+          "<th>代碼</th><th>狀態</th><th>投資論點</th><th>觸發因素</th><th>檢視</th><th>上次檢視</th>" +
           "<th>下次財報</th><th class=\"num\">新聞增溫</th><th class=\"num\">重點新聞</th><th>估值風險</th><th>30D 修正</th>" +
-          "<th class=\"num\">關注分數</th><th class=\"num\">盤前</th><th>部位</th>" +
-          headerWeightCols + "<th>標籤</th><th>複核日期</th>" +
+          "<th class=\"num\">關注分數</th><th class=\"num\">盤前</th><th>持股狀態</th>" +
+          headerWeightCols + "<th>標籤</th><th>下次檢視</th>" +
           "</tr></thead><tbody>" +
           rows + "</tbody></table></div>";
         var exportBtn = document.getElementById("export-compare");
@@ -5270,11 +5270,11 @@
           "lang_en": "English"
         },
         zh: {
-          "btn_watchlist": "僅監看清單",
-          "btn_export_watchlist": "匯出監看清單",
+          "btn_watchlist": "只看釘選",
+          "btn_export_watchlist": "匯出觀察清單",
           "btn_export_research": "匯出研究狀態",
           "btn_export_earnings": "匯出財報數據",
-          "label_export_status": "匯出項目：監看清單 TXT | 研究狀態 JSON | 財報數據 JSON",
+          "label_export_status": "匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON",
           "label_search": "搜尋代碼或公司名稱",
           "label_focus": "焦點",
           "label_state": "狀態",
@@ -5286,9 +5286,9 @@
           "label_cluster": "集群",
           "label_risk": "風險",
           "option_all": "全部",
-          "option_watchlist": "我的監看清單",
-          "option_reviewed": "已複核",
-          "option_unreviewed": "未複核",
+          "option_watchlist": "釘選項目",
+          "option_reviewed": "已檢視",
+          "option_unreviewed": "未檢視",
           "option_all_active": "全部活躍",
           "option_hot": "熱點",
           "option_warm": "溫和",
@@ -5301,16 +5301,16 @@
           "table_status": "狀態",
           "table_reasons": "原因",
           "table_move": "漲跌幅",
-          "table_weight": "配置比例",
+          "table_weight": "持股比重",
           "table_book_impact": "帳面影響",
           "position_status": "狀態",
           "position_shares": "股數",
           "position_avg_cost": "均價",
-          "position_weight": "配置比例 %",
+          "position_weight": "持股比重 %",
           "position_size": "金額 $",
           "position_stop": "停損",
           "thesis_trigger": "觸發因素",
-          "thesis_revisit": "複核日期",
+          "thesis_revisit": "下次檢視",
           "thesis_none": "無",
           "msg_loading": "載入中...",
           "msg_no_data": "無可用數據",
