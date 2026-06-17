@@ -20,6 +20,7 @@ from stock_daily_research.storage import (
     init_db,
     load_fresh_valuation_snapshot,
     load_latest_valuation_snapshot,
+    load_next_earnings_date,
     load_ticker_history,
     load_ticker_research_states,
     load_post_earnings_reviews,
@@ -618,6 +619,40 @@ def test_load_fresh_valuation_snapshot_skips_all_null_metrics(tmp_path) -> None:
         )
         conn.commit()
         result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is None
+
+
+def _earnings_on(ticker: str, when: date) -> EarningsDate:
+    return EarningsDate(
+        ticker=ticker, company_name=f"{ticker} Inc", earnings_date=when, time_of_day="unknown",
+        fiscal_quarter=None, fiscal_year=None, eps_estimate=None, revenue_estimate=None,
+        source="yfinance", source_retrieved_at=datetime.now(timezone.utc),
+    )
+
+
+def test_load_next_earnings_date_prefers_upcoming(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    with init_db(db_path) as conn:
+        save_report(conn, _wrap("AVGO", earnings=_earnings_on("AVGO", date(2026, 6, 4))))
+        save_report(conn, _wrap("AVGO", earnings=_earnings_on("AVGO", date(2026, 9, 4))))
+        result = load_next_earnings_date(conn, "AVGO", on_or_after=date(2026, 6, 8))
+    assert result is not None
+    assert result.earnings_date == date(2026, 9, 4)
+
+
+def test_load_next_earnings_date_falls_back_to_past(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    with init_db(db_path) as conn:
+        save_report(conn, _wrap("AVGO", earnings=_earnings_on("AVGO", date(2026, 6, 4))))
+        result = load_next_earnings_date(conn, "AVGO", on_or_after=date(2026, 6, 8))
+    assert result is not None
+    assert result.earnings_date == date(2026, 6, 4)
+
+
+def test_load_next_earnings_date_none_when_empty(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    with init_db(db_path) as conn:
+        result = load_next_earnings_date(conn, "AVGO", on_or_after=date(2026, 6, 8))
     assert result is None
 
 

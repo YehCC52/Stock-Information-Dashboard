@@ -224,3 +224,7 @@ __marimo__/
 data/*.sqlite3
 data/macro_events_cache.json
 reports/
+
+# Personal research & portfolio data (do not commit)
+research-state-*.json
+my-positions.json

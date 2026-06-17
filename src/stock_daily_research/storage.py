@@ -454,6 +454,58 @@ def save_earnings(conn: sqlite3.Connection, earnings: EarningsDate) -> None:
     )
 
 
+def load_next_earnings_date(
+    conn: sqlite3.Connection,
+    ticker: str,
+    *,
+    on_or_after: date,
+) -> EarningsDate | None:
+    """Best-known earnings date for a ticker from prior runs.
+
+    Prefers the soonest upcoming date (earnings_date >= on_or_after); if none are
+    upcoming, returns the most recent past date. Used as a fallback when the live
+    fetch returns nothing.
+    """
+    row = conn.execute(
+        """
+        SELECT ticker, company_name, earnings_date, time_of_day, fiscal_quarter,
+               fiscal_year, eps_estimate, revenue_estimate, source, source_retrieved_at
+        FROM earnings_dates
+        WHERE ticker = ? AND earnings_date IS NOT NULL AND earnings_date >= ?
+        ORDER BY earnings_date ASC, source_retrieved_at DESC
+        LIMIT 1
+        """,
+        (ticker, on_or_after.isoformat()),
+    ).fetchone()
+    if row is None:
+        row = conn.execute(
+            """
+            SELECT ticker, company_name, earnings_date, time_of_day, fiscal_quarter,
+                   fiscal_year, eps_estimate, revenue_estimate, source, source_retrieved_at
+            FROM earnings_dates
+            WHERE ticker = ? AND earnings_date IS NOT NULL
+            ORDER BY earnings_date DESC, source_retrieved_at DESC
+            LIMIT 1
+            """,
+            (ticker,),
+        ).fetchone()
+    if row is None:
+        return None
+    (tkr, company, ed, tod, fq, fy, eps, rev, source, retrieved) = row
+    return EarningsDate(
+        ticker=tkr,
+        company_name=company,
+        earnings_date=date.fromisoformat(ed),
+        time_of_day=tod,
+        fiscal_quarter=fq,
+        fiscal_year=fy,
+        eps_estimate=eps,
+        revenue_estimate=rev,
+        source=source,
+        source_retrieved_at=datetime.fromisoformat(retrieved),
+    )
+
+
 def load_latest_valuation_snapshot(
     conn: sqlite3.Connection,
     ticker: str,
