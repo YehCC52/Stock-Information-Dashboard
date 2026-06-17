@@ -1329,6 +1329,13 @@
     }
     .sector-row.over-cap { color: var(--danger); font-weight: 700; }
     .sector-row .tickers { color: var(--muted); font-size: 11px; font-weight: 400; }
+    .concentration-warning {
+      margin: 10px 0; padding: 10px 14px; border-radius: 8px;
+      background: var(--warning-bg); border: 1px solid var(--warning, #d97706);
+      border-left: 4px solid var(--warning, #d97706); font-size: 0.88rem; line-height: 1.5;
+    }
+    .concentration-warning strong { color: var(--warning, #d97706); }
+    .concentration-warning a { font-weight: 600; }
     .stop-row {
       display: grid;
       grid-template-columns: 56px 1fr auto;
@@ -2449,6 +2456,12 @@
           <span class="label">Invested weight</span>
           <span class="value">{{ portfolio.total_weight_pct|format_pct(sign=False) }}</span>
         </div>
+        {% if portfolio.total_pl_dollar is not none %}
+        <div class="stat" title="Total unrealized P&amp;L across holdings (current price vs avg cost)">
+          <span class="label">Unrealized P&amp;L</span>
+          <span class="value change change-{{ 'pos' if portfolio.total_pl_dollar >= 0 else 'neg' }}">${{ "{:+,.0f}".format(portfolio.total_pl_dollar) }}{% if portfolio.total_pl_pct is not none %} ({{ portfolio.total_pl_pct|format_pct }}){% endif %}</span>
+        </div>
+        {% endif %}
         {% if portfolio.addable_cash is not none %}
         <div class="stat" title="Cash available to deploy (from settings.portfolio.addable_cash)">
           <span class="label">Addable cash</span>
@@ -2468,6 +2481,14 @@
         </div>
         {% endif %}
       </div>
+
+      {% if portfolio.over_concentrated %}
+      <div class="concentration-warning" role="alert">
+        <strong>Concentration risk</strong> — {{ portfolio.over_concentrated|length }} holding{{ 's' if portfolio.over_concentrated|length > 1 else '' }} above {{ portfolio.concentration_threshold|format_pct(sign=False) }}:
+        {% for r in portfolio.over_concentrated %}<a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }} {{ r.weight|format_pct(sign=False) }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
+        Review before adding.
+      </div>
+      {% endif %}
 
       <div class="my-book-grid">
         <div class="my-book-card winners">
@@ -2496,6 +2517,34 @@
             {% endfor %}
           </ul>
           {% else %}<div class="mb-empty">No negative contributors today.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card winners">
+          <div class="mb-label">Total return leaders</div>
+          {% if portfolio.pl_leaders %}
+          <ul class="mb-list">
+            {% for r in portfolio.pl_leaders %}
+            <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
+              <span class="mb-pct change-pos">+{{ "%.1f"|format(r.pl_pct) }}%</span>
+              <span class="mb-detail">{% if r.pl_dollar is not none %}${{ "{:+,.0f}".format(r.pl_dollar) }}{% endif %}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="mb-empty">No gainers yet.</div>{% endif %}
+        </div>
+
+        <div class="my-book-card losers">
+          <div class="mb-label">Total return laggards</div>
+          {% if portfolio.pl_laggards %}
+          <ul class="mb-list">
+            {% for r in portfolio.pl_laggards %}
+            <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
+              <span class="mb-pct change-neg">{{ "%.1f"|format(r.pl_pct) }}%</span>
+              <span class="mb-detail">{% if r.pl_dollar is not none %}${{ "{:+,.0f}".format(r.pl_dollar) }}{% endif %}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="mb-empty">No laggards.</div>{% endif %}
         </div>
 
         <div class="my-book-card events">

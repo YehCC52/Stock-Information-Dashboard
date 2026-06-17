@@ -22,13 +22,14 @@ from .models import DailyReport, TickerConfig, TickerReport, TickerResearchState
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
-from .report import write_report
+from .report import derive_portfolio_weights, write_report
 from .storage import (
     export_research_state_file,
     import_research_state_file,
     init_db,
     load_fresh_valuation_snapshot,
     load_latest_valuation_snapshot,
+    load_next_earnings_date,
     load_post_earnings_reviews,
     load_report_dates,
     load_ticker_history,
@@ -164,6 +165,7 @@ def run_daily(
         if fetch_valuation:
             ticker_reports = _apply_valuation_fallbacks(conn, ticker_reports, actual_report_date)
             ticker_reports = _apply_estimate_revision_history(conn, ticker_reports, actual_report_date)
+            ticker_reports = _apply_earnings_fallbacks(conn, ticker_reports, actual_report_date)
 
         report_path = Path(output_dir) / f"{actual_report_date.isoformat()}.html"
         preliminary_report = DailyReport(
@@ -215,6 +217,7 @@ def run_daily(
         history_overview=history_overview,
         settings=config.settings,
     )
+    report = derive_portfolio_weights(report)
     write_report(report, output_dir)
     return report
 
@@ -373,6 +376,25 @@ def _apply_valuation_fallbacks(
             f"Valuation fallback used: latest available {fallback.as_of_date.isoformat()} from {fallback.source}.",
         ]
         result.append(replace(item, valuation=fallback, warnings=warnings))
+    return result
+
+
+def _apply_earnings_fallbacks(
+    conn: sqlite3.Connection,
+    ticker_reports: list[TickerReport],
+    report_date: date,
+) -> list[TickerReport]:
+    """Backfill a known earnings date from prior runs when the live fetch is empty."""
+    result: list[TickerReport] = []
+    for item in ticker_reports:
+        if item.earnings is not None and item.earnings.earnings_date is not None:
+            result.append(item)
+            continue
+        fallback = load_next_earnings_date(conn, item.ticker.symbol, on_or_after=report_date)
+        if fallback is None:
+            result.append(item)
+            continue
+        result.append(replace(item, earnings=fallback))
     return result
 
 

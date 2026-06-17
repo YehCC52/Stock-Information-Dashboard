@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from math import isfinite
 from pathlib import Path
@@ -14,6 +14,8 @@ from .models import DailyReport, MarketContext, NewsArticle, PositionConfig, Pos
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
+
+DEFAULT_MAX_SINGLE_WEIGHT = 15.0  # single-name weight % above which My Book flags concentration
 
 METRIC_LABELS = {
     "last_close": "Last Close",
@@ -63,6 +65,7 @@ METRIC_LABELS = {
 class ReportPaths:
     markdown: Path
     html: Path
+    brief: Path
 
 
 def _build_environment(template_dir: str | Path | None = None, *, autoescape_html: bool = False) -> Environment:
@@ -205,9 +208,11 @@ def write_report(report: DailyReport, output_dir: str | Path) -> ReportPaths:
     output_path.mkdir(parents=True, exist_ok=True)
     markdown_path = output_path / f"{report.report_date.isoformat()}.md"
     html_path = output_path / f"{report.report_date.isoformat()}.html"
+    brief_path = output_path / f"{report.report_date.isoformat()}-brief.txt"
     markdown_path.write_text(_strip_bom(render_markdown_report(report)), encoding="utf-8")
     html_path.write_text(_strip_bom(render_html_report(report)), encoding="utf-8")
-    return ReportPaths(markdown=markdown_path, html=html_path)
+    brief_path.write_text(portfolio_brief(report), encoding="utf-8")
+    return ReportPaths(markdown=markdown_path, html=html_path, brief=brief_path)
 
 
 def _strip_bom(text: str) -> str:
@@ -2041,6 +2046,45 @@ def ticker_cluster(item: TickerReport) -> str | None:
     return None
 
 
+def derive_portfolio_weights(report: DailyReport) -> DailyReport:
+    """Fill in portfolio_weight for holdings that lack one, from position size.
+
+    Weight = position_size / total holdings size, where size = shares × last_close
+    (falling back to shares × avg_cost when price is unavailable). Manually-set
+    weights are preserved, so a user override always wins.
+    """
+    sizes: dict[str, float] = {}
+    for tr in report.ticker_reports:
+        pos = tr.ticker.position
+        if pos.status != "holding" or pos.shares is None:
+            continue
+        last = _as_float(tr.valuation.metrics.get("last_close")) if tr.valuation else None
+        price = last if last is not None else pos.avg_cost
+        if price is None or price <= 0:
+            continue
+        sizes[tr.ticker.symbol] = pos.shares * price
+
+    total = sum(sizes.values())
+    if total <= 0:
+        return report
+
+    new_reports: list[TickerReport] = []
+    changed = False
+    for tr in report.ticker_reports:
+        pos = tr.ticker.position
+        if pos.status == "holding" and pos.portfolio_weight is None and tr.ticker.symbol in sizes:
+            weight = round(sizes[tr.ticker.symbol] / total * 100.0, 2)
+            new_pos = replace(pos, portfolio_weight=weight)
+            new_reports.append(replace(tr, ticker=replace(tr.ticker, position=new_pos)))
+            changed = True
+        else:
+            new_reports.append(tr)
+
+    if not changed:
+        return report
+    return replace(report, ticker_reports=new_reports)
+
+
 def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
     """Aggregate today's per-position impact for the My Book panel.
 
@@ -2081,12 +2125,28 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
             or bool(tr.warnings)
         )
 
+        last = _as_float(tr.valuation.metrics.get("last_close")) if tr.valuation else None
+        pl_pct = None
+        pl_dollar = None
+        cost_basis = None
+        market_value = None
+        if pos.avg_cost is not None and pos.avg_cost > 0 and last is not None:
+            pl_pct = round((last - pos.avg_cost) / pos.avg_cost * 100.0, 2)
+            if pos.shares is not None:
+                pl_dollar = round((last - pos.avg_cost) * pos.shares, 2)
+                cost_basis = pos.shares * pos.avg_cost
+                market_value = pos.shares * last
+
         rows.append({
             "symbol": tr.ticker.symbol,
             "company": tr.ticker.company_name,
             "weight": round(float(weight), 2),
             "change_pct": change_pct,
             "book_impact": book_impact,
+            "pl_pct": pl_pct,
+            "pl_dollar": pl_dollar,
+            "cost_basis": cost_basis,
+            "market_value": market_value,
             "earnings_days": delta,
             "event_soon": event_soon,
             "thesis_risk": thesis_risk,
@@ -2106,11 +2166,27 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
         key=lambda r: r["book_impact"],
     )[:3]
 
+    pl_rows = [r for r in rows if isinstance(r["pl_pct"], (int, float))]
+    pl_leaders = sorted(
+        (r for r in pl_rows if r["pl_pct"] > 0),
+        key=lambda r: r["pl_pct"],
+        reverse=True,
+    )[:3]
+    pl_laggards = sorted(
+        (r for r in pl_rows if r["pl_pct"] < 0),
+        key=lambda r: r["pl_pct"],
+    )[:3]
+
     event_soon = [r for r in rows if r["event_soon"]]
     thesis_risk = [r for r in rows if r["thesis_risk"]]
 
     total_impact = round(sum(r["book_impact"] or 0 for r in rows), 3)
     total_weight = round(sum(float(r["weight"]) for r in rows), 2)
+
+    total_cost = sum(r["cost_basis"] for r in rows if isinstance(r["cost_basis"], (int, float)))
+    total_mv = sum(r["market_value"] for r in rows if isinstance(r["market_value"], (int, float)))
+    total_pl_dollar = round(total_mv - total_cost, 2) if total_cost > 0 else None
+    total_pl_pct = round((total_mv - total_cost) / total_cost * 100.0, 2) if total_cost > 0 else None
 
     sectors = sector_concentration(report)
     stop_warnings = stop_distance_warnings(report)
@@ -2121,27 +2197,103 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
     total_value = getattr(portfolio_settings, "total_value", None) if portfolio_settings else None
     max_single_weight = getattr(portfolio_settings, "max_single_weight", None) if portfolio_settings else None
 
-    over_concentrated: list[dict[str, object]] = []
-    if max_single_weight is not None:
-        over_concentrated = [
-            r for r in rows if isinstance(r["weight"], (int, float)) and r["weight"] > max_single_weight
-        ]
+    concentration_threshold = max_single_weight if max_single_weight is not None else DEFAULT_MAX_SINGLE_WEIGHT
+    over_concentrated = sorted(
+        (r for r in rows if isinstance(r["weight"], (int, float)) and r["weight"] > concentration_threshold),
+        key=lambda r: r["weight"],
+        reverse=True,
+    )
 
     return {
         "holdings": rows,
         "winners": winners,
         "losers": losers,
+        "pl_leaders": pl_leaders,
+        "pl_laggards": pl_laggards,
         "event_soon": event_soon,
         "thesis_risk": thesis_risk,
         "total_impact_pct": total_impact,
         "total_weight_pct": total_weight,
+        "total_pl_dollar": total_pl_dollar,
+        "total_pl_pct": total_pl_pct,
         "sectors": sectors,
         "stop_warnings": stop_warnings,
         "addable_cash": addable_cash,
         "total_value": total_value,
         "over_concentrated": over_concentrated,
         "max_single_weight": max_single_weight,
+        "concentration_threshold": concentration_threshold,
     }
+
+
+def portfolio_brief(report: DailyReport) -> str:
+    """Compact plain-text portfolio summary (3–6 lines) for pasting into notes."""
+    summary = portfolio_impact_summary(report)
+    rows = summary["holdings"]
+    lines = [f"Portfolio Brief - {report.report_date.isoformat()}"]
+    if not rows:
+        lines.append("No holdings configured.")
+        return "\n".join(lines)
+
+    parts = [f"Net impact today {format_pct(summary['total_impact_pct'])}"]
+    if summary["total_pl_dollar"] is not None:
+        parts.append(f"unrealized P&L ${summary['total_pl_dollar']:+,.0f} ({format_pct(summary['total_pl_pct'])})")
+    parts.append(f"invested {format_pct(summary['total_weight_pct'], sign=False)}")
+    lines.append(" | ".join(parts))
+
+    impactful = [r for r in rows if isinstance(r["book_impact"], (int, float))]
+    if impactful:
+        drag = min(impactful, key=lambda r: r["book_impact"])
+        if drag["book_impact"] < 0:
+            lines.append(
+                f"Biggest drag: {drag['symbol']} {format_pct(drag['book_impact'])} "
+                f"({format_pct(drag['change_pct'])} x {format_pct(drag['weight'], sign=False)}w)"
+            )
+        lift = max(impactful, key=lambda r: r["book_impact"])
+        if lift["book_impact"] > 0:
+            lines.append(
+                f"Biggest lift: {lift['symbol']} {format_pct(lift['book_impact'])} "
+                f"({format_pct(lift['change_pct'])} x {format_pct(lift['weight'], sign=False)}w)"
+            )
+
+    leaders = ", ".join(f"{r['symbol']} {format_pct(r['pl_pct'])}" for r in summary["pl_leaders"])
+    laggards = ", ".join(f"{r['symbol']} {format_pct(r['pl_pct'])}" for r in summary["pl_laggards"])
+    ret_parts = []
+    if leaders:
+        ret_parts.append(f"Leaders: {leaders}")
+    if laggards:
+        ret_parts.append(f"Laggards: {laggards}")
+    if ret_parts:
+        lines.append(" | ".join(ret_parts))
+
+    flags = []
+    if summary["over_concentrated"]:
+        flags.append(
+            "concentration "
+            + ", ".join(f"{r['symbol']} {format_pct(r['weight'], sign=False)}" for r in summary["over_concentrated"])
+        )
+    risk_names = [
+        tr.ticker.symbol
+        for tr in report.ticker_reports
+        if tr.ticker.position.status == "holding" and valuation_risk_label(tr) in ("High", "Extreme")
+    ]
+    if risk_names:
+        flags.append("valuation risk " + ", ".join(risk_names))
+    if flags:
+        lines.append("Flags - " + " | ".join(flags))
+
+    soon = []
+    for tr in report.ticker_reports:
+        if tr.ticker.position.status != "holding":
+            continue
+        delta = earnings_delta(tr, report.report_date)
+        if delta is not None and 0 <= delta <= 7:
+            when = "today" if delta == 0 else "tomorrow" if delta == 1 else f"in {delta}d"
+            soon.append(f"{tr.ticker.symbol} {when}")
+    if soon:
+        lines.append("Earnings <=7d: " + ", ".join(soon))
+
+    return "\n".join(lines)
 
 
 def sector_concentration(report: DailyReport) -> list[dict[str, object]]:

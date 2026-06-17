@@ -4,9 +4,9 @@ Personal stock research dashboard with daily HTML report generation. Features te
 
 ## Project Status
 
-**Latest iteration (2026-06-08)**: Completed Features C–G — Day-over-Day Delta Badges (C), Valuation Retry + TTL Cache (D), Plan Triggers (E), Morning Actions decision block (F), and Attention Sparkline (G). Earlier: Features #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill).
+**Latest iteration (2026-06-08)**: Completed Features C–H — Day-over-Day Delta Badges (C), Valuation Retry + TTL Cache (D), Plan Triggers (E), Morning Actions decision block (F), Attention Sparkline (G), and My Book P&L with auto-weighted portfolio (H). Earlier: Features #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill).
 
-**Test Suite**: 215 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`.
+**Test Suite**: 219 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`.
 
 ## Quick Commands
 
@@ -93,6 +93,13 @@ python -m stock_daily_research.cli --import-research-state research-state-2026-0
 - `ticker_sparkline(report, symbol)` renders an inline SVG trend line (zero dependencies) of the stored attention-score history (oldest→newest)
 - Green if rising, red if falling; needs ≥2 days of history, otherwise renders nothing
 - Shown next to the Attn Score metric on each card
+
+### Feature H: My Book P&L (auto-weighted portfolio + total return)
+- **Auto portfolio weights**: `derive_portfolio_weights(report)` in `report.py` fills `portfolio_weight` for any holding missing one, from `position_size = shares × last_close` (falls back to `shares × avg_cost`), normalized across holdings. Manual weights are preserved. Called once in `runner.py` after the report is assembled (before `write_report`), so HTML/markdown/notifications all see weights.
+- **Why it matters**: weight was the gate for `book_impact_ranking`, `portfolio_impact_summary`, sector concentration, and the `book_today` cards — all previously empty because no weight was set. Auto-weighting lights them up with zero manual input (no need to enter total assets).
+- **Total return view**: `portfolio_impact_summary()` now also emits per-holding `pl_pct` / `pl_dollar` (current price vs avg cost), plus `pl_leaders` / `pl_laggards` (top/bottom 3 by total return) and book totals `total_pl_dollar` / `total_pl_pct`.
+- **Template** (`#my-book` section): new "Unrealized P&L" stat (`$+X (+Y%)`) and "Total return leaders / laggards" cards, alongside the existing today's-impact winners/losers (daily move × weight) and sector concentration.
+- **Position source**: holdings live in `watchlist.yaml` per-ticker `position:` block (`status: holding`, `shares`, `avg_cost`, optional numeric `stop_loss`). YAML is the durable baseline; DB `position_json` overrides field-by-field if edited via the UI and re-imported.
 
 ## Data Model Highlights
 
@@ -228,4 +235,4 @@ Valuation fallback → Look for "Valuation fallback used" in warnings. Data Qual
 
 ---
 
-Last updated: 2026-06-08 (Features C–G completed: delta badges, valuation retry/cache, plan triggers, morning actions, sparkline)
+Last updated: 2026-06-08 (Features C–H completed: delta badges, valuation retry/cache, plan triggers, morning actions, sparkline, My Book P&L auto-weighting)

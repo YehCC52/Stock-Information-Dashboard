@@ -65,6 +65,9 @@ from stock_daily_research.report import (
     ticker_sparkline,
     _parse_price_levels,
     _plausible_levels,
+    derive_portfolio_weights,
+    portfolio_impact_summary,
+    portfolio_brief,
 )
 
 
@@ -2598,3 +2601,130 @@ def test_ticker_sparkline_empty_with_one_point() -> None:
         ticker_history={"NVDA": [curr]},
     )
     assert ticker_sparkline(report, "NVDA") == ""
+
+
+def _holding_report(holdings: list[tuple]) -> DailyReport:
+    """holdings: list of (symbol, shares, avg_cost, last_close, prev_close, weight)."""
+    reports = []
+    for sym, shares, avg_cost, last, prev, weight in holdings:
+        reports.append(
+            TickerReport(
+                ticker=TickerConfig(
+                    symbol=sym, company_name=f"{sym} Inc",
+                    position=PositionConfig(status="holding", shares=shares, avg_cost=avg_cost, portfolio_weight=weight),
+                ),
+                articles=[], x_signals=[],
+                valuation=ValuationSnapshot(
+                    ticker=sym, as_of_date=date(2026, 4, 28), source="yfinance",
+                    metrics={"last_close": last, "previous_close": prev},
+                    retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                ),
+                earnings=None,
+            )
+        )
+    return DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=reports,
+    )
+
+
+def test_derive_portfolio_weights_normalizes_by_size() -> None:
+    # A: 10 sh @ last 150 = 1500; B: 5 sh @ last 100 = 500; total 2000 → 75% / 25%
+    report = _holding_report([
+        ("A", 10.0, 100.0, 150.0, 150.0, None),
+        ("B", 5.0, 100.0, 100.0, 100.0, None),
+    ])
+    out = derive_portfolio_weights(report)
+    weights = {tr.ticker.symbol: tr.ticker.position.portfolio_weight for tr in out.ticker_reports}
+    assert weights["A"] == 75.0
+    assert weights["B"] == 25.0
+
+
+def test_derive_portfolio_weights_preserves_manual_override() -> None:
+    report = _holding_report([
+        ("A", 10.0, 100.0, 150.0, 150.0, 60.0),  # manual weight set
+        ("B", 5.0, 100.0, 100.0, 100.0, None),
+    ])
+    out = derive_portfolio_weights(report)
+    weights = {tr.ticker.symbol: tr.ticker.position.portfolio_weight for tr in out.ticker_reports}
+    assert weights["A"] == 60.0  # untouched
+    assert weights["B"] == 25.0  # derived from total size 2000
+
+
+def test_derive_portfolio_weights_falls_back_to_avg_cost() -> None:
+    # No last_close → size uses avg_cost
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="A", company_name="A Inc",
+                    position=PositionConfig(status="holding", shares=10.0, avg_cost=100.0)),
+                articles=[], x_signals=[], valuation=None, earnings=None,
+            )
+        ],
+    )
+    out = derive_portfolio_weights(report)
+    assert out.ticker_reports[0].ticker.position.portfolio_weight == 100.0
+
+
+def test_portfolio_impact_summary_total_pl_leaders_laggards() -> None:
+    # MU +69% (avg 100 → last 169), X -20% (avg 100 → last 80)
+    report = _holding_report([
+        ("MU", 10.0, 100.0, 169.0, 168.0, None),
+        ("X", 10.0, 100.0, 80.0, 80.0, None),
+    ])
+    report = derive_portfolio_weights(report)
+    summary = portfolio_impact_summary(report)
+    assert summary["pl_leaders"][0]["symbol"] == "MU"
+    assert summary["pl_leaders"][0]["pl_pct"] == 69.0
+    assert summary["pl_laggards"][0]["symbol"] == "X"
+    assert summary["pl_laggards"][0]["pl_pct"] == -20.0
+    # total cost 2000, total mv 1690+800=2490 → +490, +24.5%
+    assert summary["total_pl_dollar"] == 490.0
+    assert summary["total_pl_pct"] == 24.5
+
+
+def test_portfolio_impact_summary_concentration_default_threshold() -> None:
+    # A is 80% of book → over the default 15% threshold
+    report = _holding_report([
+        ("A", 80.0, 100.0, 100.0, 100.0, None),
+        ("B", 20.0, 100.0, 100.0, 100.0, None),
+    ])
+    report = derive_portfolio_weights(report)
+    summary = portfolio_impact_summary(report)
+    assert summary["concentration_threshold"] == 15.0
+    over = {r["symbol"] for r in summary["over_concentrated"]}
+    assert "A" in over   # 80% weight
+    assert "B" in over   # 20% weight (also > 15)
+
+
+def test_portfolio_impact_summary_no_concentration_when_balanced() -> None:
+    # 8 equal holdings = 12.5% each, all under 15%
+    holdings = [(chr(65 + i), 10.0, 100.0, 100.0, 100.0, None) for i in range(8)]
+    report = derive_portfolio_weights(_holding_report(holdings))
+    summary = portfolio_impact_summary(report)
+    assert summary["over_concentrated"] == []
+
+
+def test_portfolio_brief_includes_key_lines() -> None:
+    report = _holding_report([
+        ("MU", 10.0, 100.0, 80.0, 95.0, None),   # total return -20%, down today
+        ("ARM", 5.0, 100.0, 174.0, 170.0, None),  # total return +74%, up today
+    ])
+    report = derive_portfolio_weights(report)
+    text = portfolio_brief(report)
+    assert "Portfolio Brief - 2026-04-28" in text
+    assert "unrealized P&L" in text
+    assert "Leaders:" in text or "Laggards:" in text
+
+
+def test_portfolio_brief_empty_when_no_holdings() -> None:
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[],
+    )
+    text = portfolio_brief(report)
+    assert "No holdings configured." in text
