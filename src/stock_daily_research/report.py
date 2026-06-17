@@ -96,8 +96,13 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env = _build_environment(template_dir, autoescape_html=True)
     env.filters["pe_class"] = pe_class
     env.filters["earnings_urgency"] = lambda value: earnings_urgency(value, report.report_date)
+    env.filters["earnings_urgency_label"] = lambda value: earnings_urgency_label(value, report.report_date)
     env.filters["days_until"] = lambda value: days_until(value, report.report_date)
     env.filters["earnings_delta"] = lambda item: earnings_delta(item, report.report_date)
+    env.filters["zh_text"] = zh_text
+    env.filters["position_status_label"] = position_status_label
+    env.filters["review_status_label"] = review_status_label
+    env.filters["card_state_label"] = card_state_label
     env.filters["ticker_anchor"] = lambda symbol: f"ticker-{symbol.lower()}"
     env.filters["event_label"] = event_label
     env.filters["news_rationale"] = news_rationale
@@ -687,12 +692,12 @@ def days_until(value: object, anchor: date) -> str:
         return ""
     delta = (value - anchor).days
     if delta < 0:
-        return f"{-delta}d ago"
+        return f"{-delta}天前"
     if delta == 0:
-        return "today"
+        return "今日"
     if delta == 1:
-        return "tomorrow"
-    return f"in {delta}d"
+        return "明日"
+    return f"{delta}天後"
 
 
 def earnings_delta(item: TickerReport, anchor: date) -> int | None:
@@ -716,6 +721,106 @@ def earnings_urgency(value: object, anchor: date) -> str:
     return "later"
 
 
+def earnings_urgency_label(value: object, anchor: date) -> str:
+    labels = {
+        "none": "",
+        "past": "已過期",
+        "imminent": "即將公布",
+        "soon": "近期",
+        "week": "本週",
+        "later": "稍後",
+    }
+    return labels.get(earnings_urgency(value, anchor), "")
+
+
+def position_status_label(value: object) -> str:
+    labels = {
+        "watchlist": "觀察中",
+        "holding": "已持有",
+        "tracking": "追蹤中",
+        "avoid": "暫不考慮",
+    }
+    text = str(value or "")
+    return labels.get(text, text)
+
+
+def review_status_label(value: object) -> str:
+    labels = {
+        "reviewed": "已檢視",
+        "in-progress": "檢視中",
+        "not-reviewed": "未檢視",
+    }
+    text = str(value or "")
+    return labels.get(text, text.replace("-", " ").title())
+
+
+def card_state_label(value: object) -> str:
+    labels = {
+        "hot": "熱點",
+        "warm": "關注",
+        "warn": "警示",
+        "quiet": "安靜",
+    }
+    text = str(value or "")
+    return labels.get(text, text.title())
+
+
+def zh_text(value: object) -> str:
+    """Display-only Traditional Chinese wording for common dashboard phrases."""
+    text = str(value or "")
+    replacements = {
+        "Breakout confirmed": "突破確認",
+        "Pullback buy zone": "回檔買點區",
+        "Extended, do not chase": "已延伸，避免追高",
+        "Mixed / neutral": "中性",
+        "Thesis weakening": "投資論點轉弱",
+        "Avoid": "暫避",
+        "Reviewed": "已檢視",
+        "In progress": "檢視中",
+        "Not reviewed": "未檢視",
+        "watching": "觀察中",
+        "building": "建立中",
+        "active": "有效",
+        "weakening": "轉弱",
+        "broken": "失效",
+        "unmarked": "未標記",
+        "Above 20D / 60D / 120D": "站上 20D / 60D / 120D",
+        "Above 20D / 60D, below 120D": "站上 20D / 60D，低於 120D",
+        "Below 20D / 60D / 120D": "低於 20D / 60D / 120D",
+        "Near 20D support": "接近 20D 支撐",
+        "5D below 20D": "5D 低於 20D",
+        "near 52w high": "接近 52 週高",
+        "below 52w high": "低於 52 週高",
+        "right at 52w high": "貼近 52 週高",
+        "revisions up": "預估上修",
+        "flat revisions": "預估持平",
+        "EPS negative / unstable": "EPS 轉弱/不穩",
+        "overbought": "過熱",
+        "oversold": "超賣",
+        "data warnings": "資料警示",
+        "data warning": "資料警示",
+        "top stories": "重點新聞",
+        "top story": "重點新聞",
+        "headlines": "則新聞",
+        "headline": "則新聞",
+        "Earnings today": "今日財報",
+        "Earnings tomorrow": "明日財報",
+        "Trailing P/E": "過去12月 P/E",
+        "Forward P/E": "預估 P/E",
+        "None": "無",
+        "Extreme": "極高",
+        "High": "高",
+        "Elevated": "偏高",
+        "Low": "低",
+        "Medium": "中",
+        "volume": "成交量",
+        "today": "今日",
+    }
+    for src, dest in replacements.items():
+        text = text.replace(src, dest)
+    return text
+
+
 def event_label(event_type: object) -> str:
     return EVENT_LABELS.get(str(event_type), str(event_type).replace("_", " ").title())
 
@@ -723,20 +828,20 @@ def event_label(event_type: object) -> str:
 # One-line interpretation for top news, by event_type.
 # Goal: turn "headline" into "judgment" — what should the reader take from it.
 NEWS_RATIONALE: dict[str, str] = {
-    "earnings": "Earnings read-through",
-    "guidance": "Forward-look impact",
-    "ai": "AI / capex implication",
-    "deal": "Strategic positioning",
-    "regulation": "Regulatory overhang",
-    "lawsuit": "Litigation risk",
-    "antitrust": "Antitrust overhang",
-    "supply": "Supply-chain signal",
-    "product": "Product cycle signal",
-    "analyst": "Sell-side view shift",
-    "analyst_call": "Sell-side view shift",
-    "management": "Leadership transition",
-    "macro": "Macro tape risk",
-    "market": "Macro tape risk",
+    "earnings": "財報解讀",
+    "guidance": "前景影響評估",
+    "ai": "AI/資本支出啟示",
+    "deal": "戰略佈局",
+    "regulation": "監管風險",
+    "lawsuit": "訴訟風險",
+    "antitrust": "反壟斷隱憂",
+    "supply": "供應鏈訊號",
+    "product": "產品週期訊號",
+    "analyst": "賣方觀點轉變",
+    "analyst_call": "賣方觀點轉變",
+    "management": "領導層變動",
+    "macro": "宏觀風險",
+    "market": "宏觀風險",
 }
 
 
@@ -767,16 +872,16 @@ def earnings_action(item: TickerReport, anchor: date) -> str | None:
 
     if delta == 0:
         if rsi is not None and rsi >= 70:
-            return "Wait reaction (overextended)"
+            return "等待反應（過度延伸）"
         if rsi is not None and rsi <= 30:
-            return "Watch capitulation"
-        return "Watch reaction"
+            return "觀察恐慌賣壓"
+        return "觀察反應"
     if delta == 1:
-        return "Prepare plan"
+        return "準備計畫"
     if 2 <= delta <= 7:
-        return "Build thesis"
+        return "建立論點"
     if -7 <= delta <= -1:
-        return "Review outcome"
+        return "檢視結果"
     return None
 
 

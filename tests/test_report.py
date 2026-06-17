@@ -28,6 +28,7 @@ from stock_daily_research.report import (
     days_until,
     earnings_delta,
     earnings_urgency,
+    earnings_urgency_label,
     eps_power_summary,
     eps_revision_class,
     event_label,
@@ -95,7 +96,7 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "Premarket tone" in output
     assert "Top risk" in output
     assert "Focus" in output
-    assert "Macro Calendar" in output
+    assert "宏觀日曆" in output
     assert "Overnight / Premarket" in output
     assert "Today&#39;s Focus" in output or "Today's Focus" in output
     assert "focus-rank" in output
@@ -111,18 +112,18 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "Next Q Revenue Rev 30D" in output
     assert "My Book Today" in output
     assert "My Book Impact Today" in output
-    assert "Ticker Cards" in output
+    assert "個股卡片" in output
     assert "Nvidia revenue beats" in output
     assert "+4.00% on 1.8x volume" in output
     assert "5.26T" in output
-    assert "Position &amp; book" in output
+    assert "部位與帳面" in output
     assert "What Changed Since Last Run" in output
     assert "Generated: 2026-04-28 15:00 Taiwan Time (UTC+8)" in output
     assert "2026-04-28 15:00 TWN / UTC+8" in output
     assert "Market data timestamp: 2026-04-28 11:00 UTC" in output
-    assert "Capital Allocation Queue" in output
-    assert "No action before event" in output
-    assert "Avoid chase" in output
+    assert "資金配置清單" in output
+    assert "事件前暫不動作" in output
+    assert "避免追高" in output
     assert "window.claude.complete" in output
 
 
@@ -275,20 +276,20 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert "data-volume-x=" in output
     assert "data-position-weight=" in output
     assert "from-high-chip" in output
-    assert "From high -5.45%" in output
+    assert "距高點 -5.45%" in output
     assert "data-revenue-rev-30d=" in output
     assert "data-next-q-revenue-rev-30d=" in output
     assert "enhanceFocusFromLocalState" in output
     assert "thesis_trigger" in output
-    assert "FY1 rev rev" in output
-    assert "NextQ rev rev" in output
+    assert "FY1營收修正" in output
+    assert "下季營收修正" in output
     assert "stock-daily-draft-post-earnings" in output
     assert "data-local-revisit-hero" in output
     assert "syncRevisitHero" in output
-    assert "Manage" in output
-    assert "Next earnings" in output
-    assert "Valuation risk" in output
-    assert "Exports: watchlist TXT" in output
+    assert "管理" in output
+    assert "下次財報" in output
+    assert "估值風險" in output
+    assert "監看清單 TXT" in output
     assert "Research Queue" in output
     assert "What Changed in 30d" in output
 
@@ -360,7 +361,7 @@ def test_render_html_report_seeds_sqlite_backed_research_state_and_history() -> 
 
     output = render_html_report(report)
 
-    assert "Research timeline" in output
+    assert "研究紀錄" in output
     assert "Review queue" in output
     assert "Recent thesis changes" in output
     assert "Archive" in output
@@ -368,7 +369,7 @@ def test_render_html_report_seeds_sqlite_backed_research_state_and_history() -> 
     assert '"history_days": 45' in output
     assert "Thesis state changed" in output
     assert "Research memory" in output
-    assert "Reviewed" in output
+    assert "已複核" in output
 
 
 def test_render_html_report_marks_imminent_earnings() -> None:
@@ -397,16 +398,17 @@ def test_render_html_report_marks_imminent_earnings() -> None:
     output = render_html_report(report)
 
     assert "earnings-pill imminent" in output
-    assert ">today<" in output
+    assert "即將公布" in output
+    assert ">今日<" in output
 
 
 def test_days_until_handles_relative_dates() -> None:
     anchor = date(2026, 4, 28)
 
-    assert days_until(date(2026, 4, 28), anchor) == "today"
-    assert days_until(date(2026, 4, 29), anchor) == "tomorrow"
-    assert days_until(date(2026, 5, 5), anchor) == "in 7d"
-    assert days_until(date(2026, 4, 27), anchor) == "1d ago"
+    assert days_until(date(2026, 4, 28), anchor) == "今日"
+    assert days_until(date(2026, 4, 29), anchor) == "明日"
+    assert days_until(date(2026, 5, 5), anchor) == "7天後"
+    assert days_until(date(2026, 4, 27), anchor) == "1天前"
     assert days_until(None, anchor) == ""
 
 
@@ -443,6 +445,16 @@ def test_earnings_urgency_buckets() -> None:
     assert earnings_urgency(date(2026, 5, 5), anchor) == "week"
     assert earnings_urgency(date(2026, 5, 20), anchor) == "later"
     assert earnings_urgency(date(2026, 4, 1), anchor) == "past"
+
+
+def test_earnings_urgency_label_localizes_buckets() -> None:
+    anchor = date(2026, 4, 28)
+
+    assert earnings_urgency_label(date(2026, 4, 28), anchor) == "即將公布"
+    assert earnings_urgency_label(date(2026, 4, 30), anchor) == "近期"
+    assert earnings_urgency_label(date(2026, 5, 5), anchor) == "本週"
+    assert earnings_urgency_label(date(2026, 5, 20), anchor) == "稍後"
+    assert earnings_urgency_label(date(2026, 4, 1), anchor) == "已過期"
 
 
 def test_pe_class_buckets() -> None:
@@ -639,10 +651,10 @@ def test_news_rationale_maps_event_types() -> None:
         def __init__(self, ev):
             self.event_type = ev
 
-    assert news_rationale(FakeArticle("earnings")) == "Earnings read-through"
-    assert news_rationale(FakeArticle("ai")) == "AI / capex implication"
-    assert news_rationale(FakeArticle("deal")) == "Strategic positioning"
-    assert news_rationale(FakeArticle("regulation")) == "Regulatory overhang"
+    assert news_rationale(FakeArticle("earnings")) == "財報解讀"
+    assert news_rationale(FakeArticle("ai")) == "AI/資本支出啟示"
+    assert news_rationale(FakeArticle("deal")) == "戰略佈局"
+    assert news_rationale(FakeArticle("regulation")) == "監管風險"
     # Unknown event_type → empty
     assert news_rationale(FakeArticle("unknown_thing")) == ""
 
@@ -924,13 +936,13 @@ def test_earnings_action_routes_by_timing_and_rsi() -> None:
 
     today = date(2026, 4, 28)
 
-    assert earnings_action(make(today, rsi=75), today) == "Wait reaction (overextended)"
-    assert earnings_action(make(today, rsi=25), today) == "Watch capitulation"
-    assert earnings_action(make(today, rsi=50), today) == "Watch reaction"
-    assert earnings_action(make(date(2026, 4, 29)), today) == "Prepare plan"
-    assert earnings_action(make(date(2026, 5, 3)), today) == "Build thesis"
-    assert earnings_action(make(date(2026, 4, 27)), today) == "Review outcome"
-    assert earnings_action(make(date(2026, 4, 21)), today) == "Review outcome"  # 7d ago boundary
+    assert earnings_action(make(today, rsi=75), today) == "等待反應（過度延伸）"
+    assert earnings_action(make(today, rsi=25), today) == "觀察恐慌賣壓"
+    assert earnings_action(make(today, rsi=50), today) == "觀察反應"
+    assert earnings_action(make(date(2026, 4, 29)), today) == "準備計畫"
+    assert earnings_action(make(date(2026, 5, 3)), today) == "建立論點"
+    assert earnings_action(make(date(2026, 4, 27)), today) == "檢視結果"
+    assert earnings_action(make(date(2026, 4, 21)), today) == "檢視結果"  # 7d ago boundary
     assert earnings_action(make(date(2026, 4, 20)), today) is None  # outside window
     assert earnings_action(make(None), today) is None
 
@@ -1703,7 +1715,7 @@ def test_rule_alerts_and_priority_items_surface_risk_workflow() -> None:
 
     assert len(alerts) == 1
     assert "AMD:" in alerts[0]["title"]
-    assert "earnings in 6d" in alerts[0]["title"]
+    assert "earnings 6天後" in alerts[0]["title"]
     assert "stretched valuation" in alerts[0]["title"]
     assert "Trailing P/E 130" in alerts[0]["detail"]
     assert "no trusted news" in alerts[0]["title"]

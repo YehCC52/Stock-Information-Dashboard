@@ -207,6 +207,23 @@
     }
     :root[data-theme="dark"] .theme-toggle .dot { background: var(--info); }
     :root[data-theme="light"] .theme-toggle .dot { background: var(--warning); }
+    .language-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+    .language-toggle:hover { background: var(--surface-soft); }
+    .language-toggle:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
     h1 { margin: 0; font-size: 28px; }
     h2 { margin: 0 0 12px; font-size: 17px; display: flex; align-items: center; gap: 10px; }
     h2 .count { color: var(--muted); font-size: 13px; font-weight: 500; }
@@ -628,12 +645,12 @@
     }
     .card-secondary > summary::-webkit-details-marker { display: none; }
     .card-secondary > summary::after {
-      content: "Show";
+      content: "顯示";
       color: var(--link);
       font-size: 11px;
       font-weight: 800;
     }
-    .card-secondary[open] > summary::after { content: "Hide"; }
+    .card-secondary[open] > summary::after { content: "隱藏"; }
     .mode-bar {
       display: flex;
       flex-wrap: wrap;
@@ -1128,7 +1145,7 @@
     }
     .pe-meta { color: var(--muted); font-size: 11px; }
     .pe-status { color: var(--good); font-size: 11px; font-weight: 700; margin-left: auto; }
-    .pe-status:empty::before { content: "Not reviewed yet"; color: var(--warning); font-weight: 600; }
+    .pe-status:empty::before { content: "尚未檢視"; color: var(--warning); font-weight: 600; }
     .post-earnings-form {
       display: flex;
       flex-direction: column;
@@ -1592,6 +1609,15 @@
       gap: 6px;
       max-width: 200px;
     }
+    .ticker-actions .icon-button {
+      width: auto;
+      min-width: 34px;
+      max-width: 72px;
+      padding: 0 7px;
+      white-space: nowrap;
+      font-size: 14px;
+      line-height: 1;
+    }
     .review-status.reviewed { color: var(--good); background: var(--good-bg); }
     .review-status.in-progress { color: var(--info); background: var(--info-bg); }
     .review-status.not-reviewed { color: var(--muted); background: var(--surface-soft); }
@@ -1951,61 +1977,66 @@
       </div>
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
-          <input id="quick-search" class="search-box" type="search" placeholder="Search ticker or company" autocomplete="off">
-          <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="Show only pinned tickers; everything else is hidden">Watchlist only</button>
-          <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">Export watchlist</button>
-          <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">Export research</button>
-          <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">Export earnings</button>
-          <div id="export-status" class="export-status" aria-live="polite">Exports: watchlist TXT | research JSON | earnings JSON</div>
+          <input id="quick-search" class="search-box" type="search" placeholder="搜尋代碼或公司名稱" autocomplete="off" data-i18n="label_search">
+          <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="只顯示釘選的股票">只看釘選</button>
+          <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">匯出觀察清單</button>
+          <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">匯出研究狀態</button>
+          <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">匯出財報數據</button>
+          <button id="save-to-db" type="button" class="tool-button tool-button-success" title="儲存所有變更到資料庫" style="background: var(--good); color: white; border-color: var(--good);">儲存到資料庫</button>
+          <div id="save-status" class="export-status" aria-live="polite"></div>
+          <div id="export-status" class="export-status" aria-live="polite">匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON</div>
         </div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
-          <span class="theme-label">Auto</span>
+          <span class="theme-label">自動</span>
+        </button>
+        <button id="language-toggle" type="button" class="language-toggle" aria-label="Toggle language: 中文 / English" title="切換語言 / Toggle language">
+          <span class="lang-label">中文</span>
         </button>
         <div class="focus-line">
-          <span><span class="focus-num">{{ summary.ticker_count }}</span> tickers</span>
+          <span><span class="focus-num">{{ summary.ticker_count }}</span> 檔股票</span>
           <span class="sep">|</span>
-          <span><span class="focus-num">{{ summary.earnings_soon_count }}</span> earnings <=7d</span>
+          <span><span class="focus-num">{{ summary.earnings_soon_count }}</span> 財報 7 天內</span>
           <span class="sep">|</span>
-          <span><span class="focus-num">{{ summary.economic_event_count }}</span> macro</span>
+          <span><span class="focus-num">{{ summary.economic_event_count }}</span> 總經事件</span>
         </div>
       </div>
     </header>
 
     <nav class="toc" aria-label="Sections">
-      {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">Actions {{ morning_actions|length }}</a>{% endif %}
-      <a href="#hero">Today</a>
-      <a href="#summary">Summary</a>
-      <a href="#todays-focus">Focus</a>
-      <a href="#capital-allocation">Capital</a>
-      <a href="#research-queue">Research</a>
-      {% if book_today %}<a href="#book-today">My Book</a>{% endif %}
-      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">My Book ({{ portfolio.holdings|length }})</a>{% endif %}
-      {% if book_impact %}<a href="#book-impact">Book Impact</a>{% endif %}
-      {% if report.premarket %}<a href="#premarket">Premarket</a>{% endif %}
-      <a href="#today-catalysts">Catalysts</a>
-      {% if sector_leadership %}<a href="#sector-leadership">Sectors</a>{% endif %}
-      {% if post_earnings_items %}<a href="#post-earnings-scoreboard">Post-Earnings</a>{% endif %}
-      {% if overextended %}<a href="#overextended" class="toc-pill">Stretched {{ overextended|length }}</a>{% endif %}
-      {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">Alerts {{ rule_alerts|length }}</a>{% endif %}
-      {% if report.warnings %}<a href="#global-warnings" class="toc-pill">Warnings {{ report.warnings|length }}</a>{% endif %}
-      {% if data_quality.flagged %}<a href="#data-quality" class="toc-pill">Data {{ data_quality.flagged|length }}</a>{% endif %}
-      {% if report.market_sentiment %}<a href="#market-sentiment">Sentiment</a>{% endif %}
-      {% if report.market_context and report.market_context.rates %}<a href="#rates">Rates</a>{% endif %}
-      {% if report.market_context and report.market_context.breadth %}<a href="#breadth">Breadth</a>{% endif %}
-      <a href="#macro">Macro ({{ report.economic_events|length }})</a>
-      <a href="#earnings">Earnings ({{ earnings_soon|length }})</a>
-      {% if news_clusters %}<a href="#news-clusters">Events ({{ news_clusters|length }})</a>{% endif %}
-      <a href="#news">News ({{ important_news|length }})</a>
-      <a href="#changes">Changes</a>
-      <a href="#valuation">Valuation</a>
-      <a href="#tickers">Tickers ({{ report.ticker_reports|length }})</a>
+      {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">行動 {{ morning_actions|length }}</a>{% endif %}
+      <a href="#hero">今日</a>
+      <a href="#summary">總覽</a>
+      <a href="#todays-focus">焦點</a>
+      <a href="#capital-allocation">資金</a>
+      <a href="#research-queue">研究</a>
+      {% if book_today %}<a href="#book-today">我的持股</a>{% endif %}
+      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">我的持股 ({{ portfolio.holdings|length }})</a>{% endif %}
+      {% if book_impact %}<a href="#book-impact">持股影響</a>{% endif %}
+      {% if report.premarket %}<a href="#premarket">盤前</a>{% endif %}
+      <a href="#today-catalysts">催化</a>
+      {% if sector_leadership %}<a href="#sector-leadership">產業</a>{% endif %}
+      {% if post_earnings_items %}<a href="#post-earnings-scoreboard">財報後</a>{% endif %}
+      {% if overextended %}<a href="#overextended" class="toc-pill">過熱 {{ overextended|length }}</a>{% endif %}
+      {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">警示 {{ rule_alerts|length }}</a>{% endif %}
+      {% if report.warnings %}<a href="#global-warnings" class="toc-pill">警告 {{ report.warnings|length }}</a>{% endif %}
+      {% if data_quality.flagged %}<a href="#data-quality" class="toc-pill">資料 {{ data_quality.flagged|length }}</a>{% endif %}
+      {% if report.market_sentiment %}<a href="#market-sentiment">情緒</a>{% endif %}
+      {% if report.market_context and report.market_context.rates %}<a href="#rates">利率</a>{% endif %}
+      {% if report.market_context and report.market_context.breadth %}<a href="#breadth">廣度</a>{% endif %}
+      <a href="#macro">總經 ({{ report.economic_events|length }})</a>
+      <a href="#earnings">財報 ({{ earnings_soon|length }})</a>
+      {% if news_clusters %}<a href="#news-clusters">事件 ({{ news_clusters|length }})</a>{% endif %}
+      <a href="#news">新聞 ({{ important_news|length }})</a>
+      <a href="#changes">變化</a>
+      <a href="#valuation">估值</a>
+      <a href="#tickers">個股 ({{ report.ticker_reports|length }})</a>
     </nav>
 
     {% if morning_actions %}
     <section id="morning-actions" class="section morning-actions" aria-label="Morning actions">
       <div class="section-header">
-        <h2>Morning Actions <span class="muted">— decide these first</span></h2>
+        <h2>早盤行動 <span class="muted">— 先決定這些</span></h2>
       </div>
       <ul class="morning-actions-list">
         {% for action in morning_actions %}
@@ -2052,22 +2083,22 @@
       </div>
       <aside class="command-side" id="summary">
         <div class="mode-bar" role="group" aria-label="Today work mode">
-          <button type="button" class="tool-button mode-button" data-mode="overview" aria-pressed="true">Overview</button>
-          <button type="button" class="tool-button mode-button" data-mode="review" aria-pressed="false">Review mode</button>
-          <button type="button" class="tool-button mode-button" data-mode="prep" aria-pressed="false">Prep mode</button>
-          <span id="mode-hint" class="mode-hint">Full dashboard view</span>
+          <button type="button" class="tool-button mode-button" data-mode="overview" aria-pressed="true">概覽</button>
+          <button type="button" class="tool-button mode-button" data-mode="review" aria-pressed="false">檢視模式</button>
+          <button type="button" class="tool-button mode-button" data-mode="prep" aria-pressed="false">準備模式</button>
+          <span id="mode-hint" class="mode-hint">完整儀表板視圖</span>
         </div>
         <div class="summary-grid" aria-label="Summary">
-          <div class="stat {% if summary.hot_count %}alert danger{% endif %}" title="Tickers with earnings today or 2+ top stories"><span class="stat-value">{{ summary.hot_count }}</span><span class="stat-label">Hot</span></div>
-          <div class="stat {% if summary.premarket_gap_count %}alert{% endif %}" title="Watchlist names moving more than +/-2% in premarket/latest quote"><span class="stat-value">{{ summary.premarket_gap_count }}</span><span class="stat-label">Premarket gaps</span></div>
-          <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">Earnings <=7d</span></div>
-          <div class="stat {% if summary.economic_event_count %}alert{% endif %}" title="Tracked macro events"><span class="stat-value">{{ summary.economic_event_count }}</span><span class="stat-label">Macro</span></div>
-          <div class="stat"><span class="stat-value">{{ summary.ticker_count }}</span><span class="stat-label">Tickers</span></div>
-          <div class="stat" title="Research review status loaded from SQLite-backed state"><span class="stat-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="stat-label">Reviewed</span></div>
+          <div class="stat {% if summary.hot_count %}alert danger{% endif %}" title="Tickers with earnings today or 2+ top stories"><span class="stat-value">{{ summary.hot_count }}</span><span class="stat-label">熱點</span></div>
+          <div class="stat {% if summary.premarket_gap_count %}alert{% endif %}" title="Watchlist names moving more than +/-2% in premarket/latest quote"><span class="stat-value">{{ summary.premarket_gap_count }}</span><span class="stat-label">盤前缺口</span></div>
+          <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">財報 <=7 天</span></div>
+          <div class="stat {% if summary.economic_event_count %}alert{% endif %}" title="Tracked macro events"><span class="stat-value">{{ summary.economic_event_count }}</span><span class="stat-label">宏觀</span></div>
+          <div class="stat"><span class="stat-value">{{ summary.ticker_count }}</span><span class="stat-label">代碼</span></div>
+          <div class="stat" title="Research review status loaded from SQLite-backed state"><span class="stat-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="stat-label">已檢視</span></div>
           {% if report.market_sentiment %}
           <div class="stat {% if report.market_sentiment.score <= 24 or report.market_sentiment.score >= 76 %}alert danger{% elif report.market_sentiment.score <= 44 or report.market_sentiment.score >= 56 %}alert{% endif %}" title="Free yfinance proxy, not a proprietary index"><span class="stat-value">{{ report.market_sentiment.score }}</span><span class="stat-label">{{ report.market_sentiment.label }}</span></div>
           {% endif %}
-          <div class="stat {% if summary.rsi_overbought_count or summary.rsi_oversold_count %}alert{% endif %}" title="RSI 14 extremes across ticker cards"><span class="stat-value">{{ summary.rsi_overbought_count }} / {{ summary.rsi_oversold_count }}</span><span class="stat-label">RSI high / low</span></div>
+          <div class="stat {% if summary.rsi_overbought_count or summary.rsi_oversold_count %}alert{% endif %}" title="RSI 14 extremes across ticker cards"><span class="stat-value">{{ summary.rsi_overbought_count }} / {{ summary.rsi_oversold_count }}</span><span class="stat-label">RSI 高/低</span></div>
         </div>
         {% if rule_alerts %}
         <div class="command-alerts">
@@ -2096,7 +2127,7 @@
       </div>
       <div class="focus-grid">
         <div class="focus-column review">
-          <h3><span class="focus-icon">R</span>Review first</h3>
+          <h3><span class="focus-icon">R</span>優先檢視</h3>
           {% if todays_focus.review_first %}
           <ul class="focus-list">
             {% for row in todays_focus.review_first %}
@@ -2106,7 +2137,7 @@
           {% else %}<div class="section-empty">No urgent review queue.</div>{% endif %}
         </div>
         <div class="focus-column chase">
-          <h3><span class="focus-icon">E</span>No action before event</h3>
+          <h3><span class="focus-icon">E</span>事件前暫不動作</h3>
           {% if todays_focus.no_action_before_event %}
           <ul class="focus-list">
             {% for row in todays_focus.no_action_before_event %}
@@ -2116,7 +2147,7 @@
           {% else %}<div class="section-empty">No event-window names blocking action.</div>{% endif %}
         </div>
         <div class="focus-column pullback">
-          <h3><span class="focus-icon">P</span>Pullback setup</h3>
+          <h3><span class="focus-icon">P</span>回檔機會</h3>
           {% if todays_focus.pullback_setup %}
           <ul class="focus-list">
             {% for row in todays_focus.pullback_setup %}
@@ -2126,7 +2157,7 @@
           {% else %}<div class="section-empty">No clean pullback watch.</div>{% endif %}
         </div>
         <div class="focus-column chase">
-          <h3><span class="focus-icon">!</span>Avoid chase</h3>
+          <h3><span class="focus-icon">!</span>避免追高</h3>
           {% if todays_focus.avoid_chase %}
           <ul class="focus-list">
             {% for row in todays_focus.avoid_chase %}
@@ -2140,18 +2171,18 @@
 
     <section id="capital-allocation" class="section section-primary">
       <div class="section-header">
-        <h2>Capital Allocation Queue</h2>
+        <h2>資金配置清單</h2>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Grade</th>
-              <th>Ticker</th>
-              <th>Action</th>
-              <th class="num">Score</th>
-              <th>Status</th>
-              <th>Reasons</th>
+              <th data-i18n="table_grade">評分</th>
+              <th data-i18n="table_ticker">代碼</th>
+              <th data-i18n="table_action">操作</th>
+              <th class="num" data-i18n="table_score">分數</th>
+              <th data-i18n="table_status">狀態</th>
+              <th data-i18n="table_reasons">原因</th>
             </tr>
           </thead>
           <tbody>
@@ -2262,11 +2293,11 @@
         <table>
           <thead>
             <tr>
-              <th>Ticker</th>
-              <th class="num">Move</th>
-              <th class="num">Weight</th>
-              <th class="num">Book impact</th>
-              <th>Action</th>
+              <th data-i18n="table_ticker">代碼</th>
+              <th class="num" data-i18n="table_move">漲跌幅</th>
+              <th class="num" data-i18n="table_weight">持股比重</th>
+              <th class="num" data-i18n="table_book_impact">帳面影響</th>
+              <th data-i18n="table_action">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -2399,7 +2430,7 @@
     {% if post_earnings_items %}
     <section id="post-earnings-scoreboard" class="section section-secondary">
       <div class="section-header">
-        <h2>Post-Earnings Scoreboard <span class="count">({{ post_earnings_items|length }})</span></h2>
+        <h2>財報後計分板 <span class="count">({{ post_earnings_items|length }})</span></h2>
       </div>
       <div class="table-wrap">
         <table>
@@ -2415,7 +2446,7 @@
               <th class="num">FY1 EPS rev</th>
               <th class="num">FY1 revenue rev</th>
               <th class="num">Price reaction</th>
-              <th>Review</th>
+              <th>檢視</th>
             </tr>
           </thead>
           <tbody>
@@ -2433,7 +2464,7 @@
               <td class="num change change-{{ pe_default.fy1_eps_revision_after|change_class }}" data-pe-score-field="fy1_eps_revision_after" data-default="{% if pe_default.fy1_eps_revision_after is not none %}{{ pe_default.fy1_eps_revision_after }}{% endif %}">{{ pe_default.fy1_eps_revision_after|format_pct }}</td>
               <td class="num change change-{{ pe_default.fy1_revenue_revision_after|change_class }}" data-pe-score-field="fy1_revenue_revision_after" data-default="{% if pe_default.fy1_revenue_revision_after is not none %}{{ pe_default.fy1_revenue_revision_after }}{% endif %}">{{ pe_default.fy1_revenue_revision_after|format_pct }}</td>
               <td class="num change change-{{ row.reaction|change_class }}">{{ row.reaction|format_pct }}</td>
-              <td><span class="scoreboard-status{% if pe_default.conclusion or pe_default.next_step %} partial{% endif %}" data-pe-score-field="review">{% if pe_default.conclusion or pe_default.next_step %}Reviewed{% else %}Not reviewed{% endif %}</span></td>
+              <td><span class="scoreboard-status{% if pe_default.conclusion or pe_default.next_step %} partial{% endif %}" data-pe-score-field="review">{% if pe_default.conclusion or pe_default.next_step %}已檢視{% else %}未檢視{% endif %}</span></td>
             </tr>
             {% endfor %}
           </tbody>
@@ -2484,7 +2515,7 @@
 
       {% if portfolio.over_concentrated %}
       <div class="concentration-warning" role="alert">
-        <strong>Concentration risk</strong> — {{ portfolio.over_concentrated|length }} holding{{ 's' if portfolio.over_concentrated|length > 1 else '' }} above {{ portfolio.concentration_threshold|format_pct(sign=False) }}:
+        <strong>集中風險</strong> — {{ portfolio.over_concentrated|length }} holding{{ 's' if portfolio.over_concentrated|length > 1 else '' }} above {{ portfolio.concentration_threshold|format_pct(sign=False) }}:
         {% for r in portfolio.over_concentrated %}<a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }} {{ r.weight|format_pct(sign=False) }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
         Review before adding.
       </div>
@@ -2492,7 +2523,7 @@
 
       <div class="my-book-grid">
         <div class="my-book-card winners">
-          <div class="mb-label">Largest positive impact</div>
+          <div class="mb-label">最大正面影響</div>
           {% if portfolio.winners %}
           <ul class="mb-list">
             {% for r in portfolio.winners %}
@@ -2506,7 +2537,7 @@
         </div>
 
         <div class="my-book-card losers">
-          <div class="mb-label">Largest negative impact</div>
+          <div class="mb-label">最大負面影響</div>
           {% if portfolio.losers %}
           <ul class="mb-list">
             {% for r in portfolio.losers %}
@@ -2768,7 +2799,7 @@
     <section id="rule-alerts" class="section section-primary">
       <div class="section-header">
         <h2>Rule Alerts <span class="count">({{ rule_alerts|length }} tickers)</span></h2>
-        {% if rule_alerts|length > 6 %}<button id="toggle-alerts" type="button" class="tool-button">Show all</button>{% endif %}
+        {% if rule_alerts|length > 6 %}<button id="toggle-alerts" type="button" class="tool-button">顯示全部</button>{% endif %}
       </div>
       <div class="alert-list">
         {% for alert in rule_alerts %}
@@ -2823,7 +2854,7 @@
     </section>
 
     <section id="macro" class="section section-secondary">
-      <h2>Macro Calendar <span class="count">(next events)</span></h2>
+      <h2>宏觀日曆 <span class="count">(next events)</span></h2>
       {% if report.economic_events %}
       <div class="macro-row">
         {% for event in report.economic_events %}
@@ -2841,7 +2872,7 @@
     </section>
 
     <section id="earnings" class="section section-tertiary">
-      <h2>Earnings Soon <span class="count">(next 7 days)</span></h2>
+      <h2>近期財報 <span class="count">(next 7 days)</span></h2>
       {% if earnings_soon %}
       <div class="earnings-row">
         {% for item in earnings_soon %}
@@ -2849,7 +2880,7 @@
         <a class="earnings-pill {{ urgency }}" href="#{{ item.ticker.symbol|ticker_anchor }}">
           <div class="top">
             <span class="symbol">{{ item.ticker.symbol }}</span>
-            <span class="when">{{ item.earnings.earnings_date|days_until }}</span>
+            <span class="when">{{ item.earnings.earnings_date|days_until }}{% set urgency_label = item.earnings.earnings_date|earnings_urgency_label %}{% if urgency_label %} · {{ urgency_label }}{% endif %}</span>
           </div>
           <span class="name">{{ item.ticker.company_name }}</span>
           <span class="date">{{ item.earnings.earnings_date|date_or_na }} | {{ item.earnings.source }}</span>
@@ -2892,7 +2923,7 @@
     <section id="news" class="section section-tertiary">
       <div class="section-header">
         <h2>Important News <span class="count">({{ important_news[:5]|length }} picks / {{ important_news|length }} total)</span></h2>
-        {% if important_news|length > 5 %}<button id="toggle-news" type="button" class="tool-button">Show backlog</button>{% endif %}
+        {% if important_news|length > 5 %}<button id="toggle-news" type="button" class="tool-button">顯示積壓</button>{% endif %}
       </div>
       {% if important_news %}
       <ul class="news-list">
@@ -2923,7 +2954,7 @@
     <section id="valuation" class="section section-tertiary">
       <div class="section-header">
         <h2>Valuation Snapshot <span class="count">({{ report.ticker_reports|length }} tickers)</span></h2>
-        <button id="toggle-valuation" type="button" class="tool-button" aria-expanded="true">Collapse</button>
+        <button id="toggle-valuation" type="button" class="tool-button" aria-expanded="true">收合</button>
       </div>
       <div id="valuation-body">
       <div class="valuation-controls">
@@ -2983,82 +3014,82 @@
 
     <section id="tickers" class="section section-primary">
       <div class="section-header">
-        <h2>Ticker Cards <span class="count" id="ticker-count">({{ report.ticker_reports|length }})</span></h2>
-        <button id="toggle-quiet" type="button" class="tool-button">Show Quiet</button>
+        <h2>個股卡片 <span class="count" id="ticker-count">({{ report.ticker_reports|length }})</span></h2>
+        <button id="toggle-quiet" type="button" class="tool-button">顯示安靜</button>
       </div>
-      <div class="sort-hint">Sorted by market cap (largest first)</div>
+      <div class="sort-hint">依市值排序（由大到小）</div>
       <div class="legend" aria-label="Card state legend">
-        <span class="badge danger">Hot</span> earnings today or 2+ top stories
+        <span class="badge danger">熱點</span> 今日財報或 2 則以上重點新聞
         <span class="legend-sep">|</span>
-        <span class="badge good">Warm</span> news or earnings <=7d
+        <span class="badge good">關注</span> 有新聞或 7 天內財報
         <span class="legend-sep">|</span>
-        <span class="badge warn">Warn</span> data warnings
+        <span class="badge warn">警示</span> 資料警示
         <span class="legend-sep">|</span>
-        <span class="badge">Quiet</span> no major catalyst
+        <span class="badge">安靜</span> 無主要催化
       </div>
       <div class="ticker-controls">
-        <label class="control-label" for="focus-filter">Focus</label>
+        <label class="control-label" for="focus-filter" data-i18n="label_focus">焦點</label>
         <select id="focus-filter" class="control-select">
-          <option value="all">All</option>
-          <option value="watchlist">My watchlist</option>
-          <option value="reviewed">Reviewed</option>
-          <option value="unreviewed">Unreviewed</option>
+          <option value="all" data-i18n="option_all">全部</option>
+          <option value="watchlist" data-i18n="option_watchlist">釘選項目</option>
+          <option value="reviewed" data-i18n="option_reviewed">已檢視</option>
+          <option value="unreviewed" data-i18n="option_unreviewed">未檢視</option>
         </select>
-        <label class="control-label" for="state-filter">State</label>
+        <label class="control-label" for="state-filter" data-i18n="label_state">狀態</label>
         <select id="state-filter" class="control-select">
-          <option value="all">All active</option>
-          <option value="hot">Hot</option>
-          <option value="warm">Warm</option>
-          <option value="warn">Warn</option>
-          <option value="quiet">Quiet</option>
+          <option value="all" data-i18n="option_all_active">全部活躍</option>
+          <option value="hot" data-i18n="option_hot">熱點</option>
+          <option value="warm" data-i18n="option_warm">溫和</option>
+          <option value="warn" data-i18n="option_warn">警示</option>
+          <option value="quiet" data-i18n="option_quiet">安靜</option>
         </select>
-        <label class="control-label" for="score-filter">Score</label>
+        <label class="control-label" for="score-filter">分數</label>
         <select id="score-filter" class="control-select">
-          <option value="all">Any score</option>
-          <option value="breakout-confirmed">Breakout confirmed</option>
-          <option value="pullback-buy-zone">Pullback buy zone</option>
-          <option value="extended-do-not-chase">Extended, do not chase</option>
-          <option value="mixed-neutral">Mixed / neutral</option>
-          <option value="thesis-weakening">Thesis weakening</option>
-          <option value="avoid">Avoid</option>
+          <option value="all">任意分數</option>
+          <option value="breakout-confirmed">突破確認</option>
+          <option value="pullback-buy-zone">回檔買點區</option>
+          <option value="extended-do-not-chase">已延伸，避免追高</option>
+          <option value="mixed-neutral">中性</option>
+          <option value="thesis-weakening">投資論點轉弱</option>
+          <option value="avoid">暫避</option>
         </select>
-        <label class="control-label" for="earnings-filter">Earnings</label>
+        <label class="control-label" for="earnings-filter">財報</label>
         <select id="earnings-filter" class="control-select">
-          <option value="all">Any date</option>
-          <option value="today">Today</option>
-          <option value="tomorrow">Tomorrow</option>
-          <option value="7d">Next 7d</option>
+          <option value="all">任意日期</option>
+          <option value="today">今日</option>
+          <option value="tomorrow">明日</option>
+          <option value="7d">7 天內</option>
         </select>
         <label class="control-label" for="rsi-filter">RSI</label>
         <select id="rsi-filter" class="control-select">
-          <option value="all">Any RSI</option>
-          <option value="oversold">Oversold &lt;=30</option>
-          <option value="neutral">Neutral 30-70</option>
-          <option value="overbought">Overbought &gt;=70</option>
+          <option value="all">任意 RSI</option>
+          <option value="oversold">超賣 &lt;=30</option>
+          <option value="neutral">中性 30-70</option>
+          <option value="overbought">過熱 &gt;=70</option>
         </select>
-        <label class="control-label" for="topic-filter">Topic</label>
+        <label class="control-label" for="topic-filter">主題</label>
         <select id="topic-filter" class="control-select">
-          <option value="all">All topics</option>
+          <option value="all">全部主題</option>
           <option value="ai">AI</option>
           <option value="cloud">Cloud</option>
           <option value="memory">Memory</option>
           <option value="ev">EV</option>
         </select>
         {% if sectors %}
-        <label class="control-label" for="sector-filter">Sector</label>
+        <label class="control-label" for="sector-filter">產業</label>
         <select id="sector-filter" class="control-select">
-          <option value="all">All sectors</option>
+          <option value="all">全部產業</option>
           {% for sec in sectors %}<option value="{{ sec|lower }}">{{ sec }}</option>{% endfor %}
         </select>
         {% endif %}
         {% if clusters %}
-        <label class="control-label" for="cluster-filter">Cluster</label>
+        <label class="control-label" for="cluster-filter">群組</label>
         <select id="cluster-filter" class="control-select">
-          <option value="all">All clusters</option>
+          <option value="all">全部群組</option>
           {% for cluster in clusters %}<option value="{{ cluster|lower }}">{{ cluster }}</option>{% endfor %}
         </select>
         {% endif %}
-        <label class="control-label checkbox"><input id="risk-filter" type="checkbox"> Risk only</label>
+        <label class="control-label checkbox"><input id="risk-filter" type="checkbox"> 僅看風險</label>
       </div>
       <div id="compare-panel" class="compare-panel is-hidden" aria-live="polite"></div>
       <div class="ticker-grid" id="ticker-grid">
@@ -3085,31 +3116,31 @@
               {% if sector %}<div class="ticker-sector">{{ sector }}</div>{% endif %}
               {% if research.thesis_state or research.last_reviewed_at %}
               <div class="ticker-sector">
-                {% if research.thesis_state %}Thesis: {{ research.thesis_state }}{% endif %}
-                {% if research.last_reviewed_at %}{% if research.thesis_state %} | {% endif %}Last reviewed {{ research.last_reviewed_at.date().isoformat() }}{% endif %}
+                {% if research.thesis_state %}投資論點：{{ research.thesis_state|zh_text }}{% endif %}
+                {% if research.last_reviewed_at %}{% if research.thesis_state %} | {% endif %}上次檢視 {{ research.last_reviewed_at.date().isoformat() }}{% endif %}
               </div>
               {% endif %}
               {% if item.earnings and item.earnings.earnings_date %}<div class="countdown" data-countdown="{{ item.earnings.earnings_date.isoformat() }}" data-time-of-day="{{ item.earnings.time_of_day }}"></div>{% endif %}
             </div>
             <div class="ticker-actions">
-              <button type="button" class="icon-button pin-button" aria-label="Pin {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">Pin</button>
-              <button type="button" class="icon-button quick-done" aria-label="Mark all checklist items reviewed" data-quick-done="{{ item.ticker.symbol }}" title="Mark earnings/guidance/valuation/news/thesis as reviewed">Done</button>
-              <button type="button" class="icon-button quick-revisit" aria-label="Bump revisit date by one day" data-quick-revisit="{{ item.ticker.symbol }}" title="Set revisit to today + 1d (or push existing date forward)">+1d</button>
-              {% if state == "hot" %}<span class="badge danger">Hot</span>
-              {% elif state == "warn" %}<span class="badge warn">Warn</span>
-              {% elif state == "warm" %}<span class="badge good">Warm</span>
-              {% else %}<span class="badge">Quiet</span>{% endif %}
-              {% if fhigh is not none %}<span class="badge from-high-chip change change-{{ fhigh|change_class }}" title="Distance from 52-week high">From high {{ fhigh|format_pct }}</span>{% endif %}
-              {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="Right-side score {{ insights.score.score }}/100">{{ insights.score.status }}</span>{% endif %}
+              <button type="button" class="icon-button pin-button" aria-label="釘選 {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">釘選</button>
+              <button type="button" class="icon-button quick-done" aria-label="標記所有檢視項目完成" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已檢視">完成</button>
+              <button type="button" class="icon-button quick-revisit" aria-label="檢視日期延後一天" data-quick-revisit="{{ item.ticker.symbol }}" title="把檢視日期設為今天 +1 天，或將既有日期往後推一天">+1天</button>
+              {% if state == "hot" %}<span class="badge danger">{{ state|card_state_label }}</span>
+              {% elif state == "warn" %}<span class="badge warn">{{ state|card_state_label }}</span>
+              {% elif state == "warm" %}<span class="badge good">{{ state|card_state_label }}</span>
+              {% else %}<span class="badge">{{ state|card_state_label }}</span>{% endif %}
+              {% if fhigh is not none %}<span class="badge from-high-chip change change-{{ fhigh|change_class }}" title="距離 52 週高點">距高點 {{ fhigh|format_pct }}</span>{% endif %}
+              {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="右側分數 {{ insights.score.score }}/100">{{ insights.score.status|zh_text }}</span>{% endif %}
               {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="Data confidence {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ') }}{% endif %}">Data {{ dq.tag }}</span>{% endif %}
-              <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|replace('-', ' ')|title }}</span>
+              <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|review_status_label }}</span>
               {% for trig in plan_triggers_for(item.ticker.symbol) %}<span class="plan-trigger-chip tone-{{ trig.tone }}" title="{{ trig.headline }} — {{ trig.detail }}">{{ trig.label }}</span>{% endfor %}
             </div>
           </div>
 
           <div class="metrics metrics-compact">
             <div class="metric">
-              <span class="metric-label">Earnings</span>
+              <span class="metric-label">財報</span>
               <span class="metric-value">
                 {% if item.earnings and item.earnings.earnings_date %}
                   {{ item.earnings.earnings_date|days_until }}
@@ -3117,7 +3148,7 @@
               </span>
             </div>
             <div class="metric">
-              <span class="metric-label">Market Cap</span>
+              <span class="metric-label">市值</span>
               <span class="metric-value">{{ item.valuation.metrics.get("market_cap")|metric_value if item.valuation else "N/A" }}</span>
             </div>
             <div class="metric">
@@ -3127,35 +3158,35 @@
             </div>
             {% if tdelta %}
             <div class="metric">
-              <span class="metric-label">News</span>
+              <span class="metric-label">新聞</span>
               <span class="metric-value">{{ item.articles|length }}{% if tdelta.news_count_delta is not none and tdelta.news_count_delta != 0 %}<span class="{{ 'delta-up' if tdelta.news_count_delta > 0 else 'delta-down' }}">{{ '+' if tdelta.news_count_delta > 0 else '' }}{{ tdelta.news_count_delta }}</span>{% endif %}</span>
             </div>
             <div class="metric">
-              <span class="metric-label">Attn Score</span>
+              <span class="metric-label">關注分數</span>
               <span class="metric-value">{% if history_current %}{{ history_current.attention_score }}{% else %}N/A{% endif %}{% if tdelta.attention_score_delta is not none and tdelta.attention_score_delta != 0 %}<span class="{{ 'delta-up' if tdelta.attention_score_delta > 0 else 'delta-down' }}">{{ '+' if tdelta.attention_score_delta > 0 else '' }}{{ tdelta.attention_score_delta }}</span>{% endif %}{{ ticker_sparkline(item.ticker.symbol)|safe }}</span>
             </div>
             {% if tdelta.valuation_risk_direction != 'same' %}
             <div class="metric">
-              <span class="metric-label">Val Risk</span>
-              <span class="metric-value"><span class="{{ 'delta-down' if tdelta.valuation_risk_direction == 'up' else 'delta-up' }}">{{ '↑' if tdelta.valuation_risk_direction == 'up' else '↓' }}</span> {{ item|valuation_risk }}</span>
+              <span class="metric-label">估值風險</span>
+              <span class="metric-value"><span class="{{ 'delta-down' if tdelta.valuation_risk_direction == 'up' else 'delta-up' }}">{{ '↑' if tdelta.valuation_risk_direction == 'up' else '↓' }}</span> {{ item|valuation_risk|zh_text }}</span>
             </div>
             {% endif %}
             {% endif %}
           </div>
 
           <details class="card-secondary position-details">
-            <summary>Position &amp; book</summary>
+            <summary>持股與損益</summary>
             <div class="position-row">
               <div class="position-chip">
-                <span class="label">Position</span>
-                <span class="value">{{ pos.status }}{% if pos.sector %} · {{ pos.sector }}{% endif %}</span>
+                <span class="label">狀態</span>
+                <span class="value">{{ pos.status|position_status_label }}{% if pos.sector %} · {{ pos.sector }}{% endif %}</span>
               </div>
               <div class="position-chip">
-                <span class="label">Weight / Impact</span>
+                <span class="label">持股比重 / 影響</span>
                 <span class="value">{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight|format_pct(sign=False) }}{% else %}N/A{% endif %}{% if pos.book_impact is not none %} / {{ pos.book_impact|format_pct }}{% endif %}</span>
               </div>
               <div class="position-chip">
-                <span class="label">Avg cost</span>
+                <span class="label">均價</span>
                 <span class="value">{{ pos.avg_cost|metric_value }}</span>
               </div>
               <div class="position-chip">
@@ -3164,13 +3195,13 @@
               </div>
               {% if pos.stop_loss is not none %}
               <div class="position-chip tone-{{ pos.stop_distance_tone }}" title="Distance from stop-loss">
-                <span class="label">Stop</span>
-                <span class="value">${{ "%.2f"|format(pos.stop_loss) }}{% if pos.stop_distance_pct is not none %} · {{ pos.stop_distance_pct|format_pct }} away{% endif %}</span>
+                <span class="label">停損</span>
+                <span class="value">${{ "%.2f"|format(pos.stop_loss) }}{% if pos.stop_distance_pct is not none %} · 距離 {{ pos.stop_distance_pct|format_pct }}{% endif %}</span>
               </div>
               {% endif %}
               {% if pos.position_size is not none %}
               <div class="position-chip">
-                <span class="label">Size</span>
+                <span class="label">持股金額</span>
                 <span class="value">${{ "{:,.0f}".format(pos.position_size) }}</span>
               </div>
               {% endif %}
@@ -3178,25 +3209,25 @@
           </details>
 
           <div class="position-live" data-position-live="{{ item.ticker.symbol }}">
-            <span><span class="label">Live position</span><span class="value" data-position-live-status="{{ item.ticker.symbol }}">{{ pos.status }}</span></span>
-            <span><span class="label">Weight</span><span class="value" data-position-live-weight="{{ item.ticker.symbol }}">N/A</span></span>
+            <span><span class="label">持股狀態</span><span class="value" data-position-live-status="{{ item.ticker.symbol }}">{{ pos.status|position_status_label }}</span></span>
+            <span><span class="label">持股比重</span><span class="value" data-position-live-weight="{{ item.ticker.symbol }}">N/A</span></span>
             <span><span class="label">P/L</span><span class="value change" data-position-live-pl="{{ item.ticker.symbol }}">N/A</span></span>
-            <span><span class="label">Impact</span><span class="value change" data-position-live-impact="{{ item.ticker.symbol }}">N/A</span></span>
+            <span><span class="label">影響</span><span class="value change" data-position-live-impact="{{ item.ticker.symbol }}">N/A</span></span>
           </div>
 
           {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score %}
           <div class="insights">
-            {% if insights.action %}<div class="insight-row action"><span class="insight-label">Action</span><span class="insight-text">{{ insights.action }}</span></div>{% endif %}
+            {% if insights.action %}<div class="insight-row action"><span class="insight-label">操作</span><span class="insight-text">{{ insights.action|zh_text }}</span></div>{% endif %}
             {% if insights.score %}
             <details class="insight-row score score-{{ insights.score.tone }}">
               <summary>
-                <span class="insight-label">Score</span>
-                <span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status }}</span>
+                <span class="insight-label">分數</span>
+                <span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status|zh_text }}</span>
               </summary>
               {% if insights.score.reasons %}
               <ul class="score-breakdown">
                 {% for reason in insights.score.reasons %}
-                <li class="score-reason {% if reason.startswith('+') %}positive{% elif reason.startswith('-') %}negative{% endif %}">{{ reason }}</li>
+                <li class="score-reason {% if reason.startswith('+') %}positive{% elif reason.startswith('-') %}negative{% endif %}">{{ reason|zh_text }}</li>
                 {% endfor %}
               </ul>
               {% else %}
@@ -3204,47 +3235,47 @@
               {% endif %}
             </details>
             {% endif %}
-            {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">Setup</span><span class="insight-text">{{ insights.setup|join(' | ') }}</span></div>{% endif %}
-            {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title }}"{% endif %}><span class="insight-label">Trend</span><span class="insight-text">{{ insights.trend|join(' | ') }}</span></div>{% endif %}
-            {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">Strength</span><span class="insight-text">{{ insights.rs|join(' · ') }}</span></div>{% endif %}
-            {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">Risk</span><span class="insight-text">{{ insights.risk|join(' | ') }}</span></div>{% endif %}
+            {% if insights.setup %}<div class="insight-row setup"><span class="insight-label">重點</span><span class="insight-text">{{ insights.setup|join(' | ')|zh_text }}</span></div>{% endif %}
+            {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title|zh_text }}"{% endif %}><span class="insight-label">趨勢</span><span class="insight-text">{{ insights.trend|join(' | ')|zh_text }}</span></div>{% endif %}
+            {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">相對強度</span><span class="insight-text">{{ insights.rs|join(' · ')|zh_text }}</span></div>{% endif %}
+            {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">風險</span><span class="insight-text">{{ insights.risk|join(' | ')|zh_text }}</span></div>{% endif %}
           </div>
           {% endif %}
 
           {% if insights.quality or insights.watch %}
           <details class="card-secondary card-extras">
-            <summary>Quality &amp; watch</summary>
+            <summary>品質與觀察</summary>
             <div class="insights">
-              {% if insights.quality %}<div class="insight-row"><span class="insight-label">Quality</span><span class="insight-text">{{ insights.quality|join(' | ') }}</span></div>{% endif %}
-              {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">Watch</span><span class="insight-text">{{ insights.watch|join(' | ') }}</span></div>{% endif %}
+              {% if insights.quality %}<div class="insight-row"><span class="insight-label">品質</span><span class="insight-text">{{ insights.quality|join(' | ')|zh_text }}</span></div>{% endif %}
+              {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">觀察</span><span class="insight-text">{{ insights.watch|join(' | ')|zh_text }}</span></div>{% endif %}
             </div>
           </details>
           {% endif %}
 
           {% if history_points %}
           <details class="card-secondary">
-            <summary>Research timeline</summary>
+            <summary>研究紀錄</summary>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Thesis</th>
-                    <th>Review</th>
-                    <th class="num">Top news</th>
-                    <th>Valuation</th>
-                    <th class="num">Earnings</th>
-                    <th class="num">Warn</th>
+                    <th>日期</th>
+                    <th>投資論點</th>
+                    <th>檢視</th>
+                    <th class="num">重點新聞</th>
+                    <th>估值</th>
+                    <th class="num">財報</th>
+                    <th class="num">警示</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for point in history_points[:6] %}
                   <tr>
                     <td>{{ point.report_date.isoformat() }}</td>
-                    <td>{{ point.thesis_state or 'unmarked' }}</td>
-                    <td>{{ point.review_status }}</td>
+                    <td>{{ point.thesis_state|zh_text if point.thesis_state else '未標記' }}</td>
+                    <td>{{ point.review_status|review_status_label }}</td>
                     <td class="num">{{ point.top_news_count }}</td>
-                    <td>{{ point.valuation_risk }}</td>
+                    <td>{{ point.valuation_risk|zh_text }}</td>
                     <td class="num">{% if point.earnings_days is not none %}{{ point.earnings_days }}d{% else %}N/A{% endif %}</td>
                     <td class="num">{{ point.warning_count }}</td>
                   </tr>
@@ -3374,82 +3405,82 @@
           <div class="thesis-preview is-hidden" data-thesis-preview="{{ item.ticker.symbol }}"></div>
 
           <details class="user-tools-details">
-            <summary>Manage</summary>
+            <summary>管理</summary>
             <div class="user-tools">
-              <label class="compare-label"><input type="checkbox" class="compare-check" value="{{ item.ticker.symbol }}"> Add to compare</label>
+              <label class="compare-label"><input type="checkbox" class="compare-check" value="{{ item.ticker.symbol }}"> 加入比較</label>
               <div class="position-editor" data-position-editor="{{ item.ticker.symbol }}">
-                <label>Status
+                <label>狀態
                   <select data-position-field="status" data-position-symbol="{{ item.ticker.symbol }}">
-                    <option value="watchlist">Watchlist</option>
-                    <option value="holding">Holding</option>
-                    <option value="tracking">Tracking</option>
-                    <option value="avoid">Avoid</option>
+                    <option value="watchlist">觀察中</option>
+                    <option value="holding">已持有</option>
+                    <option value="tracking">追蹤中</option>
+                    <option value="avoid">暫不考慮</option>
                   </select>
                 </label>
-                <label>Shares
+                <label>股數
                   <input type="number" step="0.0001" min="0" data-position-field="shares" data-position-symbol="{{ item.ticker.symbol }}" placeholder="10">
                 </label>
-                <label>Avg cost
+                <label>均價
                   <input type="number" step="0.01" min="0" data-position-field="avg_cost" data-position-symbol="{{ item.ticker.symbol }}" placeholder="120.00">
                 </label>
-                <label>Weight %
+                <label>持股比重 %
                   <input type="number" step="0.01" min="0" data-position-field="portfolio_weight" data-position-symbol="{{ item.ticker.symbol }}" placeholder="5">
                 </label>
-                <label>Size $
+                <label>金額 $
                   <input type="number" step="1" min="0" data-position-field="position_size" data-position-symbol="{{ item.ticker.symbol }}" placeholder="auto">
                 </label>
-                <label>Stop
+                <label>停損
                   <input type="number" step="0.01" min="0" data-position-field="stop_loss" data-position-symbol="{{ item.ticker.symbol }}" placeholder="optional">
                 </label>
               </div>
               <div class="tag-row">
                 <label class="control-label" for="tag-{{ item.ticker.symbol }}">Tag</label>
                 <select id="tag-{{ item.ticker.symbol }}" class="tag-select" data-tag="{{ item.ticker.symbol }}">
-                  <option value="">None</option>
-                  <option value="High conviction">High conviction</option>
-                  <option value="Watch closely">Watch closely</option>
-                  <option value="Overvalued">Overvalued</option>
-                  <option value="Post-earnings review">Post-earnings review</option>
-                  <option value="Do not chase">Do not chase</option>
+                  <option value="">無</option>
+                  <option value="High conviction">高度確信</option>
+                  <option value="Watch closely">密切關注</option>
+                  <option value="Overvalued">高估</option>
+                  <option value="Post-earnings review">財報後檢視</option>
+                  <option value="Do not chase">勿追</option>
                 </select>
                 <span class="badge info tag-badge" data-tag-badge="{{ item.ticker.symbol }}"></span>
               </div>
               <div class="tag-row">
-                <label class="control-label" for="thesis-{{ item.ticker.symbol }}">Thesis</label>
+                <label class="control-label" for="thesis-{{ item.ticker.symbol }}">投資論點</label>
                 <div class="draft-row">
                   <select id="thesis-{{ item.ticker.symbol }}" class="tag-select" data-thesis="{{ item.ticker.symbol }}">
-                    <option value="">Unmarked</option>
-                    <option value="watching">Watching</option>
-                    <option value="building">Building</option>
-                    <option value="active">Active</option>
-                    <option value="weakening">Weakening</option>
-                    <option value="broken">Broken</option>
+                    <option value="">未標記</option>
+                    <option value="watching">觀察中</option>
+                    <option value="building">建立中</option>
+                    <option value="active">有效</option>
+                    <option value="weakening">轉弱</option>
+                    <option value="broken">失效</option>
                   </select>
-                  <button type="button" class="tool-button" data-thesis-draft="{{ item.ticker.symbol }}">Draft</button>
+                  <button type="button" class="tool-button" data-thesis-draft="{{ item.ticker.symbol }}">草稿</button>
                 </div>
               </div>
               <div class="tag-row">
-                <label class="control-label" for="thesis-trigger-{{ item.ticker.symbol }}">Trigger</label>
+                <label class="control-label" for="thesis-trigger-{{ item.ticker.symbol }}">觸發因素</label>
                 <select id="thesis-trigger-{{ item.ticker.symbol }}" class="tag-select" data-thesis-trigger="{{ item.ticker.symbol }}">
-                  <option value="">None</option>
-                  <option value="valuation">Valuation</option>
-                  <option value="guidance">Guidance</option>
-                  <option value="regulation">Regulation</option>
-                  <option value="competitive pressure">Competitive pressure</option>
-                  <option value="macro">Macro</option>
-                  <option value="execution">Execution</option>
+                  <option value="">無</option>
+                  <option value="valuation">估值</option>
+                  <option value="guidance">前景指引</option>
+                  <option value="regulation">監管</option>
+                  <option value="competitive pressure">競爭壓力</option>
+                  <option value="macro">宏觀</option>
+                  <option value="execution">執行</option>
                 </select>
               </div>
               <div class="tag-row">
-                <label class="control-label" for="thesis-text-{{ item.ticker.symbol }}">Thesis</label>
+                <label class="control-label" for="thesis-text-{{ item.ticker.symbol }}">投資論點</label>
                 <input type="text" id="thesis-text-{{ item.ticker.symbol }}" class="control-input thesis-text-input"
                   data-thesis-text="{{ item.ticker.symbol }}"
-                  placeholder="One-sentence thesis (e.g. AI capex → NVDA revenue beat)"
+                  placeholder="單句投資論點（例如：AI資本支出→NVDA營收超預期）"
                   maxlength="120">
               </div>
               <textarea class="note-input" rows="2" data-note="{{ item.ticker.symbol }}" placeholder="Notes: thesis, risk, what to watch"></textarea>
               <div class="revisit-row">
-                <label class="control-label" for="revisit-{{ item.ticker.symbol }}">Revisit</label>
+                <label class="control-label" for="revisit-{{ item.ticker.symbol }}">下次檢視</label>
                 <input id="revisit-{{ item.ticker.symbol }}" class="revisit-input" type="date" data-revisit="{{ item.ticker.symbol }}">
               </div>
               <div class="checklist" data-checklist="{{ item.ticker.symbol }}">
@@ -3463,7 +3494,7 @@
           </details>
 
           <details class="card-secondary investment-plan" data-plan-card="{{ item.ticker.symbol }}">
-            <summary>Investment plan</summary>
+            <summary>投資計畫</summary>
             <div class="plan-grid">
               <label class="plan-field">
                 <span class="plan-label up">Bull case</span>
@@ -3493,7 +3524,7 @@
           </details>
 
           <details>
-            <summary>News &amp; X signals</summary>
+            <summary>新聞與 X 訊號</summary>
             {% if item.articles %}
             <ul>
               {% for article in item.articles %}
@@ -3525,7 +3556,7 @@
     (function () {
       var STORAGE_KEY = "stock-daily-theme";
       var ORDER = ["auto", "light", "dark"];
-      var LABEL = { auto: "Auto", light: "Light", dark: "Dark" };
+      var LABEL = { auto: "自動", light: "淺色", dark: "深色" };
       var btn = document.getElementById("theme-toggle");
       if (!btn) return;
       var label = btn.querySelector(".theme-label");
@@ -3764,7 +3795,7 @@
         var weightEl = card.querySelector("[data-position-live-weight]");
         var plEl = card.querySelector("[data-position-live-pl]");
         var impactEl = card.querySelector("[data-position-live-impact]");
-        if (statusEl) statusEl.textContent = rec.status || "watchlist";
+        if (statusEl) statusEl.textContent = positionStatusLabel(rec.status || "watchlist");
         if (weightEl) weightEl.textContent = weight == null ? "N/A" : formattedPct(weight).replace(/^\+/, "");
         if (plEl) {
           plEl.textContent = plPct == null ? "N/A" : formattedPct(plPct) + (plDollar == null ? "" : " (" + formattedDollar(plDollar) + ")");
@@ -3791,9 +3822,68 @@
         return "not-reviewed";
       }
       function reviewLabel(state) {
-        if (state === "reviewed") return "Reviewed";
-        if (state === "in-progress") return "In progress";
-        return "Not reviewed";
+        if (state === "reviewed") return "已檢視";
+        if (state === "in-progress") return "檢視中";
+        return "未檢視";
+      }
+      function positionStatusLabel(state) {
+        if (state === "holding") return "已持有";
+        if (state === "tracking") return "追蹤中";
+        if (state === "avoid") return "暫不考慮";
+        return "觀察中";
+      }
+      function cardStateLabel(state) {
+        if (state === "hot") return "熱點";
+        if (state === "warm") return "關注";
+        if (state === "warn") return "警示";
+        return "安靜";
+      }
+      function valuationRiskLabel(value) {
+        if (value === "Extreme") return "極高";
+        if (value === "High") return "高";
+        if (value === "Elevated") return "偏高";
+        if (value === "None") return "無";
+        return value || "無";
+      }
+      function thesisStateLabel(value) {
+        if (value === "watching") return "觀察中";
+        if (value === "building") return "建立中";
+        if (value === "active") return "有效";
+        if (value === "weakening") return "轉弱";
+        if (value === "broken") return "失效";
+        return value || "未標記";
+      }
+      function thesisTriggerLabel(value) {
+        if (value === "valuation") return "估值";
+        if (value === "guidance") return "前景指引";
+        if (value === "regulation") return "監管";
+        if (value === "competitive pressure") return "競爭壓力";
+        if (value === "macro") return "宏觀";
+        if (value === "execution") return "執行";
+        return value || "無";
+      }
+      function scoreStatusLabel(value) {
+        if (!value) return "";
+        var normalized = String(value).replace(/-/g, " ").toLowerCase();
+        if (normalized === "breakout confirmed") return "突破確認";
+        if (normalized === "pullback buy zone") return "回檔買點區";
+        if (normalized === "extended do not chase") return "已延伸，避免追高";
+        if (normalized === "mixed-neutral" || normalized === "mixed neutral") return "中性";
+        if (normalized === "thesis weakening") return "投資論點轉弱";
+        if (normalized === "avoid") return "暫避";
+        return value;
+      }
+      function phraseLabel(value) {
+        return String(value || "—")
+          .replace(/Above/g, "站上")
+          .replace(/Below/g, "低於")
+          .replace(/below/g, "低於")
+          .replace(/Near 20D support/g, "接近 20D 支撐")
+          .replace(/5D 低於 20D/g, "5D 低於 20D")
+          .replace(/today/g, "今日")
+          .replace(/headlines/g, "則新聞")
+          .replace(/top stories/g, "重點新聞")
+          .replace(/top story/g, "重點新聞");
       }
       function topWatch(card) {
         var watch = (card.dataset.watch || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
@@ -4024,7 +4114,7 @@
           function paint() {
             var on = isPinned(card);
             btn.setAttribute("aria-pressed", on ? "true" : "false");
-            btn.textContent = on ? "Pinned" : "Pin";
+            btn.textContent = on ? "已釘選" : "釘選";
           }
           btn.addEventListener("click", function () {
             var s = symbol(card);
@@ -4371,7 +4461,7 @@
       function reviewStatusFor(sym) {
         var values = checklist[sym] || [];
         if (!values.length) return "—";
-        if (values.length >= 4) return "Reviewed";
+        if (values.length >= 4) return "已檢視";
         return values.length + "/5";
       }
 
@@ -4404,22 +4494,22 @@
         var rows = selected.map(function (card) {
           var sym = symbol(card);
           var scoreVal = card.dataset.rightSideScore || "";
-          var scoreStatus = (card.dataset.rightSideStatus || "").replace(/-/g, " ");
+          var scoreStatus = scoreStatusLabel(card.dataset.rightSideStatus || "");
           var scoreTone = card.dataset.rightSideTone || "";
-          var scoreCell = scoreVal ? scoreVal + "/100 — " + scoreStatus.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : "—";
+          var scoreCell = scoreVal ? scoreVal + "/100 — " + scoreStatus : "—";
           var weightCells = hideWeightColumns ? "" : ("<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>");
           return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
-            "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
+            "<td>" + escapeHtml(cardStateLabel(card.dataset.state || "")) + "</td>" +
             "<td class=\"score-" + escapeHtml(scoreTone) + "\">" + escapeHtml(scoreCell) + "</td>" +
-            "<td class=\"trend-" + escapeHtml(card.dataset.trendTone || "") + "\">" + escapeHtml(card.dataset.trend || "—") + "</td>" +
+            "<td class=\"trend-" + escapeHtml(card.dataset.trendTone || "") + "\">" + escapeHtml(phraseLabel(card.dataset.trend || "—")) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.dailyChange) + "\">" + formattedPct(card.dataset.dailyChange) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.fromHigh) + "\">" + formattedPct(card.dataset.fromHigh) + "</td>" +
             "<td>" + earningsText(card.dataset.earningsDays) + "</td>" +
             "<td>" + escapeHtml(reviewStatusFor(sym)) + "</td>" +
             "<td>" + escapeHtml(tagFor(card)) + "</td>" +
-            "<td>" + escapeHtml(thesisTextFor(sym) || thesisState(card)) + "</td>" +
-            "<td>" + escapeHtml(thesisTrigger(card)) + "</td>" +
+            "<td>" + escapeHtml(thesisTextFor(sym) || thesisStateLabel(thesisState(card))) + "</td>" +
+            "<td>" + escapeHtml(thesisTriggerLabel(thesisTrigger(card))) + "</td>" +
             "<td>" + escapeHtml(revisitFor(sym)) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.premarketChange) + "\">" + formattedPct(card.dataset.premarketChange) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.gapPct) + "\">" + formattedPct(card.dataset.gapPct) + "</td>" +
@@ -4429,24 +4519,24 @@
             "<td class=\"num change-" + signClass(attrValue(card, "epsRev30d", "data-eps-rev-30d")) + "\">" + formattedPct(attrValue(card, "epsRev30d", "data-eps-rev-30d")) + "</td>" +
             "<td class=\"num change-" + signClass(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")) + "\">" + formattedPct(attrValue(card, "revenueRev30d", "data-revenue-rev-30d")) + "</td>" +
             "<td class=\"num change-" + signClass(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")) + "\">" + formattedPct(attrValue(card, "nextQRevenueRev30d", "data-next-q-revenue-rev-30d")) + "</td>" +
-            "<td>" + escapeHtml(card.dataset.positionStatus || "watchlist") + "</td>" +
+            "<td>" + escapeHtml(positionStatusLabel(card.dataset.positionStatus || "watchlist")) + "</td>" +
             weightCells +
             "<td>" + escapeHtml(topWatch(card)) + "</td>" +
-            "<td>" + escapeHtml(valuationRisk(card)) + "</td>" +
+            "<td>" + escapeHtml(valuationRiskLabel(valuationRisk(card))) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.rsi) + "</td>" +
             "<td class=\"num\">" + (card.dataset.topNewsCount || "0") + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.marketCap) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.forwardPe, "x") + "</td></tr>";
         }).join("");
-        var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">Weight</th><th class=\"num\">Book impact</th>";
-        panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
+        var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">權重</th><th class=\"num\">帳面影響</th>";
+        panel.innerHTML = "<h3>比較模式 <button id=\"export-compare\" type=\"button\" class=\"tool-button\">匯出比較</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
-          "<th>Ticker</th><th>State</th><th>Score</th><th>Trend</th><th class=\"num\">Daily %</th><th class=\"num\">From High</th>" +
-          "<th>Next earnings</th><th>Review</th><th>User tag</th><th>Thesis</th><th>Trigger</th><th>Revisit</th>" +
-          "<th class=\"num\">Premarket</th><th class=\"num\">Gap</th><th class=\"num\">Vol/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS growth</th><th class=\"num\">EPS rev 30D</th><th class=\"num\">FY1 rev rev</th><th class=\"num\">NextQ rev rev</th><th>Position</th>" +
+          "<th>代碼</th><th>狀態</th><th>分數</th><th>趨勢</th><th class=\"num\">今日 %</th><th class=\"num\">距高點</th>" +
+          "<th>下次財報</th><th>檢視</th><th>標籤</th><th>投資論點</th><th>觸發因素</th><th>下次檢視</th>" +
+          "<th class=\"num\">盤前</th><th class=\"num\">缺口</th><th class=\"num\">量/20D</th><th class=\"num\">ATR %</th><th class=\"num\">EPS 成長</th><th class=\"num\">EPS 30D修正</th><th class=\"num\">FY1營收修正</th><th class=\"num\">下季營收修正</th><th>持股狀態</th>" +
           headerWeightCols +
-          "<th>Top watch</th><th>Valuation risk</th><th class=\"num\">RSI 14</th><th class=\"num\">Top news</th>" +
-          "<th class=\"num\">Market Cap</th><th class=\"num\">Forward P/E</th>" +
+          "<th>觀察重點</th><th>估值風險</th><th class=\"num\">RSI 14</th><th class=\"num\">重點新聞</th>" +
+          "<th class=\"num\">市值</th><th class=\"num\">預估 P/E</th>" +
           "</tr></thead><tbody>" +
           rows + "</tbody></table></div>";
         var exportBtn = document.getElementById("export-compare");
@@ -4511,8 +4601,8 @@
           if (!el) return;
           var target = new Date(el.dataset.countdown + "T00:00:00");
           var days = Math.round((target - today) / 86400000);
-          var session = { before_market: "before open", after_market: "after close", during_market: "during market", unknown: "time TBD" }[el.dataset.timeOfDay] || el.dataset.timeOfDay;
-          el.textContent = days <= 0 ? "Earnings today | " + session : "Earnings in " + days + "d | " + session;
+          var session = { before_market: "開盤前", after_market: "收盤後", during_market: "盤中", unknown: "時間待定" }[el.dataset.timeOfDay] || el.dataset.timeOfDay;
+          el.textContent = days <= 0 ? "今日財報 | " + session : days === 1 ? "明日財報 | " + session : days + "天後財報 | " + session;
         });
       }
 
@@ -4523,7 +4613,7 @@
             var extras = Array.prototype.slice.call(document.querySelectorAll(".news-extra"));
             var hidden = extras.some(function (el) { return el.classList.contains("is-hidden"); });
             extras.forEach(function (el) { el.classList.toggle("is-hidden", !hidden); });
-            newsBtn.textContent = hidden ? "Show picks" : "Show backlog";
+            newsBtn.textContent = hidden ? "顯示精選" : "顯示積壓";
           });
         }
         var alertsBtn = document.getElementById("toggle-alerts");
@@ -4532,7 +4622,7 @@
             var extras = Array.prototype.slice.call(document.querySelectorAll(".alert-extra"));
             var hidden = extras.some(function (el) { return el.classList.contains("is-hidden"); });
             extras.forEach(function (el) { el.classList.toggle("is-hidden", !hidden); });
-            alertsBtn.textContent = hidden ? "Show top 6" : "Show all";
+            alertsBtn.textContent = hidden ? "顯示前 6 名" : "顯示全部";
           });
         }
         var valuationBtn = document.getElementById("toggle-valuation");
@@ -4540,14 +4630,14 @@
         if (valuationBtn && valuationBody) {
           valuationBtn.addEventListener("click", function () {
             var hidden = valuationBody.classList.toggle("is-hidden");
-            valuationBtn.textContent = hidden ? "Expand" : "Collapse";
+            valuationBtn.textContent = hidden ? "展開" : "收合";
             valuationBtn.setAttribute("aria-expanded", hidden ? "false" : "true");
           });
         }
         if (toggleQuiet) {
           toggleQuiet.addEventListener("click", function () {
             showQuiet = !showQuiet;
-            toggleQuiet.textContent = showQuiet ? "Hide Quiet" : "Show Quiet";
+            toggleQuiet.textContent = showQuiet ? "隱藏安靜" : "顯示安靜";
             applyFilters();
           });
         }
@@ -4659,7 +4749,7 @@
               var cell = row.querySelector("[data-pe-score-field=\"" + field + "\"]");
               return !!rec[field] || !!(cell && cell.dataset.default);
             }).length;
-            review.textContent = done >= 5 ? "Reviewed" : done > 0 ? done + "/7" : "Not reviewed";
+            review.textContent = done >= 5 ? "已檢視" : done > 0 ? done + "/7" : "未檢視";
             review.classList.remove("done", "partial");
             if (done >= 5) review.classList.add("done");
             else if (done > 0) review.classList.add("partial");
@@ -4751,7 +4841,7 @@
         function apply() {
           document.body.classList.toggle("watchlist-mode", active);
           btn.setAttribute("aria-pressed", active ? "true" : "false");
-          btn.textContent = active ? "Exit watchlist" : "Watchlist only";
+          btn.textContent = active ? "離開釘選" : "只看釘選";
           // Force-open user-tools details for pinned cards in watchlist mode
           if (active) {
             cards.forEach(function (card) {
@@ -4997,30 +5087,30 @@
           var weightCells = hideWeightColumns ? "" : ("<td class=\"num\">" + formattedPct(card.dataset.positionWeight) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.bookImpact) + "\">" + formattedPct(card.dataset.bookImpact) + "</td>");
           return "<tr><td><a href=\"#" + card.id + "\">" + sym + "</a></td>" +
-            "<td>" + escapeHtml(card.dataset.state || "") + "</td>" +
-            "<td>" + escapeHtml(thesisState(card)) + "</td>" +
-            "<td>" + escapeHtml(thesisTrigger(card)) + "</td>" +
+            "<td>" + escapeHtml(cardStateLabel(card.dataset.state || "")) + "</td>" +
+            "<td>" + escapeHtml(thesisStateLabel(thesisState(card))) + "</td>" +
+            "<td>" + escapeHtml(thesisTriggerLabel(thesisTrigger(card))) + "</td>" +
             "<td>" + escapeHtml(reviewStatusFor(sym)) + "</td>" +
             "<td>" + escapeHtml(lastReviewedText(card.dataset.lastReviewedAt)) + "</td>" +
             "<td>" + earningsText(card.dataset.earningsDays) + "</td>" +
             "<td class=\"num\">" + formattedPct(card.dataset.newsBurst, false) + "</td>" +
             "<td class=\"num\">" + (card.dataset.topNewsCount || "0") + "</td>" +
-            "<td>" + escapeHtml(valuationRisk(card)) + "</td>" +
+            "<td>" + escapeHtml(valuationRiskLabel(valuationRisk(card))) + "</td>" +
             "<td>" + escapeHtml(revisions) + "</td>" +
             "<td class=\"num\">" + formattedNumber(card.dataset.attentionScore) + "</td>" +
             "<td class=\"num change-" + signClass(card.dataset.premarketChange) + "\">" + formattedPct(card.dataset.premarketChange) + "</td>" +
-            "<td>" + escapeHtml(card.dataset.positionStatus || "watchlist") + "</td>" +
+            "<td>" + escapeHtml(positionStatusLabel(card.dataset.positionStatus || "watchlist")) + "</td>" +
             weightCells +
             "<td>" + escapeHtml(tagFor(card)) + "</td>" +
             "<td>" + escapeHtml(revisitFor(sym)) + "</td></tr>";
         }).join("");
-        var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">Weight</th><th class=\"num\">Book impact</th>";
-        panel.innerHTML = "<h3>Compare mode <button id=\"export-compare\" type=\"button\" class=\"tool-button\">Export compare</button></h3>" +
+        var headerWeightCols = hideWeightColumns ? "" : "<th class=\"num\">權重</th><th class=\"num\">帳面影響</th>";
+        panel.innerHTML = "<h3>比較模式 <button id=\"export-compare\" type=\"button\" class=\"tool-button\">匯出比較</button></h3>" +
           "<div class=\"compare-table-wrap\"><table><thead><tr>" +
-          "<th>Ticker</th><th>State</th><th>Thesis</th><th>Trigger</th><th>Review</th><th>Last reviewed</th>" +
-          "<th>Next earnings</th><th class=\"num\">News burst</th><th class=\"num\">Top news</th><th>Valuation risk</th><th>30D revisions</th>" +
-          "<th class=\"num\">Attention</th><th class=\"num\">Premarket</th><th>Position</th>" +
-          headerWeightCols + "<th>User tag</th><th>Revisit</th>" +
+          "<th>代碼</th><th>狀態</th><th>投資論點</th><th>觸發因素</th><th>檢視</th><th>上次檢視</th>" +
+          "<th>下次財報</th><th class=\"num\">新聞增溫</th><th class=\"num\">重點新聞</th><th>估值風險</th><th>30D 修正</th>" +
+          "<th class=\"num\">關注分數</th><th class=\"num\">盤前</th><th>持股狀態</th>" +
+          headerWeightCols + "<th>標籤</th><th>下次檢視</th>" +
           "</tr></thead><tbody>" +
           rows + "</tbody></table></div>";
         var exportBtn = document.getElementById("export-compare");
@@ -5118,6 +5208,318 @@
           }
           saveReadNews();
         });
+      });
+    })();
+
+    // Language toggle
+    (function () {
+      var LANG_KEY = "stock-daily-language";
+      var currentLang = localStorage.getItem(LANG_KEY) || "zh";
+
+      var translations = {
+        en: {
+          "btn_watchlist": "Watchlist only",
+          "btn_export_watchlist": "Export watchlist",
+          "btn_export_research": "Export research",
+          "btn_export_earnings": "Export earnings",
+          "label_export_status": "Exports: watchlist TXT | research state JSON | earnings data JSON",
+          "label_search": "Search ticker or company",
+          "label_focus": "Focus",
+          "label_state": "State",
+          "label_score": "Score",
+          "label_earnings": "Earnings",
+          "label_rsi": "RSI",
+          "label_topic": "Topic",
+          "label_sector": "Sector",
+          "label_cluster": "Cluster",
+          "label_risk": "Risk",
+          "option_all": "All",
+          "option_watchlist": "My watchlist",
+          "option_reviewed": "Reviewed",
+          "option_unreviewed": "Unreviewed",
+          "option_all_active": "All active",
+          "option_hot": "Hot",
+          "option_warm": "Warm",
+          "option_warn": "Warn",
+          "option_quiet": "Quiet",
+          "table_grade": "Grade",
+          "table_ticker": "Ticker",
+          "table_action": "Action",
+          "table_score": "Score",
+          "table_status": "Status",
+          "table_reasons": "Reasons",
+          "table_move": "Move",
+          "table_weight": "Weight",
+          "table_book_impact": "Book impact",
+          "position_status": "Status",
+          "position_shares": "Shares",
+          "position_avg_cost": "Avg cost",
+          "position_weight": "Weight %",
+          "position_size": "Size $",
+          "position_stop": "Stop",
+          "thesis_trigger": "Trigger",
+          "thesis_revisit": "Revisit",
+          "thesis_none": "None",
+          "msg_loading": "Loading...",
+          "msg_no_data": "No data available",
+          "btn_pin": "Pin",
+          "btn_pinned": "Pinned",
+          "btn_compare": "Add to compare",
+          "btn_manage": "Manage",
+          "lang_zh": "中文",
+          "lang_en": "English"
+        },
+        zh: {
+          "btn_watchlist": "只看釘選",
+          "btn_export_watchlist": "匯出觀察清單",
+          "btn_export_research": "匯出研究狀態",
+          "btn_export_earnings": "匯出財報數據",
+          "label_export_status": "匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON",
+          "label_search": "搜尋代碼或公司名稱",
+          "label_focus": "焦點",
+          "label_state": "狀態",
+          "label_score": "分數",
+          "label_earnings": "財報",
+          "label_rsi": "RSI",
+          "label_topic": "主題",
+          "label_sector": "行業",
+          "label_cluster": "集群",
+          "label_risk": "風險",
+          "option_all": "全部",
+          "option_watchlist": "釘選項目",
+          "option_reviewed": "已檢視",
+          "option_unreviewed": "未檢視",
+          "option_all_active": "全部活躍",
+          "option_hot": "熱點",
+          "option_warm": "溫和",
+          "option_warn": "警示",
+          "option_quiet": "安靜",
+          "table_grade": "評分",
+          "table_ticker": "代碼",
+          "table_action": "操作",
+          "table_score": "分數",
+          "table_status": "狀態",
+          "table_reasons": "原因",
+          "table_move": "漲跌幅",
+          "table_weight": "持股比重",
+          "table_book_impact": "帳面影響",
+          "position_status": "狀態",
+          "position_shares": "股數",
+          "position_avg_cost": "均價",
+          "position_weight": "持股比重 %",
+          "position_size": "金額 $",
+          "position_stop": "停損",
+          "thesis_trigger": "觸發因素",
+          "thesis_revisit": "下次檢視",
+          "thesis_none": "無",
+          "msg_loading": "載入中...",
+          "msg_no_data": "無可用數據",
+          "btn_pin": "釘選",
+          "btn_pinned": "已釘選",
+          "btn_compare": "加入比較",
+          "btn_manage": "管理",
+          "lang_zh": "中文",
+          "lang_en": "English"
+        }
+      };
+
+      function t(key) {
+        return (translations[currentLang] || translations.zh)[key] || key;
+      }
+
+      function setLanguage(lang) {
+        if (lang !== "en" && lang !== "zh") lang = "zh";
+        currentLang = lang;
+        localStorage.setItem(LANG_KEY, lang);
+        applyLanguage();
+        var langBtn = document.getElementById("language-toggle");
+        if (langBtn) {
+          var label = langBtn.querySelector(".lang-label");
+          if (label) label.textContent = lang === "zh" ? "中文" : "English";
+        }
+      }
+
+      function applyLanguage() {
+        // Update button text
+        var btns = {
+          "watchlist-mode-toggle": "btn_watchlist",
+          "export-watchlist": "btn_export_watchlist",
+          "export-research": "btn_export_research",
+          "export-earnings": "btn_export_earnings"
+        };
+        Object.keys(btns).forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = t(btns[id]);
+        });
+
+        // Update export status text
+        var statusEl = document.getElementById("export-status");
+        if (statusEl) statusEl.textContent = t("label_export_status");
+
+        // Update table headers
+        var headerMap = {
+          "th_grade": "table_grade",
+          "th_ticker": "table_ticker",
+          "th_action": "table_action",
+          "th_score": "table_score",
+          "th_status": "table_status",
+          "th_reasons": "table_reasons"
+        };
+        Object.keys(headerMap).forEach(function (selector) {
+          var els = document.querySelectorAll("[data-i18n='" + selector + "']");
+          els.forEach(function (el) {
+            el.textContent = t(headerMap[selector]);
+          });
+        });
+
+        // Update filter labels
+        var filterLabels = {
+          "label_focus": ["label_focus"],
+          "label_state": ["label_state"],
+          "label_score": ["label_score"],
+          "label_earnings": ["label_earnings"]
+        };
+
+        // Update all elements with data-i18n attribute
+        var i18nEls = document.querySelectorAll("[data-i18n]");
+        i18nEls.forEach(function (el) {
+          var key = el.dataset.i18n;
+          if (translations[currentLang] && translations[currentLang][key]) {
+            el.textContent = translations[currentLang][key];
+          }
+        });
+      }
+
+      var langToggle = document.getElementById("language-toggle");
+      if (langToggle) {
+        langToggle.addEventListener("click", function () {
+          setLanguage(currentLang === "zh" ? "en" : "zh");
+        });
+      }
+
+      // Apply saved language on page load
+      applyLanguage();
+
+      window.i18n = { t: t, setLanguage: setLanguage, currentLang: function () { return currentLang; } };
+    })();
+
+    // Save to database functionality
+    (function () {
+      var saveBtn = document.getElementById("save-to-db");
+      var saveStatus = document.getElementById("save-status");
+
+      if (!saveBtn) return;
+
+      saveBtn.addEventListener("click", function () {
+        saveBtn.disabled = true;
+        saveStatus.textContent = "正在儲存...";
+        saveStatus.style.color = "var(--info)";
+
+        // Collect research state from localStorage
+        var researchState = {};
+
+        var pinned = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-pins") || "[]"); } catch (e) { return []; }
+        })();
+
+        var tags = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-tags") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var thesisStates = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-thesis") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var thesisTriggers = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-thesis-triggers") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var thesisTexts = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-thesis-text") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var notes = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-notes") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var checklists = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-checklist") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var plans = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-plans") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var earningsQuestions = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-earnings-questions") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var positions = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-positions") || "{}"); } catch (e) { return {}; }
+        })();
+
+        var postEarnings = (function () {
+          try { return JSON.parse(localStorage.getItem("stock-daily-draft-post-earnings") || "{}"); } catch (e) { return {}; }
+        })();
+
+        // Collect all tickers from the page
+        var cards = document.querySelectorAll("[data-symbol]");
+        var allSymbols = [];
+        cards.forEach(function (card) {
+          var sym = card.dataset.symbol;
+          if (sym && allSymbols.indexOf(sym) === -1) allSymbols.push(sym);
+        });
+
+        // Build research state for each ticker
+        allSymbols.forEach(function (sym) {
+          researchState[sym] = {
+            ticker: sym,
+            pinned: pinned.indexOf(sym) !== -1,
+            tag: tags[sym] || "",
+            thesis_state: thesisStates[sym] || "",
+            thesis_trigger: thesisTriggers[sym] || "",
+            thesis_text: thesisTexts[sym] || "",
+            note: (notes[sym] && notes[sym].note) || "",
+            revisit_date: (notes[sym] && notes[sym].revisit) || null,
+            checklist: checklists[sym] || [],
+            bull_case: (plans[sym] && plans[sym].bull_case) || "",
+            bear_case: (plans[sym] && plans[sym].bear_case) || "",
+            entry_plan: (plans[sym] && plans[sym].entry_plan) || "",
+            add_zone: (plans[sym] && plans[sym].add_zone) || "",
+            reduce_zone: (plans[sym] && plans[sym].reduce_zone) || "",
+            stop_loss: (plans[sym] && plans[sym].stop_loss) || "",
+            earnings_questions: earningsQuestions[sym] || [],
+            position: positions[sym] || {},
+            post_earnings_review: postEarnings[sym] || {}
+          };
+        });
+
+        // Send to API
+        var payload = { research_state: researchState };
+
+        fetch("http://127.0.0.1:8765/api/save-research-state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+          .then(function (response) {
+            if (response.ok) return response.json();
+            throw new Error("API response: " + response.status);
+          })
+          .then(function (data) {
+            saveStatus.textContent = data.message || "已成功儲存到資料庫";
+            saveStatus.style.color = "var(--good)";
+            setTimeout(function () {
+              saveStatus.textContent = "";
+              saveBtn.disabled = false;
+            }, 3000);
+          })
+          .catch(function (error) {
+            console.error("Save error:", error);
+            saveStatus.textContent = "儲存失敗：" + error.message + "（請確認 API 服務正在執行）";
+            saveStatus.style.color = "var(--danger)";
+            saveBtn.disabled = false;
+          });
       });
     })();
   </script>

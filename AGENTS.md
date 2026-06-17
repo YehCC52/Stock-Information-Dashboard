@@ -4,12 +4,9 @@ Personal stock research dashboard with daily HTML report generation. Features te
 
 ## Project Status
 
-**Latest iteration (2026-06-17)**: 
-- **UI Localization**: Complete Traditional Chinese (繁體中文) interface with English/Chinese toggle (Method A language switching via localStorage)
-- **Database Saving**: One-click "Save to Database" button in report, backed by simple HTTP API server (`api_server.py`)
-- **Earlier Features**: C–H (Delta Badges, Valuation Cache, Plan Triggers, Morning Actions, Attention Sparkline, My Book P&L), #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill)
+**Latest iteration (2026-06-08)**: Completed Features C–H — Day-over-Day Delta Badges (C), Valuation Retry + TTL Cache (D), Plan Triggers (E), Morning Actions decision block (F), Attention Sparkline (G), and My Book P&L with auto-weighted portfolio (H). Earlier: Features #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill).
 
-**Test Suite**: 227 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`. API server: HTTP-based, no external dependencies.
+**Test Suite**: 219 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`.
 
 ## Quick Commands
 
@@ -22,9 +19,6 @@ python run_daily.py --no-news --no-valuation --no-macro
 
 # Run full test suite
 python -m pytest tests/ -q
-
-# Start API server for one-click "Save to Database" in report
-python -m stock_daily_research.api_server
 
 # Import research state from JSON
 python -m stock_daily_research.cli --import-research-state research-state-2026-06-02.json
@@ -52,10 +46,9 @@ python -m stock_daily_research.cli --import-research-state research-state-2026-0
 | `src/stock_daily_research/report.py` | Hero items, insights, scoring, confidence |
 | `src/stock_daily_research/storage.py` | SQLite schema, migrations, CRUD |
 | `src/stock_daily_research/models.py` | Frozen dataclasses (TickerResearchState, ValuationSnapshot, etc.) |
-| `src/stock_daily_research/api_server.py` | HTTP API for "Save to Database" button in report |
-| `src/stock_daily_research/templates/daily_report.html.j2` | HTML + JS interactivity + language toggle |
+| `src/stock_daily_research/templates/daily_report.html.j2` | HTML + JS interactivity |
 | `watchlist.yaml` | Ticker config + plan defaults |
-| `tests/` | 227 unit tests |
+| `tests/` | 183 unit tests |
 
 ## Recent Features (June 2026)
 
@@ -107,29 +100,6 @@ python -m stock_daily_research.cli --import-research-state research-state-2026-0
 - **Total return view**: `portfolio_impact_summary()` now also emits per-holding `pl_pct` / `pl_dollar` (current price vs avg cost), plus `pl_leaders` / `pl_laggards` (top/bottom 3 by total return) and book totals `total_pl_dollar` / `total_pl_pct`.
 - **Template** (`#my-book` section): new "Unrealized P&L" stat (`$+X (+Y%)`) and "Total return leaders / laggards" cards, alongside the existing today's-impact winners/losers (daily move × weight) and sector concentration.
 - **Position source**: holdings live in `watchlist.yaml` per-ticker `position:` block (`status: holding`, `shares`, `avg_cost`, optional numeric `stop_loss`). YAML is the durable baseline; DB `position_json` overrides field-by-field if edited via the UI and re-imported.
-
-### UI Localization: Traditional Chinese (繁體中文) + Language Toggle
-- **Method A (Client-side)**:  All UI text rendered in Traditional Chinese by default (100+ locations)
-  - Toolbar buttons, table headers, filter options, manage panel labels, JavaScript state labels, CSS content properties
-  - Full test coverage: 227 tests updated and passing
-- **Language toggle**: Click button in top-right (next to theme toggle) to switch between 中文 ↔ English
-  - Preference saved to `localStorage` as `stock-daily-language`
-  - Affects ~50 common UI elements with `data-i18n` attributes
-  - Translations dict in JavaScript, no backend required
-  - **Future (Phase 2)**: Full i18n infrastructure with dedicated translation files for all 100+ strings
-
-### Save to Database: One-Click Database Persistence
-- **API Server** (`api_server.py`): Simple HTTP server (no external dependencies)
-  - Listens on `http://127.0.0.1:8765`
-  - POST `/api/save-research-state` accepts JSON payload
-  - Calls `import_research_state_payload()` to persist to SQLite
-  - CORS-enabled for cross-origin requests
-- **Report Button**: "💾 Save to Database" button in toolbar
-  - Collects all localStorage changes (pins, tags, thesis, notes, positions, etc.)
-  - Sends to API in single request
-  - Real-time feedback: saving → success/error message
-  - Workflow: Edit report → Click save → Changes persist to DB (no export/import needed)
-- **Startup**: `python -m stock_daily_research.api_server` (ctrl+C to stop)
 
 ## Data Model Highlights
 
