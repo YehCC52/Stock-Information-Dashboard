@@ -118,6 +118,72 @@ Outputs:
 - HTML dashboard: `reports/YYYY-MM-DD.html`
 - SQLite database: `data/stock_daily.sqlite3`
 
+## Interactive Dashboard & Data Management
+
+### Editing Research State in the Report
+
+The HTML dashboard (`reports/YYYY-MM-DD.html`) is fully interactive. You can:
+
+1. **Edit ticker information** via the "Manage" panel on each card:
+   - Research thesis (state, trigger, text)
+   - Notes and revisit date
+   - Investment plan (bull/bear case, entry, add zone, reduce zone, stop loss)
+   - Position details (status, shares, avg cost, weight, stop loss)
+   - Post-earnings review
+
+2. **Use filters and search**:
+   - Quick search by ticker or company name
+   - Filter by focus, state, earnings timing, RSI, topic, sector, cluster, or risk
+   - Compare multiple tickers side-by-side
+
+3. **Pin and tag** tickers for personalized workflow
+
+4. **Export research state** as JSON for backup or multi-device sync
+
+### Saving Changes to Database
+
+To save all your edits from the report directly to the database:
+
+#### Step 1: Start the API Server
+
+In a terminal:
+
+```powershell
+python -m stock_daily_research.api_server
+```
+
+Output:
+```
+[OK] Research State API server started at http://127.0.0.1:8765
+     Press Ctrl+C to stop
+```
+
+#### Step 2: Edit in the Report
+
+1. Open the HTML report (`reports/2026-06-17.html`)
+2. Make changes in the Manage panels
+3. Changes are auto-saved to browser localStorage
+
+#### Step 3: Click "Save to Database" Button
+
+- **Button location**: Top toolbar, next to export buttons
+- **Feedback**:
+  - ⏳ `💫 正在保存...` (saving...)
+  - ✅ `已成功保存到資料庫` (saved successfully)
+  - ❌ If API server is not running: `保存失敗：...`
+
+Your edits are now persisted to SQLite and will appear in tomorrow's report.
+
+### Alternative: Export & Import via CLI
+
+If you prefer not to run the API server, use the manual export/import workflow:
+
+```powershell
+# 1. Edit in the report and click "Export research state"
+# 2. Import the JSON file back:
+python -m stock_daily_research.cli --import-research-state research-state-2026-06-17.json
+```
+
 ## Windows Daily Schedule
 
 Register an 08:00 daily scheduled task:
