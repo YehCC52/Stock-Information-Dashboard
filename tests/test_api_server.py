@@ -1,6 +1,11 @@
 import pytest
 
-from stock_daily_research.api_server import DEFAULT_DB_PATH, normalize_research_state_payload
+from stock_daily_research.api_server import (
+    DEFAULT_DB_PATH,
+    _origin_allowed,
+    _resolved_db_path,
+    normalize_research_state_payload,
+)
 
 
 def test_normalize_research_state_payload_accepts_api_wrapper() -> None:
@@ -29,3 +34,25 @@ def test_normalize_research_state_payload_rejects_non_object() -> None:
 
 def test_api_server_uses_project_default_db_path() -> None:
     assert DEFAULT_DB_PATH.as_posix() == "data/stock_daily.sqlite3"
+
+
+def test_resolved_db_path_is_anchored_to_project_root() -> None:
+    resolved = _resolved_db_path()
+    assert resolved.is_absolute()
+    assert resolved.as_posix().endswith("data/stock_daily.sqlite3")
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [None, "null", "http://localhost:8000", "http://127.0.0.1:5500"],
+)
+def test_origin_allowed_accepts_local_and_non_browser(origin) -> None:
+    assert _origin_allowed(origin) is True
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["https://evil.com", "http://attacker.example", "http://localhost.evil.com"],
+)
+def test_origin_allowed_rejects_remote_sites(origin) -> None:
+    assert _origin_allowed(origin) is False

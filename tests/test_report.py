@@ -26,6 +26,7 @@ from stock_daily_research.report import (
     capital_allocation_queue,
     card_state,
     days_until,
+    daily_summary,
     earnings_delta,
     earnings_urgency,
     earnings_urgency_label,
@@ -96,6 +97,8 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "Premarket tone" in output
     assert "Top risk" in output
     assert "Focus" in output
+    assert "今日摘要" in output
+    assert "daily-summary-item" in output
     assert "宏觀日曆" in output
     assert "Overnight / Premarket" in output
     assert "Today&#39;s Focus" in output or "Today's Focus" in output
@@ -1648,6 +1651,16 @@ def test_build_summary_includes_hot_count() -> None:
     assert summary["hot_count"] == 1
     assert summary["ticker_count"] == 2
     assert summary["rsi_oversold_count"] == 1
+
+
+def test_daily_summary_prioritizes_decision_items() -> None:
+    summary = daily_summary(_sample_report())
+
+    assert summary["headline"].startswith("今天先看")
+    assert summary["tone"] == "danger"
+    assert summary["items"][0]["label"] == "盤前缺口"
+    assert summary["items"][0]["anchor"] == "#ticker-nvda"
+    assert any(item["label"] == "重點新聞" for item in summary["items"])
 
 
 def test_hero_items_surfaces_valuation_watch_when_room() -> None:

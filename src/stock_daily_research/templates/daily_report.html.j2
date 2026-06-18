@@ -18,25 +18,25 @@
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f6f7f9;
+      --bg: #f4f6f9;
       --surface: #ffffff;
-      --surface-soft: #eef2f7;
-      --surface-alt: #f8fafc;
-      --text: #17202a;
-      --muted: #657184;
-      --border: #d8dee8;
-      --border-soft: #e5e7eb;
-      --accent: #0f766e;
-      --link: #075985;
-      --warning: #b45309;
-      --warning-bg: #fff7ed;
-      --danger: #b91c1c;
-      --danger-bg: #fef2f2;
-      --good: #15803d;
-      --good-bg: #f0fdf4;
-      --info: #1d4ed8;
+      --surface-soft: #eaeef7;
+      --surface-alt: #f5f8fc;
+      --text: #0f172a;
+      --muted: #5a6e81;
+      --border: #cbd5e0;
+      --border-soft: #e2e8f0;
+      --accent: #0d9488;
+      --link: #0369a1;
+      --warning: #d97706;
+      --warning-bg: #fef3c7;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --good: #16a34a;
+      --good-bg: #ecfdf5;
+      --info: #2563eb;
       --info-bg: #eff6ff;
-      --shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+      --shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
     }
 
     /* Dark tokens applied two ways: when OS prefers dark and no manual override,
@@ -44,46 +44,46 @@
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
         color-scheme: dark;
-        --bg: #0f172a;
-        --surface: #1e293b;
-        --surface-soft: #243144;
-        --surface-alt: #182234;
-        --text: #e2e8f0;
-        --muted: #94a3b8;
-        --border: #334155;
-        --border-soft: #2a384e;
-        --link: #7dd3fc;
+        --bg: #0d1117;
+        --surface: #161b22;
+        --surface-soft: #1d232d;
+        --surface-alt: #0d1117;
+        --text: #c9d1d9;
+        --muted: #8b949e;
+        --border: #30363d;
+        --border-soft: #21262d;
+        --link: #58a6ff;
         --warning: #fbbf24;
-        --warning-bg: #3b2c10;
-        --danger: #fca5a5;
-        --danger-bg: #3b1717;
-        --good: #86efac;
-        --good-bg: #0f2e1c;
-        --info: #93c5fd;
-        --info-bg: #16243f;
-        --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        --warning-bg: #3d2817;
+        --danger: #ff7b72;
+        --danger-bg: #3d1f1a;
+        --good: #3fb950;
+        --good-bg: #0d3a1f;
+        --info: #79c0ff;
+        --info-bg: #1f2d3d;
+        --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
       }
     }
     :root[data-theme="dark"] {
       color-scheme: dark;
-      --bg: #0f172a;
-      --surface: #1e293b;
-      --surface-soft: #243144;
-      --surface-alt: #182234;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --border: #334155;
-      --border-soft: #2a384e;
-      --link: #7dd3fc;
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-soft: #1d232d;
+      --surface-alt: #0d1117;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --border: #30363d;
+      --border-soft: #21262d;
+      --link: #58a6ff;
       --warning: #fbbf24;
-      --warning-bg: #3b2c10;
-      --danger: #fca5a5;
-      --danger-bg: #3b1717;
-      --good: #86efac;
-      --good-bg: #0f2e1c;
-      --info: #93c5fd;
-      --info-bg: #16243f;
-      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      --warning-bg: #3d2817;
+      --danger: #ff7b72;
+      --danger-bg: #3d1f1a;
+      --good: #3fb950;
+      --good-bg: #0d3a1f;
+      --info: #79c0ff;
+      --info-bg: #1f2d3d;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
     }
     :root[data-theme="light"] {
       color-scheme: light;
@@ -128,6 +128,16 @@
       color: var(--muted);
       font-size: 11px;
       text-align: right;
+      min-height: 16px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #save-status {
+      color: var(--info);
+      min-height: 16px;
+      font-size: 12px;
+      font-weight: 500;
     }
     .search-box, .control-input, .control-select, .tag-select, .note-input, .revisit-input, .plan-input {
       border: 1px solid var(--border);
@@ -165,6 +175,24 @@
     .tool-button-primary:hover { background: color-mix(in srgb, var(--info) 90%, black); border-color: var(--info); }
     .tool-button-secondary { opacity: 0.75; }
     .tool-button-secondary:hover { opacity: 1; }
+    .tool-button-success {
+      background: var(--good);
+      color: white;
+      border-color: var(--good);
+      font-weight: 800;
+    }
+    .tool-button-success:hover { background: color-mix(in srgb, var(--good) 90%, black); border-color: var(--good); }
+    .tool-button-success:disabled { opacity: 0.6; cursor: default; }
+    .save-status {
+      flex-basis: 100%;
+      text-align: right;
+      font-size: 11px;
+      min-height: 14px;
+      color: var(--muted);
+    }
+    .save-status.is-saving { color: var(--info); }
+    .save-status.is-ok { color: var(--good); }
+    .save-status.is-error { color: var(--danger); }
     .icon-button {
       display: inline-flex;
       align-items: center;
@@ -319,6 +347,85 @@
     .command-alert a { display: flex; gap: 8px; align-items: baseline; color: var(--text); }
     .command-alert .ca-label { font-weight: 800; font-size: 12px; min-width: 48px; }
     .command-alert .ca-title { font-size: 12px; color: var(--text); line-height: 1.3; }
+
+    .daily-summary {
+      border-color: color-mix(in srgb, var(--info) 28%, var(--border));
+      background: color-mix(in srgb, var(--surface) 90%, var(--info-bg));
+    }
+    .daily-summary::before { background: var(--info); }
+    .daily-summary.danger {
+      border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
+      background: color-mix(in srgb, var(--surface) 84%, var(--danger-bg));
+    }
+    .daily-summary.danger::before { background: var(--danger); }
+    .daily-summary.warn {
+      border-color: color-mix(in srgb, var(--warning) 36%, var(--border));
+      background: color-mix(in srgb, var(--surface) 84%, var(--warning-bg));
+    }
+    .daily-summary.warn::before { background: var(--warning); }
+    .daily-summary-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .daily-summary-head h2 { margin: 0; }
+    .daily-summary-detail {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+    .daily-summary-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 8px;
+    }
+    .daily-summary-item a {
+      display: grid;
+      grid-template-columns: minmax(64px, max-content) minmax(0, 1fr);
+      gap: 8px 12px;
+      align-items: baseline;
+      padding: 9px 10px;
+      border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--info);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      min-height: 58px;
+    }
+    .daily-summary-item a:hover {
+      border-color: var(--border);
+      text-decoration: none;
+    }
+    .daily-summary-item.danger a { border-left-color: var(--danger); }
+    .daily-summary-item.warn a,
+    .daily-summary-item.warning a { border-left-color: var(--warning); }
+    .daily-summary-item.good a { border-left-color: var(--good); }
+    .daily-summary-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .daily-summary-title {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.3;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .daily-summary-text {
+      grid-column: 2;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
 
     /* Hero card itself (used inside .command-hero) */
     .hero {
@@ -1901,11 +2008,16 @@
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .sentiment-panel { grid-template-columns: 1fr; }
       .toc { position: static; }
+      .daily-summary-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+      .daily-summary-detail { text-align: left; }
       .news-item { grid-template-columns: 1fr; }
       .news-item .meta { white-space: normal; }
     }
     @media (max-width: 480px) {
       .summary-grid { grid-template-columns: 1fr 1fr; }
+      .daily-summary-list { grid-template-columns: 1fr; }
+      .daily-summary-item a { grid-template-columns: 1fr; }
+      .daily-summary-text { grid-column: 1; }
       .metrics { grid-template-columns: 1fr; }
       .ticker-actions { max-width: 100%; }
     }
@@ -1982,10 +2094,10 @@
           <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">匯出觀察清單</button>
           <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">匯出研究狀態</button>
           <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">匯出財報數據</button>
-          <button id="save-to-db" type="button" class="tool-button tool-button-success" title="儲存所有變更到資料庫" style="background: var(--good); color: white; border-color: var(--good);">儲存到資料庫</button>
-          <div id="save-status" class="export-status" aria-live="polite"></div>
-          <div id="export-status" class="export-status" aria-live="polite">匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON</div>
+          <button id="save-to-db" type="button" class="tool-button tool-button-success" title="儲存所有變更到資料庫">💾 保存</button>
+          <div id="save-status" class="save-status" aria-live="polite"></div>
         </div>
+        <div id="export-status" class="export-status" aria-live="polite">匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON</div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
           <span class="theme-label">自動</span>
@@ -2007,6 +2119,7 @@
       {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">行動 {{ morning_actions|length }}</a>{% endif %}
       <a href="#hero">今日</a>
       <a href="#summary">總覽</a>
+      <a href="#daily-summary">摘要</a>
       <a href="#todays-focus">焦點</a>
       <a href="#capital-allocation">資金</a>
       <a href="#research-queue">研究</a>
@@ -2119,6 +2232,24 @@
         </div>
         {% endif %}
       </aside>
+    </section>
+
+    <section id="daily-summary" class="section daily-summary {{ daily_summary.tone }}" aria-label="Daily summary">
+      <div class="daily-summary-head">
+        <h2>今日摘要</h2>
+        <span class="daily-summary-detail">{{ daily_summary.headline }} · {{ daily_summary.detail }}</span>
+      </div>
+      <ul class="daily-summary-list">
+        {% for item in daily_summary["items"] %}
+        <li class="daily-summary-item {{ item.tone }}">
+          <a href="{{ item.anchor }}">
+            <span class="daily-summary-label">{{ item.label }}</span>
+            <span class="daily-summary-title">{{ item.headline }}</span>
+            <span class="daily-summary-text">{{ item.detail }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
     </section>
 
     <section id="todays-focus" class="section section-primary">
@@ -3612,6 +3743,9 @@
       var reportDate = "{{ report.report_date.isoformat() }}";
       var showQuiet = false;
       var tickerState = initialResearch.tickers || {};
+      // Expose the server-rendered research state so the "Save to DB" block can
+      // fall back to it for tickers/fields not edited in this session.
+      window.__serverResearch = tickerState;
       var pinned = readJson("stock-daily-draft-pins", Object.keys(tickerState).filter(function (sym) { return !!tickerState[sym].pinned; }));
       var tags = readJson("stock-daily-draft-tags", mapState("tag"));
       var thesis = readJson("stock-daily-draft-thesis", mapState("thesis_state"));
@@ -5413,56 +5547,44 @@
       saveBtn.addEventListener("click", function () {
         saveBtn.disabled = true;
         saveStatus.textContent = "正在儲存...";
-        saveStatus.style.color = "var(--info)";
+        saveStatus.className = "save-status is-saving";
 
-        // Collect research state from localStorage
+        // Collect research state from localStorage drafts, falling back to the
+        // server-rendered state for any ticker/field the user did NOT edit this
+        // session. Without this fallback, saving would blank thesis/note/plan for
+        // every untouched ticker (full-overwrite upsert on the backend).
         var researchState = {};
+        var serverState = (window.__serverResearch) || {};
 
-        var pinned = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-pins") || "[]"); } catch (e) { return []; }
-        })();
+        function readDraft(key, fallback) {
+          var raw = localStorage.getItem(key);
+          if (raw == null) return null;            // key absent => never touched
+          try { return JSON.parse(raw); } catch (e) { return fallback; }
+        }
 
-        var tags = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-tags") || "{}"); } catch (e) { return {}; }
-        })();
+        // null means "this category was never touched" => use server values wholesale.
+        var pinsDraft = readDraft("stock-daily-draft-pins", null);
+        var tags = readDraft("stock-daily-draft-tags", {});
+        var thesisStates = readDraft("stock-daily-draft-thesis", {});
+        var thesisTriggers = readDraft("stock-daily-draft-thesis-triggers", {});
+        var thesisTexts = readDraft("stock-daily-draft-thesis-text", {});
+        var notes = readDraft("stock-daily-draft-notes", {});
+        var checklists = readDraft("stock-daily-draft-checklist", {});
+        var plans = readDraft("stock-daily-draft-plans", {});
+        var earningsQuestions = readDraft("stock-daily-draft-earnings-questions", {});
+        var positions = readDraft("stock-daily-draft-positions", {});
+        var postEarnings = readDraft("stock-daily-draft-post-earnings", {});
 
-        var thesisStates = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-thesis") || "{}"); } catch (e) { return {}; }
-        })();
+        // Per-ticker draft value if present, else the server value. Uses key
+        // presence (not truthiness) so an intentional empty edit is preserved.
+        function pick(draft, sym, serverVal) {
+          if (draft && Object.prototype.hasOwnProperty.call(draft, sym) && draft[sym] != null) {
+            return draft[sym];
+          }
+          return serverVal;
+        }
 
-        var thesisTriggers = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-thesis-triggers") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var thesisTexts = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-thesis-text") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var notes = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-notes") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var checklists = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-checklist") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var plans = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-plans") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var earningsQuestions = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-earnings-questions") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var positions = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-positions") || "{}"); } catch (e) { return {}; }
-        })();
-
-        var postEarnings = (function () {
-          try { return JSON.parse(localStorage.getItem("stock-daily-draft-post-earnings") || "{}"); } catch (e) { return {}; }
-        })();
-
-        // Collect all tickers from the page
+        // Collect all tickers from the page (cards + valuation table share data-symbol)
         var cards = document.querySelectorAll("[data-symbol]");
         var allSymbols = [];
         cards.forEach(function (card) {
@@ -5470,27 +5592,30 @@
           if (sym && allSymbols.indexOf(sym) === -1) allSymbols.push(sym);
         });
 
-        // Build research state for each ticker
+        // Build research state for each ticker (draft overlaid on server value)
         allSymbols.forEach(function (sym) {
+          var srv = serverState[sym] || {};
+          var noteRec = (notes && Object.prototype.hasOwnProperty.call(notes, sym)) ? notes[sym] : null;
+          var planRec = (plans && Object.prototype.hasOwnProperty.call(plans, sym)) ? plans[sym] : null;
           researchState[sym] = {
             ticker: sym,
-            pinned: pinned.indexOf(sym) !== -1,
-            tag: tags[sym] || "",
-            thesis_state: thesisStates[sym] || "",
-            thesis_trigger: thesisTriggers[sym] || "",
-            thesis_text: thesisTexts[sym] || "",
-            note: (notes[sym] && notes[sym].note) || "",
-            revisit_date: (notes[sym] && notes[sym].revisit) || null,
-            checklist: checklists[sym] || [],
-            bull_case: (plans[sym] && plans[sym].bull_case) || "",
-            bear_case: (plans[sym] && plans[sym].bear_case) || "",
-            entry_plan: (plans[sym] && plans[sym].entry_plan) || "",
-            add_zone: (plans[sym] && plans[sym].add_zone) || "",
-            reduce_zone: (plans[sym] && plans[sym].reduce_zone) || "",
-            stop_loss: (plans[sym] && plans[sym].stop_loss) || "",
-            earnings_questions: earningsQuestions[sym] || [],
-            position: positions[sym] || {},
-            post_earnings_review: postEarnings[sym] || {}
+            pinned: pinsDraft ? (pinsDraft.indexOf(sym) !== -1) : !!srv.pinned,
+            tag: pick(tags, sym, srv.tag || ""),
+            thesis_state: pick(thesisStates, sym, srv.thesis_state || ""),
+            thesis_trigger: pick(thesisTriggers, sym, srv.thesis_trigger || ""),
+            thesis_text: pick(thesisTexts, sym, srv.thesis_text || ""),
+            note: noteRec ? (noteRec.note || "") : (srv.note || ""),
+            revisit_date: noteRec ? (noteRec.revisit || null) : (srv.revisit_date || null),
+            checklist: pick(checklists, sym, srv.checklist || []),
+            bull_case: planRec ? (planRec.bull_case || "") : (srv.bull_case || ""),
+            bear_case: planRec ? (planRec.bear_case || "") : (srv.bear_case || ""),
+            entry_plan: planRec ? (planRec.entry_plan || "") : (srv.entry_plan || ""),
+            add_zone: planRec ? (planRec.add_zone || "") : (srv.add_zone || ""),
+            reduce_zone: planRec ? (planRec.reduce_zone || "") : (srv.reduce_zone || ""),
+            stop_loss: planRec ? (planRec.stop_loss || "") : (srv.stop_loss || ""),
+            earnings_questions: pick(earningsQuestions, sym, srv.earnings_questions || []),
+            position: pick(positions, sym, srv.position || {}),
+            post_earnings_review: pick(postEarnings, sym, srv.post_earnings_review || {})
           };
         });
 
@@ -5508,16 +5633,17 @@
           })
           .then(function (data) {
             saveStatus.textContent = data.message || "已成功儲存到資料庫";
-            saveStatus.style.color = "var(--good)";
+            saveStatus.className = "save-status is-ok";
             setTimeout(function () {
               saveStatus.textContent = "";
+              saveStatus.className = "save-status";
               saveBtn.disabled = false;
             }, 3000);
           })
           .catch(function (error) {
             console.error("Save error:", error);
             saveStatus.textContent = "儲存失敗：" + error.message + "（請確認 API 服務正在執行）";
-            saveStatus.style.color = "var(--danger)";
+            saveStatus.className = "save-status is-error";
             saveBtn.disabled = false;
           });
       });
