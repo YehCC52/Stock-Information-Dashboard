@@ -165,6 +165,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         important_news=important_news(report),
         news_clusters=event_clusters(report),
         hero=morning_briefing_cards(report),
+        daily_summary=daily_summary(report),
         morning_actions=morning_actions(report),
         todays_catalysts=todays_catalysts(report),
         post_earnings_items=post_earnings_items(report),
@@ -3020,6 +3021,214 @@ def morning_briefing_cards(report: DailyReport) -> list[dict[str, object]]:
         "anchor": "#todays-focus",
     })
     return cards
+
+
+def daily_summary(report: DailyReport, limit: int = 6) -> dict[str, object]:
+    """Compact first-read summary for deciding whether to drill in.
+
+    This deliberately reuses existing report signals instead of inventing new
+    sentiment. The output is short, clickable, and ordered by decision value.
+    """
+    actions = morning_actions(report)
+    focus = todays_focus(report)
+    news = important_news(report, limit=5)
+    earnings = earnings_soon(report)
+    macro_near = [
+        event for event in report.economic_events
+        if 0 <= (event.event_datetime.date() - report.report_date).days <= 1
+    ]
+    items: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def add(
+        label: str,
+        headline: str,
+        detail: str,
+        anchor: str,
+        tone: str = "info",
+        *,
+        key: str | None = None,
+    ) -> None:
+        if len(items) >= limit:
+            return
+        item_key = key or anchor
+        if item_key in seen:
+            return
+        seen.add(item_key)
+        items.append({
+            "label": label,
+            "headline": headline,
+            "detail": detail,
+            "anchor": anchor,
+            "tone": tone,
+        })
+
+    for action in actions[:3]:
+        label, headline, detail = _daily_summary_action_text(action)
+        add(
+            label,
+            headline,
+            detail,
+            str(action.get("anchor") or "#morning-actions"),
+            str(action.get("tone") or "warn"),
+            key=str(action.get("ticker") or action.get("anchor") or headline),
+        )
+
+    for row in focus.get("review_first", [])[:3]:
+        item = row["item"]
+        symbol = item.ticker.symbol
+        reasons = row.get("reasons", [])
+        detail = _daily_summary_reasons(reasons)
+        add(
+            "優先檢視",
+            f"{symbol} 需要先看",
+            detail or "同時有持股、催化、缺口或研究狀態訊號。",
+            f"#ticker-{symbol.lower()}",
+            "warn" if has_risk_signal(item, report.report_date) else "info",
+            key=symbol,
+        )
+
+    for card in book_today_summary(report)[:2]:
+        item = card["item"]
+        symbol = item.ticker.symbol
+        add(
+            _daily_summary_book_label(str(card["label"])),
+            f"{symbol} {card['value']}",
+            _daily_summary_reasons([str(card["detail"])]),
+            f"#ticker-{symbol.lower()}",
+            str(card.get("tone") or "info"),
+            key=symbol,
+        )
+
+    for tr, article, tier in news[:3]:
+        symbol = tr.ticker.symbol
+        tone = "danger" if tier == "top" else "info"
+        add(
+            "重點新聞",
+            f"{symbol}: {article.title}",
+            f"{article.source} · {event_label(article.event_type)}",
+            "#news",
+            tone,
+            key=f"news:{symbol}:{article.url}",
+        )
+
+    if earnings:
+        symbols = ", ".join(item.ticker.symbol for item in earnings[:4])
+        more = "" if len(earnings) <= 4 else f" 等 {len(earnings)} 檔"
+        add(
+            "財報提醒",
+            f"{symbols}{more}",
+            "7 天內有財報，先看持股、估值和最近新聞。",
+            "#earnings",
+            "warn",
+            key="earnings",
+        )
+
+    if macro_near:
+        event = sorted(macro_near, key=lambda ev: ev.event_datetime)[0]
+        add(
+            "總經提醒",
+            event.name,
+            f"{format_twn_timestamp(event.event_datetime)} / {format_et_timestamp(event.event_datetime)}",
+            "#macro",
+            "warn",
+            key="macro",
+        )
+
+    if not items:
+        add(
+            "今日摘要",
+            "沒有明顯急件",
+            "可先快速掃過持股、新聞與個股卡，再決定是否深入研究。",
+            "#tickers",
+            "info",
+            key="quiet",
+        )
+
+    detail_parts: list[str] = []
+    if actions:
+        detail_parts.append(f"{len(actions)} 個待決策訊號")
+    if focus.get("review_first"):
+        detail_parts.append(f"{len(focus['review_first'])} 檔優先檢視")
+    if news:
+        detail_parts.append(f"{len(news)} 則重點新聞")
+    if earnings:
+        detail_parts.append(f"{len(earnings)} 檔 7 天內財報")
+    if macro_near:
+        detail_parts.append(f"{len(macro_near)} 個近端總經事件")
+    if not detail_parts:
+        detail_parts.append("目前沒有高優先級訊號")
+
+    tone = "danger" if actions else "warn" if earnings or macro_near else "info"
+    headline = f"今天先看 {len(items)} 件事" if items and items[0]["headline"] != "沒有明顯急件" else "今天偏平穩"
+    return {
+        "headline": headline,
+        "detail": " · ".join(detail_parts),
+        "tone": tone,
+        "items": items,
+    }
+
+
+def _daily_summary_action_text(action: dict[str, object]) -> tuple[str, str, str]:
+    symbol = str(action.get("ticker") or "").strip()
+    raw_label = str(action.get("label") or "")
+    raw_headline = str(action.get("headline") or "")
+    raw_detail = str(action.get("detail") or "")
+
+    if raw_label == "Earnings":
+        return "先決定", f"{symbol} 財報即將公布", "先確認指引、估值和最近新聞。"
+    if raw_label == "Gap":
+        return "盤前缺口", zh_text(raw_headline).replace("gapped", "盤前跳空"), "先確認隔夜原因，再決定是否追價。"
+    if raw_label == "Thesis":
+        return "論點風險", f"{symbol} 投資論點需要重看", "論點已轉弱或失效，先不要直接加碼。"
+    if "Stop" in raw_label or "stop" in raw_label.lower():
+        return "停損提醒", f"{symbol} 接近停損", zh_text(raw_detail)
+    if raw_label in _PLAN_KIND_LABELS.values():
+        return "交易計畫", zh_text(raw_headline), zh_text(raw_detail)
+    return "先決定", zh_text(raw_headline), zh_text(raw_detail)
+
+
+def _daily_summary_book_label(label: str) -> str:
+    labels = {
+        "Biggest positive impact": "持股助攻",
+        "Biggest negative impact": "持股拖累",
+        "Highest risk holding": "持股風險",
+        "Holding with event soon": "持股財報",
+    }
+    return labels.get(label, "持股")
+
+
+def _daily_summary_reasons(reasons: object) -> str:
+    if isinstance(reasons, str):
+        parts = [reasons]
+    else:
+        parts = [str(reason) for reason in list(reasons)[:3]]
+    text = "、".join(part for part in parts if part)
+    replacements = {
+        "earnings today": "今日財報",
+        "earnings tomorrow": "明日財報",
+        "post-earnings review": "財報後檢視",
+        "post-earnings review due": "待做財報後檢視",
+        "premarket": "盤前",
+        "top headlines": "則重點新聞",
+        "top headline": "則重點新聞",
+        "news burst": "新聞放量",
+        "holding": "已持有",
+        "book impact": "持股影響",
+        "EPS rev": "EPS 預估",
+        "revenue rev": "營收預估",
+        "revenue growth": "營收成長",
+        "thesis never reviewed": "論點尚未檢視",
+        "review stale": "檢視已過久",
+        "event soon": "近期事件",
+        "valuation": "估值",
+        "weight": "持股比重",
+        "latest daily": "最新日線",
+        "book": "持股影響",
+    }
+    for src, dest in replacements.items():
+        text = text.replace(src, dest)
+    return zh_text(text)
 
 
 def priority_items(report: DailyReport) -> list[dict[str, object]]:
