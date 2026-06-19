@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Daily Stock Research - {{ report.report_date.isoformat() }}</title>
+  <title>每日股票研究 - {{ report.report_date.isoformat() }}</title>
   <script>
     // Apply persisted theme before paint to avoid a flash. Falls back to OS preference.
     (function () {
@@ -98,6 +98,7 @@
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.45;
       font-feature-settings: "tnum" 1, "cv11" 1;
+      overflow-x: hidden;
     }
     a { color: var(--link); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -121,7 +122,8 @@
       flex-wrap: wrap;
       justify-content: flex-end;
       gap: 8px;
-      width: min(100%, 560px);
+      width: min(100%, 720px);
+      align-items: center;
     }
     .export-status {
       flex-basis: 100%;
@@ -183,6 +185,48 @@
     }
     .tool-button-success:hover { background: color-mix(in srgb, var(--good) 90%, black); border-color: var(--good); }
     .tool-button-success:disabled { opacity: 0.6; cursor: default; }
+    .tools-menu {
+      position: relative;
+      margin: 0;
+    }
+    .tools-menu > summary {
+      list-style: none;
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+    }
+    .tools-menu > summary::-webkit-details-marker { display: none; }
+    .tools-menu > summary::after {
+      content: "▾";
+      margin-left: 6px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .tools-menu-panel {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      z-index: 10;
+      display: grid;
+      gap: 8px;
+      min-width: 220px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .tools-menu-panel .tool-button {
+      justify-content: center;
+      width: 100%;
+    }
+    .tools-menu-panel .export-status {
+      display: block;
+      flex-basis: auto;
+      text-align: left;
+      white-space: normal;
+      min-height: 0;
+    }
     .save-status {
       flex-basis: 100%;
       text-align: right;
@@ -260,24 +304,29 @@
 
     .toc {
       display: flex;
-      flex-wrap: wrap;
-      gap: 18px;
-      padding: 8px 24px;
-      margin: 0 -24px 18px;
+      flex-wrap: nowrap;
+      gap: 14px;
+      padding: 8px 0;
+      margin: 0 0 18px;
       background: color-mix(in srgb, var(--bg) 82%, transparent);
       border-bottom: 1px solid var(--border-soft);
+      overflow-x: auto;
+      overflow-y: hidden;
       position: sticky;
       top: 0;
       z-index: 5;
       backdrop-filter: blur(8px);
+      scrollbar-width: thin;
     }
+    .toc::-webkit-scrollbar { height: 6px; }
+    .toc::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
     .toc a {
       padding: 2px 0;
       color: var(--muted);
       font-size: 12px;
       font-weight: 500;
       white-space: nowrap;
-      letter-spacing: 0.01em;
+      letter-spacing: 0;
     }
     .toc a:hover { color: var(--text); text-decoration: none; }
     .toc .toc-pill {
@@ -291,15 +340,15 @@
     /* Command center: hero left, summary + top alerts right */
     .command-center {
       display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
-      gap: 14px;
-      margin-bottom: 18px;
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.85fr);
+      gap: 10px;
+      margin-bottom: 14px;
       align-items: stretch;
     }
     .command-hero {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 8px;
     }
     .command-side {
       display: flex;
@@ -309,9 +358,11 @@
     }
     .command-side .summary-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      gap: 6px;
       margin-bottom: 0;
     }
+    .command-side .stat { padding: 10px 12px; }
+    .command-side .stat-value { font-size: 20px; }
     .command-alerts {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -351,6 +402,7 @@
     .daily-summary {
       border-color: color-mix(in srgb, var(--info) 28%, var(--border));
       background: color-mix(in srgb, var(--surface) 90%, var(--info-bg));
+      margin-bottom: 14px;
     }
     .daily-summary::before { background: var(--info); }
     .daily-summary.danger {
@@ -376,26 +428,32 @@
       font-size: 12px;
       text-align: right;
     }
+    .daily-summary-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 0.34fr);
+      gap: 12px;
+      align-items: start;
+    }
     .daily-summary-list {
       list-style: none;
       margin: 0;
       padding: 0;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 8px;
     }
     .daily-summary-item a {
       display: grid;
       grid-template-columns: minmax(64px, max-content) minmax(0, 1fr);
-      gap: 8px 12px;
+      gap: 6px 10px;
       align-items: baseline;
-      padding: 9px 10px;
+      padding: 8px 10px;
       border: 1px solid var(--border-soft);
       border-left: 3px solid var(--info);
       border-radius: 6px;
       background: var(--surface);
       color: var(--text);
-      min-height: 58px;
+      min-height: 52px;
     }
     .daily-summary-item a:hover {
       border-color: var(--border);
@@ -426,6 +484,38 @@
       min-width: 0;
       overflow-wrap: anywhere;
     }
+    .brief-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--surface) 86%, var(--surface-alt));
+    }
+    .brief-metric {
+      min-width: 0;
+      padding: 6px 8px;
+      border-radius: 5px;
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+    }
+    .brief-metric-value {
+      display: block;
+      color: var(--text);
+      font-size: 18px;
+      line-height: 1.1;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .brief-metric-label {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .brief-metric.alert .brief-metric-value { color: var(--warning); }
+    .brief-metric.alert.danger .brief-metric-value { color: var(--danger); }
 
     /* Hero card itself (used inside .command-hero) */
     .hero {
@@ -436,11 +526,11 @@
     }
     .hero-card {
       display: grid;
-      grid-template-columns: 36px 1fr;
-      gap: 12px;
+      grid-template-columns: 30px 1fr;
+      gap: 10px;
       align-items: start;
-      padding: 14px 16px;
-      border-radius: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--surface);
       box-shadow: var(--shadow);
@@ -456,9 +546,9 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
       background: color-mix(in srgb, currentColor 12%, transparent);
       color: var(--muted);
     }
@@ -472,11 +562,11 @@
     .hero-card.info .hero-label { color: var(--info); }
     .hero-card .hero-headline {
       display: block;
-      font-size: 19px;
+      font-size: 16px;
       font-weight: 800;
       line-height: 1.25;
-      letter-spacing: -0.01em;
-      margin-bottom: 4px;
+      letter-spacing: 0;
+      margin-bottom: 3px;
       color: var(--text);
     }
     .hero-card .hero-sub { display: block; color: var(--muted); font-size: 12px; }
@@ -505,7 +595,7 @@
     .stat.alert .stat-value { color: var(--warning); }
     .stat.alert.danger .stat-value { color: var(--danger); }
 
-    .section { padding: 16px; margin-bottom: 18px; position: relative; }
+    .section { padding: 16px; margin-bottom: 16px; position: relative; min-width: 0; }
     .section::before {
       content: "";
       position: absolute;
@@ -720,6 +810,7 @@
     }
     .focus-list a { font-weight: 800; color: var(--text); }
     .focus-reason { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .heatmap-table { min-width: 560px; }
     .heatmap-table .symbols { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .position-row {
       display: grid;
@@ -762,8 +853,8 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: 6px;
+      margin-bottom: 8px;
     }
     .mode-button[aria-pressed="true"] {
       color: var(--info);
@@ -870,6 +961,7 @@
       border-radius: 8px;
       overflow: auto;
       max-height: 560px;
+      max-width: 100%;
     }
     table {
       width: 100%;
@@ -1719,7 +1811,7 @@
     .ticker-actions .icon-button {
       width: auto;
       min-width: 34px;
-      max-width: 72px;
+      max-width: 82px;
       padding: 0 7px;
       white-space: nowrap;
       font-size: 14px;
@@ -2010,6 +2102,7 @@
       .toc { position: static; }
       .daily-summary-head { flex-direction: column; align-items: flex-start; gap: 4px; }
       .daily-summary-detail { text-align: left; }
+      .daily-summary-body { grid-template-columns: 1fr; }
       .news-item { grid-template-columns: 1fr; }
       .news-item .meta { white-space: normal; }
     }
@@ -2084,20 +2177,25 @@
   <main class="page">
     <header class="header">
       <div>
-        <h1>Daily Stock Research</h1>
+        <h1>每日股票研究</h1>
         <div class="muted">{{ report.report_date.isoformat() }} | Generated: {{ report.generated_at|twn_datetime }}</div>
       </div>
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
           <input id="quick-search" class="search-box" type="search" placeholder="搜尋代碼或公司名稱" autocomplete="off" data-i18n="label_search">
           <button id="watchlist-mode-toggle" type="button" class="tool-button" aria-pressed="false" title="只顯示釘選的股票">只看釘選</button>
-          <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">匯出觀察清單</button>
-          <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">匯出研究狀態</button>
-          <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">匯出財報數據</button>
           <button id="save-to-db" type="button" class="tool-button tool-button-success" title="儲存所有變更到資料庫">💾 保存</button>
+          <details class="tools-menu">
+            <summary class="tool-button">匯出</summary>
+            <div class="tools-menu-panel">
+              <button id="export-watchlist" type="button" class="tool-button tool-button-secondary" title="TXT: ticker, state, earnings timing, tag">觀察清單 TXT</button>
+              <button id="export-research" type="button" class="tool-button tool-button-primary" title="JSON: current research state for CLI import back into SQLite">研究狀態 JSON</button>
+              <button id="export-earnings" type="button" class="tool-button tool-button-secondary" title="JSON: ticker, company, earnings timing">財報數據 JSON</button>
+              <div id="export-status" class="export-status" aria-live="polite">可匯出觀察清單、研究狀態、財報數據</div>
+            </div>
+          </details>
           <div id="save-status" class="save-status" aria-live="polite"></div>
         </div>
-        <div id="export-status" class="export-status" aria-live="polite">匯出項目：觀察清單 TXT | 研究狀態 JSON | 財報數據 JSON</div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
           <span class="theme-label">自動</span>
@@ -2117,31 +2215,17 @@
 
     <nav class="toc" aria-label="Sections">
       {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">行動 {{ morning_actions|length }}</a>{% endif %}
-      <a href="#hero">今日</a>
-      <a href="#summary">總覽</a>
       <a href="#daily-summary">摘要</a>
+      <a href="#hero">盤前快照</a>
       <a href="#todays-focus">焦點</a>
-      <a href="#capital-allocation">資金</a>
-      <a href="#research-queue">研究</a>
-      {% if book_today %}<a href="#book-today">我的持股</a>{% endif %}
-      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">我的持股 ({{ portfolio.holdings|length }})</a>{% endif %}
-      {% if book_impact %}<a href="#book-impact">持股影響</a>{% endif %}
-      {% if report.premarket %}<a href="#premarket">盤前</a>{% endif %}
-      <a href="#today-catalysts">催化</a>
-      {% if sector_leadership %}<a href="#sector-leadership">產業</a>{% endif %}
-      {% if post_earnings_items %}<a href="#post-earnings-scoreboard">財報後</a>{% endif %}
+      {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">持股 {{ portfolio.holdings|length }}</a>{% elif book_today %}<a href="#book-today">持股</a>{% endif %}
       {% if overextended %}<a href="#overextended" class="toc-pill">過熱 {{ overextended|length }}</a>{% endif %}
       {% if rule_alerts %}<a href="#rule-alerts" class="toc-pill">警示 {{ rule_alerts|length }}</a>{% endif %}
       {% if report.warnings %}<a href="#global-warnings" class="toc-pill">警告 {{ report.warnings|length }}</a>{% endif %}
       {% if data_quality.flagged %}<a href="#data-quality" class="toc-pill">資料 {{ data_quality.flagged|length }}</a>{% endif %}
-      {% if report.market_sentiment %}<a href="#market-sentiment">情緒</a>{% endif %}
-      {% if report.market_context and report.market_context.rates %}<a href="#rates">利率</a>{% endif %}
-      {% if report.market_context and report.market_context.breadth %}<a href="#breadth">廣度</a>{% endif %}
-      <a href="#macro">總經 ({{ report.economic_events|length }})</a>
-      <a href="#earnings">財報 ({{ earnings_soon|length }})</a>
-      {% if news_clusters %}<a href="#news-clusters">事件 ({{ news_clusters|length }})</a>{% endif %}
+      <a href="#macro">總經</a>
+      <a href="#earnings">財報</a>
       <a href="#news">新聞 ({{ important_news|length }})</a>
-      <a href="#changes">變化</a>
       <a href="#valuation">估值</a>
       <a href="#tickers">個股 ({{ report.ticker_reports|length }})</a>
     </nav>
@@ -2164,6 +2248,34 @@
       </ul>
     </section>
     {% endif %}
+
+    <section id="daily-summary" class="section daily-summary {{ daily_summary.tone }}" aria-label="Daily summary">
+      <div class="daily-summary-head">
+        <h2>今日摘要</h2>
+        <span class="daily-summary-detail">{{ daily_summary.headline }} · {{ daily_summary.detail }}</span>
+      </div>
+      <div class="daily-summary-body">
+        <ul class="daily-summary-list">
+          {% for item in daily_summary["items"] %}
+          <li class="daily-summary-item {{ item.tone }}">
+            <a href="{{ item.anchor }}">
+              <span class="daily-summary-label">{{ item.label }}</span>
+              <span class="daily-summary-title">{{ item.headline }}</span>
+              <span class="daily-summary-text">{{ item.detail }}</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="brief-metrics" aria-label="Key metrics">
+          <div class="brief-metric {% if summary.hot_count %}alert danger{% endif %}"><span class="brief-metric-value">{{ summary.hot_count }}</span><span class="brief-metric-label">熱點</span></div>
+          <div class="brief-metric {% if summary.premarket_gap_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.premarket_gap_count }}</span><span class="brief-metric-label">盤前缺口</span></div>
+          <div class="brief-metric {% if summary.earnings_soon_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.earnings_soon_count }}</span><span class="brief-metric-label">財報 7 天內</span></div>
+          <div class="brief-metric {% if summary.economic_event_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.economic_event_count }}</span><span class="brief-metric-label">總經事件</span></div>
+          <div class="brief-metric"><span class="brief-metric-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="brief-metric-label">已檢視</span></div>
+          <div class="brief-metric {% if summary.rsi_overbought_count or summary.rsi_oversold_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.rsi_overbought_count }} / {{ summary.rsi_oversold_count }}</span><span class="brief-metric-label">RSI 高/低</span></div>
+        </div>
+      </div>
+    </section>
 
     <section class="command-center" aria-label="Today">
       <div id="hero" class="command-hero">
@@ -2199,24 +2311,12 @@
           <button type="button" class="tool-button mode-button" data-mode="overview" aria-pressed="true">概覽</button>
           <button type="button" class="tool-button mode-button" data-mode="review" aria-pressed="false">檢視模式</button>
           <button type="button" class="tool-button mode-button" data-mode="prep" aria-pressed="false">準備模式</button>
-          <span id="mode-hint" class="mode-hint">完整儀表板視圖</span>
-        </div>
-        <div class="summary-grid" aria-label="Summary">
-          <div class="stat {% if summary.hot_count %}alert danger{% endif %}" title="Tickers with earnings today or 2+ top stories"><span class="stat-value">{{ summary.hot_count }}</span><span class="stat-label">熱點</span></div>
-          <div class="stat {% if summary.premarket_gap_count %}alert{% endif %}" title="Watchlist names moving more than +/-2% in premarket/latest quote"><span class="stat-value">{{ summary.premarket_gap_count }}</span><span class="stat-label">盤前缺口</span></div>
-          <div class="stat {% if summary.earnings_soon_count %}alert{% endif %}" title="Earnings reports within the next 7 days"><span class="stat-value">{{ summary.earnings_soon_count }}</span><span class="stat-label">財報 <=7 天</span></div>
-          <div class="stat {% if summary.economic_event_count %}alert{% endif %}" title="Tracked macro events"><span class="stat-value">{{ summary.economic_event_count }}</span><span class="stat-label">宏觀</span></div>
-          <div class="stat"><span class="stat-value">{{ summary.ticker_count }}</span><span class="stat-label">代碼</span></div>
-          <div class="stat" title="Research review status loaded from SQLite-backed state"><span class="stat-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="stat-label">已檢視</span></div>
-          {% if report.market_sentiment %}
-          <div class="stat {% if report.market_sentiment.score <= 24 or report.market_sentiment.score >= 76 %}alert danger{% elif report.market_sentiment.score <= 44 or report.market_sentiment.score >= 56 %}alert{% endif %}" title="Free yfinance proxy, not a proprietary index"><span class="stat-value">{{ report.market_sentiment.score }}</span><span class="stat-label">{{ report.market_sentiment.label }}</span></div>
-          {% endif %}
-          <div class="stat {% if summary.rsi_overbought_count or summary.rsi_oversold_count %}alert{% endif %}" title="RSI 14 extremes across ticker cards"><span class="stat-value">{{ summary.rsi_overbought_count }} / {{ summary.rsi_oversold_count }}</span><span class="stat-label">RSI 高/低</span></div>
+          <span id="mode-hint" class="mode-hint">完整儀表板</span>
         </div>
         {% if rule_alerts %}
         <div class="command-alerts">
           <div class="command-alerts-head">
-            <span class="cc-label">Top alerts</span>
+            <span class="cc-label">警示</span>
             {% if rule_alerts|length > 3 %}<a href="#rule-alerts" class="cc-more">+{{ rule_alerts|length - 3 }} more</a>{% endif %}
           </div>
           <ul class="command-alert-list">
@@ -2234,68 +2334,50 @@
       </aside>
     </section>
 
-    <section id="daily-summary" class="section daily-summary {{ daily_summary.tone }}" aria-label="Daily summary">
-      <div class="daily-summary-head">
-        <h2>今日摘要</h2>
-        <span class="daily-summary-detail">{{ daily_summary.headline }} · {{ daily_summary.detail }}</span>
-      </div>
-      <ul class="daily-summary-list">
-        {% for item in daily_summary["items"] %}
-        <li class="daily-summary-item {{ item.tone }}">
-          <a href="{{ item.anchor }}">
-            <span class="daily-summary-label">{{ item.label }}</span>
-            <span class="daily-summary-title">{{ item.headline }}</span>
-            <span class="daily-summary-text">{{ item.detail }}</span>
-          </a>
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-
     <section id="todays-focus" class="section section-primary">
       <div class="section-header">
-        <h2>Today's Focus</h2>
+        <h2>決策清單</h2>
       </div>
       <div class="focus-grid">
         <div class="focus-column review">
-          <h3><span class="focus-icon">R</span>優先檢視</h3>
+          <h3><span class="focus-icon">1</span>先處理</h3>
           {% if todays_focus.review_first %}
           <ul class="focus-list">
             {% for row in todays_focus.review_first %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ')|zh_text }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No urgent review queue.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有需要立刻處理的個股。</div>{% endif %}
         </div>
         <div class="focus-column chase">
-          <h3><span class="focus-icon">E</span>事件前暫不動作</h3>
+          <h3><span class="focus-icon">2</span>事件前暫停</h3>
           {% if todays_focus.no_action_before_event %}
           <ul class="focus-list">
             {% for row in todays_focus.no_action_before_event %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ')|zh_text }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No event-window names blocking action.</div>{% endif %}
+          {% else %}<div class="section-empty">沒有因事件窗口需要暫停操作的個股。</div>{% endif %}
         </div>
         <div class="focus-column pullback">
-          <h3><span class="focus-icon">P</span>回檔機會</h3>
+          <h3><span class="focus-icon">3</span>回檔機會</h3>
           {% if todays_focus.pullback_setup %}
           <ul class="focus-list">
             {% for row in todays_focus.pullback_setup %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ')|zh_text }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No clean pullback watch.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有乾淨的回檔機會。</div>{% endif %}
         </div>
         <div class="focus-column chase">
           <h3><span class="focus-icon">!</span>避免追高</h3>
           {% if todays_focus.avoid_chase %}
           <ul class="focus-list">
             {% for row in todays_focus.avoid_chase %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ')|zh_text }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No obvious chase-risk names.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有明顯追高風險。</div>{% endif %}
         </div>
       </div>
     </section>
@@ -3254,9 +3336,9 @@
               {% if item.earnings and item.earnings.earnings_date %}<div class="countdown" data-countdown="{{ item.earnings.earnings_date.isoformat() }}" data-time-of-day="{{ item.earnings.time_of_day }}"></div>{% endif %}
             </div>
             <div class="ticker-actions">
-              <button type="button" class="icon-button pin-button" aria-label="釘選 {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">釘選</button>
-              <button type="button" class="icon-button quick-done" aria-label="標記所有檢視項目完成" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已檢視">完成</button>
-              <button type="button" class="icon-button quick-revisit" aria-label="檢視日期延後一天" data-quick-revisit="{{ item.ticker.symbol }}" title="把檢視日期設為今天 +1 天，或將既有日期往後推一天">+1天</button>
+              <button type="button" class="icon-button pin-button" aria-label="加入焦點 {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">焦點</button>
+              <button type="button" class="icon-button quick-done" aria-label="標記 {{ item.ticker.symbol }} 已看過" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已檢視">已看過</button>
+              <button type="button" class="icon-button quick-revisit" aria-label="明天再看 {{ item.ticker.symbol }}" data-quick-revisit="{{ item.ticker.symbol }}" title="把檢視日期設為今天 +1 天，或將既有日期往後推一天">明天</button>
               {% if state == "hot" %}<span class="badge danger">{{ state|card_state_label }}</span>
               {% elif state == "warn" %}<span class="badge warn">{{ state|card_state_label }}</span>
               {% elif state == "warm" %}<span class="badge good">{{ state|card_state_label }}</span>
@@ -4248,7 +4330,7 @@
           function paint() {
             var on = isPinned(card);
             btn.setAttribute("aria-pressed", on ? "true" : "false");
-            btn.textContent = on ? "已釘選" : "釘選";
+            btn.textContent = on ? "已加入" : "焦點";
           }
           btn.addEventListener("click", function () {
             var s = symbol(card);
@@ -4794,9 +4876,9 @@
           button.setAttribute("aria-pressed", button.dataset.mode === mode ? "true" : "false");
         });
         var hints = {
-          overview: "Full dashboard view",
-          review: "Hot catalysts and earnings today/tomorrow, sorted for review",
-          prep: "Earnings within 7 days, with notes and revisit fields open",
+          overview: "完整儀表板",
+          review: "只看熱點催化與今日/明日財報",
+          prep: "展開 7 天內財報、筆記與檢視欄位",
         };
         if (modeHint) modeHint.textContent = hints[mode] || hints.overview;
         applyFilters();
@@ -5448,8 +5530,8 @@
           "thesis_none": "無",
           "msg_loading": "載入中...",
           "msg_no_data": "無可用數據",
-          "btn_pin": "釘選",
-          "btn_pinned": "已釘選",
+          "btn_pin": "焦點",
+          "btn_pinned": "已加入",
           "btn_compare": "加入比較",
           "btn_manage": "管理",
           "lang_zh": "中文",

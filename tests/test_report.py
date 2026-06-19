@@ -93,15 +93,15 @@ def test_render_html_report_includes_visual_sections() -> None:
     output = render_html_report(_sample_report())
 
     assert "<!doctype html>" in output
-    assert "Regime" in output
-    assert "Premarket tone" in output
-    assert "Top risk" in output
-    assert "Focus" in output
+    assert "盤勢" in output
+    assert "盤前" in output
+    assert "主要風險" in output
+    assert "今日焦點" in output
     assert "今日摘要" in output
     assert "daily-summary-item" in output
     assert "宏觀日曆" in output
     assert "Overnight / Premarket" in output
-    assert "Today&#39;s Focus" in output or "Today's Focus" in output
+    assert "今日焦點" in output
     assert "focus-rank" in output
     assert "section-primary" in output
     assert "Today's Catalysts" in output
@@ -117,7 +117,7 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "My Book Impact Today" in output
     assert "個股卡片" in output
     assert "Nvidia revenue beats" in output
-    assert "+4.00% on 1.8x volume" in output
+    assert "+4.00% / 1.8x 成交量" in output
     assert "5.26T" in output
     assert "持股與損益" in output
     assert "What Changed Since Last Run" in output
@@ -125,7 +125,7 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "2026-04-28 15:00 TWN / UTC+8" in output
     assert "Market data timestamp: 2026-04-28 11:00 UTC" in output
     assert "資金配置清單" in output
-    assert "事件前暫不動作" in output
+    assert "事件前暫停" in output
     assert "避免追高" in output
     assert "window.claude.complete" in output
 
@@ -1656,7 +1656,7 @@ def test_build_summary_includes_hot_count() -> None:
 def test_daily_summary_prioritizes_decision_items() -> None:
     summary = daily_summary(_sample_report())
 
-    assert summary["headline"].startswith("今天先看")
+    assert summary["headline"].startswith("今天分成")
     assert summary["tone"] == "danger"
     assert summary["items"][0]["label"] == "盤前缺口"
     assert summary["items"][0]["anchor"] == "#ticker-nvda"
@@ -1693,7 +1693,7 @@ def test_morning_briefing_cards_build_four_first_screen_cards() -> None:
     cards = morning_briefing_cards(_sample_report())
     labels = [card["label"] for card in cards]
 
-    assert labels == ["Regime", "Premarket tone", "Top risk", "Focus"]
+    assert labels == ["盤勢", "盤前", "主要風險", "今日焦點"]
     assert "QQQ" in str(cards[1]["headline"])
     assert cards[3]["anchor"] == "#todays-focus"
 

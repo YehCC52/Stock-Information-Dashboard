@@ -800,6 +800,8 @@ def zh_text(value: object) -> str:
         "oversold": "超賣",
         "data warnings": "資料警示",
         "data warning": "資料警示",
+        "pre-market": "盤前",
+        "Earnings": "財報",
         "top stories": "重點新聞",
         "top story": "重點新聞",
         "headlines": "則新聞",
@@ -814,6 +816,14 @@ def zh_text(value: object) -> str:
         "Elevated": "偏高",
         "Low": "低",
         "Medium": "中",
+        "Extreme Greed": "極度貪婪",
+        "Greed": "貪婪",
+        "Neutral": "中性",
+        "Fear": "恐懼",
+        "Extreme Fear": "極度恐懼",
+        "Rates": "利率",
+        "DXY": "美元",
+        "Oil": "油價",
         "volume": "成交量",
         "today": "今日",
     }
@@ -2938,37 +2948,37 @@ def morning_briefing_cards(report: DailyReport) -> list[dict[str, object]]:
     """First-screen briefing: regime, premarket tone, top risk, and focus."""
     cards: list[dict[str, object]] = []
 
-    regime_headline = "Regime check"
-    regime_subtitle = "No market context available."
+    regime_headline = "盤勢檢查"
+    regime_subtitle = "沒有市場背景資料。"
     regime_tone = "info"
     risks = macro_risk_meter(report.market_context)
     high_risks = [risk for risk in risks if risk["level"] == "high"]
     medium_risks = [risk for risk in risks if risk["level"] == "medium"]
     if high_risks:
         lead = high_risks[0]
-        regime_headline = f"{lead['name'].replace(' pressure', '')}-led pressure"
-        regime_subtitle = lead["detail"]
+        regime_headline = zh_text(str(lead["name"]).replace(" pressure", " 壓力"))
+        regime_subtitle = zh_text(lead["detail"])
         regime_tone = "soon"
     elif medium_risks:
         lead = medium_risks[0]
-        regime_headline = f"{lead['name'].replace(' pressure', '')} pressure building"
-        regime_subtitle = lead["detail"]
+        regime_headline = zh_text(str(lead["name"]).replace(" pressure", " 壓力升溫"))
+        regime_subtitle = zh_text(lead["detail"])
         regime_tone = "info"
     elif report.market_sentiment:
-        regime_headline = f"{report.market_sentiment.label} tape"
-        regime_subtitle = f"Sentiment {report.market_sentiment.score} / 100"
+        regime_headline = f"{zh_text(report.market_sentiment.label)} 盤勢"
+        regime_subtitle = f"市場情緒 {report.market_sentiment.score} / 100"
         regime_tone = "imminent" if report.market_sentiment.score <= 24 or report.market_sentiment.score >= 76 else "info"
     cards.append({
         "kind": "regime",
-        "label": "Regime",
+        "label": "盤勢",
         "headline": regime_headline,
         "subtitle": regime_subtitle,
         "tone": regime_tone,
         "anchor": "#rates" if report.market_context and report.market_context.rates else "#market-sentiment",
     })
 
-    pm_headline = "No premarket snapshot"
-    pm_subtitle = "Run with valuation fetching enabled for ES/NQ/SPY/QQQ tone."
+    pm_headline = "無盤前快照"
+    pm_subtitle = "啟用行情抓取後可顯示 ES/NQ/SPY/QQQ 盤前基調。"
     pm_tone = "info"
     if report.premarket and report.premarket.benchmarks:
         parts = []
@@ -2981,11 +2991,11 @@ def morning_briefing_cards(report: DailyReport) -> list[dict[str, object]]:
         if parts:
             avg = sum(values) / len(values)
             pm_headline = ", ".join(parts[:2])
-            pm_subtitle = "Risk-on premarket tone" if avg > 0.15 else "Risk-off premarket tone" if avg < -0.15 else "Mixed premarket tone"
+            pm_subtitle = "盤前偏多" if avg > 0.15 else "盤前偏空" if avg < -0.15 else "盤前中性"
             pm_tone = "info" if avg >= 0 else "soon"
     cards.append({
         "kind": "premarket",
-        "label": "Premarket tone",
+        "label": "盤前",
         "headline": pm_headline,
         "subtitle": pm_subtitle,
         "tone": pm_tone,
@@ -2996,16 +3006,16 @@ def morning_briefing_cards(report: DailyReport) -> list[dict[str, object]]:
     macro_warning_count = sum(1 for warning in report.warnings if "macro" in warning.lower())
     risk_bits: list[str] = []
     if stretched:
-        risk_bits.append(f"{len(stretched)} stretched")
+        risk_bits.append(f"{len(stretched)} 檔過熱")
     if macro_warning_count:
-        risk_bits.append(f"{macro_warning_count} macro warning{'s' if macro_warning_count != 1 else ''}")
+        risk_bits.append(f"{macro_warning_count} 個總經警示")
     if not risk_bits and rule_alerts(report):
-        risk_bits.append(f"{len(rule_alerts(report))} rule alert{'s' if len(rule_alerts(report)) != 1 else ''}")
+        risk_bits.append(f"{len(rule_alerts(report))} 個規則警示")
     cards.append({
         "kind": "risk",
-        "label": "Top risk",
-        "headline": ", ".join(risk_bits) if risk_bits else "No major tape risk",
-        "subtitle": "Check valuation and feed quality before chasing." if risk_bits else "No stretched or feed-risk cluster flagged.",
+        "label": "主要風險",
+        "headline": "、".join(risk_bits) if risk_bits else "沒有主要盤面風險",
+        "subtitle": "追價前先檢查估值與資料品質。" if risk_bits else "目前沒有明顯過熱或資料風險群聚。",
         "tone": "imminent" if macro_warning_count or len(stretched) >= 5 else "soon" if stretched else "info",
         "anchor": "#overextended" if stretched else "#global-warnings" if macro_warning_count else "#rule-alerts",
     })
@@ -3014,9 +3024,9 @@ def morning_briefing_cards(report: DailyReport) -> list[dict[str, object]]:
     focus_symbols = [str(row["item"].ticker.symbol) for row in focus["review_first"][:3]]
     cards.append({
         "kind": "focus",
-        "label": "Focus",
-        "headline": " / ".join(focus_symbols) if focus_symbols else "No urgent review queue",
-        "subtitle": "Review first from holdings, catalysts, gaps, revisions, and alerts." if focus_symbols else "Dashboard is quiet after current rules.",
+        "label": "今日焦點",
+        "headline": " / ".join(focus_symbols) if focus_symbols else "沒有急件",
+        "subtitle": "依持股、催化、缺口、預估修正與警示排序。" if focus_symbols else "目前規則下沒有需要優先檢視的項目。",
         "tone": "info",
         "anchor": "#todays-focus",
     })
@@ -3063,7 +3073,7 @@ def daily_summary(report: DailyReport, limit: int = 6) -> dict[str, object]:
             "tone": tone,
         })
 
-    for action in actions[:3]:
+    for action in actions[:2]:
         label, headline, detail = _daily_summary_action_text(action)
         add(
             label,
@@ -3074,19 +3084,50 @@ def daily_summary(report: DailyReport, limit: int = 6) -> dict[str, object]:
             key=str(action.get("ticker") or action.get("anchor") or headline),
         )
 
-    for row in focus.get("review_first", [])[:3]:
-        item = row["item"]
-        symbol = item.ticker.symbol
-        reasons = row.get("reasons", [])
-        detail = _daily_summary_reasons(reasons)
+    def add_focus_bucket(bucket: str, label: str, headline_suffix: str, fallback: str, tone: str) -> None:
+        rows = focus.get(bucket, [])[:3]
+        if not rows:
+            return
+        symbols = [row["item"].ticker.symbol for row in rows]
+        detail = _daily_summary_reasons(rows[0].get("reasons", [])) or fallback
+        first_symbol = symbols[0]
         add(
-            "優先檢視",
-            f"{symbol} 需要先看",
-            detail or "同時有持股、催化、缺口或研究狀態訊號。",
-            f"#ticker-{symbol.lower()}",
-            "warn" if has_risk_signal(item, report.report_date) else "info",
-            key=symbol,
+            label,
+            f"{', '.join(symbols)} {headline_suffix}",
+            detail,
+            f"#ticker-{first_symbol.lower()}",
+            tone,
+            key=f"{bucket}:{','.join(symbols)}",
         )
+
+    add_focus_bucket(
+        "no_action_before_event",
+        "事件前暫停",
+        "先不要動作",
+        "事件窗口內，等財報或催化落地後再判斷。",
+        "warn",
+    )
+    add_focus_bucket(
+        "avoid_chase",
+        "避免追高",
+        "先不要追",
+        "技術或估值已延伸，等回檔或新催化。",
+        "warn",
+    )
+    add_focus_bucket(
+        "pullback_setup",
+        "回檔機會",
+        "可列入觀察",
+        "接近回檔買點，確認價格和風險後再決定。",
+        "good",
+    )
+    add_focus_bucket(
+        "review_first",
+        "需要研究",
+        "需要先看",
+        "同時有持股、催化、缺口或研究狀態訊號。",
+        "info",
+    )
 
     for card in book_today_summary(report)[:2]:
         item = card["item"]
@@ -3147,9 +3188,13 @@ def daily_summary(report: DailyReport, limit: int = 6) -> dict[str, object]:
 
     detail_parts: list[str] = []
     if actions:
-        detail_parts.append(f"{len(actions)} 個待決策訊號")
+        detail_parts.append(f"{len(actions)} 個先處理")
+    if focus.get("avoid_chase"):
+        detail_parts.append(f"{len(focus['avoid_chase'])} 檔避免追高")
+    if focus.get("pullback_setup"):
+        detail_parts.append(f"{len(focus['pullback_setup'])} 檔回檔機會")
     if focus.get("review_first"):
-        detail_parts.append(f"{len(focus['review_first'])} 檔優先檢視")
+        detail_parts.append(f"{len(focus['review_first'])} 檔需要研究")
     if news:
         detail_parts.append(f"{len(news)} 則重點新聞")
     if earnings:
@@ -3160,7 +3205,7 @@ def daily_summary(report: DailyReport, limit: int = 6) -> dict[str, object]:
         detail_parts.append("目前沒有高優先級訊號")
 
     tone = "danger" if actions else "warn" if earnings or macro_near else "info"
-    headline = f"今天先看 {len(items)} 件事" if items and items[0]["headline"] != "沒有明顯急件" else "今天偏平穩"
+    headline = f"今天分成 {len(items)} 個決策入口" if items and items[0]["headline"] != "沒有明顯急件" else "今天偏平穩"
     return {
         "headline": headline,
         "detail": " · ".join(detail_parts),
@@ -3224,6 +3269,8 @@ def _daily_summary_reasons(reasons: object) -> str:
         "valuation": "估值",
         "weight": "持股比重",
         "latest daily": "最新日線",
+        "less stretched": "估值壓力較低",
+        " on ": " / ",
         "book": "持股影響",
     }
     for src, dest in replacements.items():
