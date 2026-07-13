@@ -10,7 +10,7 @@ Personal stock research dashboard with daily HTML report generation. Features te
 - **Earlier (2026-06-17)**: UI Localization (繁體中文 + language toggle), one-click Save to Database (`api_server.py`)
 - **Earlier Features**: C–H (Delta Badges, Valuation Cache, Plan Triggers, Morning Actions, Attention Sparkline, My Book P&L), #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill)
 
-**Test Suite**: 255 tests, all passing. Report generation: ~1–2 min full fetch (32 tickers), <1s with `--no-news --no-valuation --no-macro`. API server: HTTP-based, no external dependencies.
+**Test Suite**: 260 tests, all passing. Report generation: ~1–2 min full fetch (32 tickers), <1s with `--no-news --no-valuation --no-macro`. API server: HTTP-based, no external dependencies.
 
 ## Quick Commands
 
@@ -180,6 +180,7 @@ thesis_changed: str               # Feature #3: Y/N
 | `stock-daily-draft-earnings-questions` | `{ [sym]: string[] }` | Pre-earnings questions |
 | `stock-daily-draft-positions` | `{ [sym]: position object }` | Position editor state |
 | `stock-daily-read-news` | `{ [url]: true }` | **New (Feature A)**: read news URLs |
+| `stock-daily-market-tab` | `"us" \| "taiwan" \| "crypto"` | Active market for the workspace tabs + sector map (shared state) |
 | `stock-daily-theme` | `"auto" \| "light" \| "dark"` | Theme preference |
 
 ## CSS Variables (Light/Dark)

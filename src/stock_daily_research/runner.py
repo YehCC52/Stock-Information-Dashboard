@@ -22,7 +22,7 @@ from .models import DailyReport, TickerConfig, TickerReport, TickerResearchState
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
-from .report import derive_portfolio_weights, report_output_dir, write_report
+from .report import derive_portfolio_weights, holding_currencies, report_output_dir, write_report
 from .storage import (
     export_research_state_file,
     import_research_state_file,
@@ -121,8 +121,7 @@ def run_daily(
         research_states = _apply_plan_defaults(research_states, config.tickers)
         tickers = _apply_position_overrides(config.tickers, research_states)
         post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
-        holding_currencies = {ticker.currency for ticker in tickers if ticker.position.status == "holding"}
-        if len(holding_currencies) > 1:
+        if len(holding_currencies(tickers)) > 1:
             global_warnings.append("Mixed-currency holdings detected; combined unrealized P/L is intentionally hidden.")
 
         news_provider = GoogleNewsRssProvider()

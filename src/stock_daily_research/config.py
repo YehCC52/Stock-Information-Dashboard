@@ -145,13 +145,18 @@ def _load_notification_settings(data: dict[str, Any]) -> NotificationSettings:
     )
 
 
-def _infer_market(symbol: str) -> str:
+def _infer_market(symbol: str) -> str | None:
     if symbol.endswith(".TW"):
         return "twse"
     if symbol.endswith(".TWO"):
         return "tpex"
     if symbol.endswith("-USD"):
         return "crypto"
+    if "." in symbol:
+        # A Yahoo dot-suffix means a non-US exchange we don't know. Guessing
+        # "us" would also guess currency=USD and silently corrupt the
+        # mixed-currency P&L guard — make the user declare the market.
+        return None
     return "us"
 
 
@@ -163,7 +168,13 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
     if not company_name:
         raise ValueError(f"tickers[{index}].company_name is required")
     normalized_symbol = str(symbol).upper()
-    market = str(data.get("market") or _infer_market(normalized_symbol)).lower()
+    market_raw = data.get("market") or _infer_market(normalized_symbol)
+    if market_raw is None:
+        raise ValueError(
+            f"tickers[{index}].market is required for '{normalized_symbol}': "
+            "unrecognized exchange suffix, set market/currency explicitly"
+        )
+    market = str(market_raw).lower()
     if market not in MARKET_DEFAULTS:
         allowed = ", ".join(sorted(MARKET_DEFAULTS))
         raise ValueError(f"tickers[{index}].market must be one of {allowed}, got {market!r}")
