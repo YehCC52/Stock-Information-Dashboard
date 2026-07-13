@@ -5,6 +5,40 @@ from datetime import date, datetime
 from typing import Any
 
 
+MARKET_DEFAULTS: dict[str, dict[str, str]] = {
+    "us": {
+        "currency": "USD",
+        "news_language": "en-US",
+        "news_region": "US",
+        "news_edition": "US:en",
+    },
+    "twse": {
+        "currency": "TWD",
+        "news_language": "zh-TW",
+        "news_region": "TW",
+        "news_edition": "TW:zh-Hant",
+    },
+    "tpex": {
+        "currency": "TWD",
+        "news_language": "zh-TW",
+        "news_region": "TW",
+        "news_edition": "TW:zh-Hant",
+    },
+    "crypto": {
+        "currency": "USD",
+        "news_language": "en-US",
+        "news_region": "US",
+        "news_edition": "US:en",
+    },
+}
+
+MARKET_LABELS: dict[str, str] = {
+    "us": "美股",
+    "twse": "台股",
+    "tpex": "上櫃",
+    "crypto": "加密貨幣",
+}
+
 @dataclass(frozen=True)
 class TrustedXAccount:
     handle: str
@@ -85,6 +119,9 @@ class ResearchDefaults:
 class TickerConfig:
     symbol: str
     company_name: str
+    market: str = "us"
+    currency: str = "USD"
+    has_fundamentals: bool = True
     aliases: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     trusted_news_domains: list[str] = field(default_factory=list)
@@ -92,6 +129,42 @@ class TickerConfig:
     position: PositionConfig = field(default_factory=PositionConfig)
     plan: InvestmentPlan = field(default_factory=InvestmentPlan)
     research: ResearchDefaults = field(default_factory=ResearchDefaults)
+
+    @property
+    def display_symbol(self) -> str:
+        """Human-facing symbol without the Yahoo Finance exchange suffix."""
+        if self.market == "twse" and self.symbol.endswith(".TW"):
+            return self.symbol[:-3]
+        if self.market == "tpex" and self.symbol.endswith(".TWO"):
+            return self.symbol[:-4]
+        if self.market == "crypto" and "-" in self.symbol:
+            return self.symbol.rsplit("-", 1)[0]
+        return self.symbol
+
+    @property
+    def has_earnings(self) -> bool:
+        """Only company-like assets expose a meaningful earnings calendar."""
+        return self.has_fundamentals and self.market != "crypto"
+
+    @property
+    def news_language(self) -> str:
+        return MARKET_DEFAULTS[self.market]["news_language"]
+
+    @property
+    def news_region(self) -> str:
+        return MARKET_DEFAULTS[self.market]["news_region"]
+
+    @property
+    def news_edition(self) -> str:
+        return MARKET_DEFAULTS[self.market]["news_edition"]
+
+    @property
+    def default_news_domains(self) -> list[str]:
+        if self.market in {"twse", "tpex"}:
+            return ["money.udn.com", "cnyes.com", "moneydj.com"]
+        if self.market == "crypto":
+            return ["coindesk.com", "cointelegraph.com", "theblock.co"]
+        return ["reuters.com", "cnbc.com"]
 
     @property
     def search_terms(self) -> list[str]:

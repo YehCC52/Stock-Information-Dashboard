@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PositionConfig, PremarketSnapshot, ResearchDefaults, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
-from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, _has_usable_valuation, run_daily
+from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, _fetch_one_ticker, _has_usable_valuation, run_daily
 from stock_daily_research.storage import init_db, save_report
 
 
@@ -154,7 +154,8 @@ def test_run_daily_writes_report_and_db(tmp_path: Path, monkeypatch) -> None:
         notify_telegram=False,
     )
 
-    assert (output_dir / "2026-04-28.md").exists()
+    assert (output_dir / '2026' / '04' / '2026-04-28.md').exists()
+    assert (output_dir / '2026' / '04' / '2026-04-28.html').exists()
     assert db_path.exists()
     assert report.report_date == date(2026, 4, 28)
     assert len(report.ticker_reports) == 1
@@ -390,3 +391,69 @@ def test_valuation_all_retries_exhausted_produces_warning(tmp_path: Path, monkey
 
     warnings_text = " ".join(report.ticker_reports[0].warnings)
     assert "failed after 4 attempts" in warnings_text
+
+
+def test_fetch_one_ticker_skips_earnings_fetch_for_crypto(monkeypatch) -> None:
+    snapshot = ValuationSnapshot(
+        ticker="BTC-USD",
+        as_of_date=date(2026, 4, 28),
+        source="yfinance",
+        metrics={"last_close": 60000.0},
+        retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", lambda _t: snapshot)
+
+    def boom_earnings(_ticker):
+        raise AssertionError("earnings-date fetch should be skipped for crypto")
+
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", boom_earnings)
+
+    ticker = TickerConfig(symbol="BTC-USD", company_name="Bitcoin", market="crypto")
+    result = _fetch_one_ticker(
+        ticker,
+        news_provider=None,
+        signals=[],
+        fetch_news=False,
+        fetch_valuation=True,
+        lookback_days=3,
+        max_articles=5,
+    )
+
+    assert result.valuation is snapshot
+    assert result.earnings is None
+    assert result.warnings == []
+
+def test_fetch_one_ticker_skips_earnings_fetch_for_etf(monkeypatch) -> None:
+    snapshot = ValuationSnapshot(
+        ticker="0050.TW",
+        as_of_date=date(2026, 4, 28),
+        source="yfinance",
+        metrics={"last_close": 52.4},
+        retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_valuation", lambda _ticker: snapshot)
+
+    def boom_earnings(_ticker):
+        raise AssertionError("earnings-date fetch should be skipped for ETFs")
+
+    monkeypatch.setattr("stock_daily_research.runner.fetch_yfinance_earnings_date", boom_earnings)
+
+    ticker = TickerConfig(
+        symbol="0050.TW",
+        company_name="元大台灣50",
+        market="twse",
+        has_fundamentals=False,
+    )
+    result = _fetch_one_ticker(
+        ticker,
+        news_provider=None,
+        signals=[],
+        fetch_news=False,
+        fetch_valuation=True,
+        lookback_days=3,
+        max_articles=5,
+    )
+
+    assert result.valuation is snapshot
+    assert result.earnings is None
+    assert result.warnings == []

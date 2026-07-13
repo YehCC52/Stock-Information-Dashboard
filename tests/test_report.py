@@ -36,6 +36,8 @@ from stock_daily_research.report import (
     hero_items,
     important_news,
     macro_risk_meter,
+    market_label,
+    map_change_bin,
     morning_briefing_cards,
     news_tier,
     pe_class,
@@ -53,6 +55,7 @@ from stock_daily_research.report import (
     rsi_label,
     rule_alerts,
     sector_leadership,
+    sector_map_markets,
     sort_by_market_cap,
     source_reliability,
     topic_tags,
@@ -70,6 +73,7 @@ from stock_daily_research.report import (
     derive_portfolio_weights,
     portfolio_impact_summary,
     portfolio_brief,
+    report_output_dir,
 )
 
 
@@ -99,31 +103,37 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "今日焦點" in output
     assert "今日摘要" in output
     assert "daily-summary-item" in output
-    assert "宏觀日曆" in output
-    assert "Overnight / Premarket" in output
+    assert "總經日曆" in output
+    assert "隔夜 / 盤前" in output
     assert "今日焦點" in output
     assert "focus-rank" in output
     assert "section-primary" in output
-    assert "Today's Catalysts" in output
-    assert "Sector Leadership" in output
-    assert "Macro risk meter" in output
+    assert "今日催化" in output
+    assert "產業地圖" in output
+    assert "sector-map" in output
+    assert "map-tile" in output
+    assert "map-market-panel" in output
+    assert "總經風險儀表" in output
+    assert "資料品質" in output
+    assert "全域警示" in output
+    assert "盤前公布財報" in output
     assert "FOMC Rate Decision" in output
-    assert "Valuation Snapshot" in output
+    assert "估值快照" in output
     assert "TTM EPS" in output
-    assert "FY1 EPS Rev 30D" in output
-    assert "FY1 Revenue Rev 30D" in output
-    assert "Next Q Revenue Rev 30D" in output
-    assert "My Book Today" in output
-    assert "My Book Impact Today" in output
+    assert "FY1 EPS 修正 30D" in output
+    assert "FY1 營收修正 30D" in output
+    assert "下季營收修正 30D" in output
+    assert "持股總覽" in output
+    assert "持股貢獻明細" in output
     assert "個股卡片" in output
     assert "Nvidia revenue beats" in output
     assert "+4.00% / 1.8x 成交量" in output
     assert "5.26T" in output
     assert "持股與損益" in output
-    assert "What Changed Since Last Run" in output
+    assert "上次報告後的變化" in output
     assert "Generated: 2026-04-28 15:00 Taiwan Time (UTC+8)" in output
     assert "2026-04-28 15:00 TWN / UTC+8" in output
-    assert "Market data timestamp: 2026-04-28 11:00 UTC" in output
+    assert "行情時間：2026-04-28 11:00 UTC" in output
     assert "資金配置清單" in output
     assert "事件前暫停" in output
     assert "避免追高" in output
@@ -137,6 +147,10 @@ def test_write_report_outputs_markdown_and_html(tmp_path) -> None:
     assert paths.html.exists()
     assert paths.markdown.suffix == ".md"
     assert paths.html.suffix == ".html"
+    assert paths.markdown.parent == tmp_path / "2026" / "04"
+    assert paths.html.parent == tmp_path / "2026" / "04"
+    assert paths.brief.parent == tmp_path / "2026" / "04"
+    assert report_output_dir(tmp_path, date(2026, 11, 5)) == tmp_path / "2026" / "11"
 
     # Files must be raw UTF-8 with NO BOM. A leading U+FEFF would render as a
     # stray character or break HTML parsing in some browsers.
@@ -258,9 +272,29 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert 'data-mode="overview"' in output
     assert 'id="focus-filter"' in output
     assert 'id="state-filter"' in output
+    assert 'id="market-workspace"' in output
+    assert output.index('id="market-workspace"') < output.index('<nav class="toc"')
+    assert output.count('class="market-tabs"') == 1
+    assert 'market-stat-tickers' in output
+    assert 'id="market-summary-list"' in output
+    assert 'function updateMarketSummary(' in output
+    assert 'function updateMarketWorkspace()' in output
+    assert 'is-market-hidden' in output
+    assert 'class="map-tabs"' not in output
+    assert '<button type="button" class="map-tab' not in output
+    assert 'id="valuation-table" class="valuation-table is-compact"' in output
+    assert 'id="toggle-valuation-columns"' in output
+    assert 'function setupValuationColumns()' in output
+    assert 'data-market-tab="us"' in output
+    assert 'data-market-tab="taiwan"' in output
+    assert 'data-market-tab="crypto"' in output
+    assert 'stock-daily-market-tab' in output
+    assert 'function setupMarketTabs()' in output
+    assert 'data-market="us"' in output
+    assert 'market-badge' in output
     assert 'id="rsi-filter"' in output
     assert 'id="valuation-sort"' in output
-    assert "Market Sentiment" in output
+    assert "市場情緒" in output
     assert "RSI 14" in output
     assert 'id="compare-panel"' in output
     assert 'id="changes-body"' in output
@@ -293,8 +327,8 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert "下次財報" in output
     assert "估值風險" in output
     assert "觀察清單 TXT" in output
-    assert "Research Queue" in output
-    assert "What Changed in 30d" in output
+    assert "研究待辦" in output
+    assert "30 天變化" in output
 
 
 def test_render_html_report_seeds_sqlite_backed_research_state_and_history() -> None:
@@ -365,13 +399,13 @@ def test_render_html_report_seeds_sqlite_backed_research_state_and_history() -> 
     output = render_html_report(report)
 
     assert "研究紀錄" in output
-    assert "Review queue" in output
-    assert "Recent thesis changes" in output
-    assert "Archive" in output
+    assert "優先檢視" in output
+    assert "論點變動" in output
+    assert "歷史報告" in output
     assert '"thesis_state": "active"' in output
     assert '"history_days": 45' in output
-    assert "Thesis state changed" in output
-    assert "Research memory" in output
+    assert "投資論點狀態改變" in output
+    assert "研究記憶" in output
     assert "已檢視" in output
 
 
@@ -1372,6 +1406,13 @@ def test_sector_leadership_and_premarket_triage() -> None:
     triage = premarket_triage(report)
 
     assert any(row["label"] == "Semis" for row in groups)
+    semis = next(row for row in groups if row["label"] == "Semis")
+    assert semis["label_zh"] == "半導體"
+    assert semis["tiles"][0]["symbol"] == "NVDA"
+    assert semis["tiles"][0]["change"] == 4.0
+    assert semis["tiles"][0]["bin"] == "up-3"
+    # Exclusive assignment: NVDA matches Semis and AI infra, but maps once.
+    assert sum(1 for row in groups for tile in row["tiles"] if tile["symbol"] == "NVDA") == 1
     assert triage["catalyst_backed"][0]["item"].ticker.symbol == "NVDA"
     assert triage["catalyst_backed"][0]["headline_count"] == 1
     assert "trusted" in triage["catalyst_backed"][0]["source_tier"] or "tier" in triage["catalyst_backed"][0]["source_tier"]
@@ -2753,3 +2794,230 @@ def test_portfolio_brief_empty_when_no_holdings() -> None:
     )
     text = portfolio_brief(report)
     assert "No holdings configured." in text
+
+def test_market_label_uses_taiwan_market_names() -> None:
+    assert market_label("us") == "\u7f8e\u80a1"
+    assert market_label("twse") == "\u53f0\u80a1"
+    assert market_label("tpex") == "\u4e0a\u6ac3"
+
+def test_render_html_report_marks_taiwan_stock_and_uses_short_symbol() -> None:
+    report = _sample_report()
+    taiwan_item = replace(
+        report.ticker_reports[0],
+        ticker=TickerConfig(
+            symbol="2330.TW",
+            company_name="\u53f0\u7063\u7a4d\u9ad4\u96fb\u8def\u88fd\u9020\u80a1\u4efd\u6709\u9650\u516c\u53f8",
+            market="twse",
+            currency="TWD",
+            aliases=["\u53f0\u7a4d\u96fb"],
+        ),
+    )
+
+    output = render_html_report(replace(report, ticker_reports=[taiwan_item]))
+
+    assert 'data-market="twse"' in output
+    assert 'ticker-symbol">2330<span class="market-badge">台股</span>' in output
+    assert 'currency-code">TWD</span>' in output
+
+
+def test_map_change_bin_buckets() -> None:
+    assert map_change_bin(None) == "na"
+    assert map_change_bin(float("nan")) == "na"
+    assert map_change_bin(0.0) == "flat"
+    assert map_change_bin(0.5) == "flat"
+    assert map_change_bin(-0.5) == "flat"
+    assert map_change_bin(0.8) == "up-1"
+    assert map_change_bin(1.5) == "up-2"
+    assert map_change_bin(3.0) == "up-3"
+    assert map_change_bin(-0.8) == "down-1"
+    assert map_change_bin(-1.5) == "down-2"
+    assert map_change_bin(-4.2) == "down-3"
+
+
+def test_sector_leadership_assigns_crypto_group() -> None:
+    today = date(2026, 7, 10)
+    btc = TickerReport(
+        ticker=TickerConfig(
+            symbol="BTC-USD", company_name="Bitcoin", market="crypto",
+            keywords=["crypto", "ETF flows"],
+        ),
+        articles=[], x_signals=[],
+        valuation=ValuationSnapshot(
+            ticker="BTC-USD", as_of_date=today, source="yfinance",
+            metrics={"last_close": 61800.0, "previous_close": 60000.0, "return_5d": 5.0, "return_20d": 9.0},
+            retrieved_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+        ),
+        earnings=None,
+    )
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+        ticker_reports=[btc],
+    )
+
+    groups = sector_leadership(report)
+
+    crypto = next(row for row in groups if row["label"] == "加密貨幣")
+    assert crypto["label_zh"] == "加密貨幣"
+    assert crypto["tiles"][0]["symbol"] == "BTC"
+    assert crypto["tiles"][0]["bin"] == "up-3"
+    assert crypto["tiles"][0]["anchor"] == "ticker-btc-usd"
+
+
+def test_sector_map_markets_splits_us_tw_crypto() -> None:
+    today = date(2026, 7, 10)
+
+    def item(symbol, market, company, keywords, change_pct, cap):
+        prev = 100.0
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=company, market=market, keywords=keywords),
+            articles=[], x_signals=[],
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=today, source="yfinance",
+                metrics={"last_close": prev * (1 + change_pct / 100.0), "previous_close": prev, "market_cap": cap},
+                retrieved_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            ),
+            earnings=None,
+        )
+
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+        ticker_reports=[
+            item("NVDA", "us", "NVIDIA", ["GPU"], 2.0, 5e12),
+            item("2330.TW", "twse", "台灣積體電路", ["半導體", "晶圓代工"], 1.0, 2e13),
+            item("0050.TW", "twse", "元大台灣50", ["台股ETF", "臺灣50指數"], 0.4, 1e11),
+            item("BTC-USD", "crypto", "Bitcoin", ["crypto", "ETF flows"], 4.0, 1.2e12),
+        ],
+    )
+
+    panels = sector_map_markets(report)
+
+    assert [p["key"] for p in panels] == ["us", "taiwan", "crypto"]
+    assert [p["label"] for p in panels] == ["美股", "台股", "加密貨幣"]
+    assert [p["ticker_count"] for p in panels] == [1, 2, 1]
+    # Breadth (漲跌家數): 2330 +1%, 0050 +0.4% — both advancing.
+    taiwan_panel = panels[1]
+    assert (taiwan_panel["advancers"], taiwan_panel["flat"], taiwan_panel["decliners"]) == (2, 0, 0)
+
+    us_rows, tw_rows, crypto_rows = (p["rows"] for p in panels)
+    # Each market uses its own taxonomy: NVDA in the US Semis theme, 2330 in
+    # the Taiwan 晶圓代工 chain — never a shared row.
+    assert [t["symbol"] for r in us_rows if r["label"] == "Semis" for t in r["tiles"]] == ["NVDA"]
+    assert [t["symbol"] for r in tw_rows if r["label"] == "晶圓代工" for t in r["tiles"]] == ["2330"]
+    # 0050 lands in the ETF group; BTC's "ETF flows" keyword stays in Crypto.
+    assert [t["symbol"] for r in tw_rows if r["label"] == "ETF / 指數" for t in r["tiles"]] == ["0050"]
+    assert [t["symbol"] for r in crypto_rows if r["label"] == "加密貨幣" for t in r["tiles"]] == ["BTC"]
+    # Every row is tagged with its market for the flat detail table.
+    assert all(r["market"] == "taiwan" and r["market_label"] == "台股" for r in tw_rows)
+
+
+def test_tw_sector_groups_cover_local_chains() -> None:
+    today = date(2026, 7, 10)
+
+    def tw_item(symbol, company, keywords, market="twse"):
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=company, market=market, keywords=keywords),
+            articles=[], x_signals=[],
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=today, source="yfinance",
+                metrics={"last_close": 101.0, "previous_close": 100.0},
+                retrieved_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            ),
+            earnings=None,
+        )
+
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+        ticker_reports=[
+            tw_item("3711.TW", "日月光投資控股", ["半導體封裝", "半導體測試", "SiP"]),
+            tw_item("2330.TW", "台灣積體電路", ["晶圓代工", "半導體", "CoWoS"]),
+            # tpex (上櫃) shares the 台股 panel with twse.
+            tw_item("6770.TWO", "力積電", ["功率半導體", "MOSFET"], market="tpex"),
+            tw_item("2327.TW", "國巨", ["被動元件", "MLCC"]),
+            tw_item("3017.TW", "奇鋐", ["散熱", "水冷"]),
+            # 電源 / 重電 outranks 散熱 even though 台達電 also carries 散熱.
+            tw_item("2308.TW", "台達電子工業", ["電源供應器", "伺服器電源", "散熱"]),
+        ],
+    )
+
+    panels = sector_map_markets(report)
+
+    assert len(panels) == 1 and panels[0]["key"] == "taiwan"
+    by_label = {row["label"]: [t["symbol"] for t in row["tiles"]] for row in panels[0]["rows"]}
+    assert by_label["封測"] == ["3711"]
+    assert by_label["晶圓代工"] == ["2330"]
+    assert by_label["功率元件"] == ["6770"]
+    assert by_label["被動元件"] == ["2327"]
+    assert by_label["散熱"] == ["3017"]
+    assert by_label["電源 / 重電"] == ["2308"]
+
+
+def test_sector_term_boundary_prevents_substring_false_positives() -> None:
+    today = date(2026, 7, 10)
+
+    def us_item(symbol, company, keywords, industry=""):
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=company, keywords=keywords),
+            articles=[], x_signals=[],
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=today, source="yfinance",
+                metrics={"last_close": 101.0, "previous_close": 100.0, "industry": industry},
+                retrieved_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            ),
+            earnings=None,
+        )
+
+    report = DailyReport(
+        report_date=today,
+        generated_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+        ticker_reports=[
+            # "sustainable" contains "ai", "systems" contains "ems" — neither
+            # may fire now that short tokens are boundary-matched.
+            us_item("XYZ", "Xyz Corp", ["sustainable water systems"]),
+            # A standalone "AI" keyword still counts.
+            us_item("ABCD", "Abcd Corp", ["AI", "data center"]),
+            # AAPL belongs to Consumer hardware, not AI infra.
+            us_item("AAPL", "Apple Inc.", ["iPhone", "Mac", "services", "AI"], industry="Consumer Electronics"),
+            # RKLB belongs to Space, not Other watchlist.
+            us_item("RKLB", "Rocket Lab USA", ["space launch", "Electron rocket", "satellites"]),
+        ],
+    )
+
+    panels = sector_map_markets(report)
+
+    assert len(panels) == 1 and panels[0]["key"] == "us"
+    by_label = {row["label"]: [t["symbol"] for t in row["tiles"]] for row in panels[0]["rows"]}
+    assert by_label["Other watchlist"] == ["XYZ"]
+    assert by_label["AI infra"] == ["ABCD"]
+    assert by_label["Consumer hardware"] == ["AAPL"]
+    assert by_label["Space"] == ["RKLB"]
+
+
+def test_sort_by_market_cap_keeps_markets_separate() -> None:
+    today = date(2026, 7, 10)
+
+    def item(symbol, market, cap):
+        return TickerReport(
+            ticker=TickerConfig(symbol=symbol, company_name=symbol, market=market),
+            articles=[], x_signals=[],
+            valuation=ValuationSnapshot(
+                ticker=symbol, as_of_date=today, source="yfinance",
+                metrics={"market_cap": cap},
+                retrieved_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            ),
+            earnings=None,
+        )
+
+    ordered = sort_by_market_cap([
+        # 2330's TWD market cap is numerically larger than NVDA's USD cap,
+        # but currencies aren't comparable — US names stay first.
+        item("2330.TW", "twse", 26e12),
+        item("BTC-USD", "crypto", 1.2e12),
+        item("NVDA", "us", 5e12),
+        item("AAPL", "us", 4e12),
+        item("5425.TWO", "tpex", 4e10),
+    ])
+
+    assert [tr.ticker.symbol for tr in ordered] == ["NVDA", "AAPL", "2330.TW", "5425.TWO", "BTC-USD"]

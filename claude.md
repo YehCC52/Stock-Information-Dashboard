@@ -4,12 +4,13 @@ Personal stock research dashboard with daily HTML report generation. Features te
 
 ## Project Status
 
-**Latest iteration (2026-06-17)**: 
-- **UI Localization**: Complete Traditional Chinese (繁體中文) interface with English/Chinese toggle (Method A language switching via localStorage)
-- **Database Saving**: One-click "Save to Database" button in report, backed by simple HTTP API server (`api_server.py`)
+**Latest iteration (2026-07-10)**:
+- **Multi-market support**: `TickerConfig.market` (us / twse / tpex / crypto), auto-inferred from symbol suffix (`.TW` → twse, `.TWO` → tpex, `-USD` → crypto). `MARKET_DEFAULTS` in `models.py` drives per-market currency, Google News edition (`zh-TW` for Taiwan), and default news domains (cnyes/moneydj/udn for 台股, coindesk/cointelegraph/theblock for crypto). Crypto skips earnings-date + analyst-estimate fetches (`TickerConfig.has_earnings`); data-quality doesn't penalize crypto for missing forward P/E. Mixed-currency holdings hide combined P&L.
+- **Sector map (產業地圖)**: `#sector-leadership` section (placed right after `#daily-summary`) renders diverging heat tiles (±0.5/1.5/3% bins, `map_change_bin`) grouped by sector, one panel per market with tabs + 漲跌家數 breadth. Market tabs share ONE state with the ticker-card market tabs: same keys (us/taiwan/crypto), same localStorage key `stock-daily-market-tab`, synced both ways via the `stock-daily:market` CustomEvent. Card/table market-cap sorts are market-scoped (TWD vs USD caps are not comparable). Per-market taxonomies in `report.py`: `SECTOR_GROUPS` (US themes), `TW_SECTOR_GROUPS` (封測/晶圓代工/IC 設計/功率元件/被動元件/電源 重電/散熱…), `CRYPTO_SECTOR_GROUPS`. Assignment is exclusive (first match wins, specific groups first); short ASCII terms (≤4 chars) are word-boundary matched via `_sector_term_matches` to prevent substring false-positives ("ai" in "sustain", "mu" in "communication").
+- **Earlier (2026-06-17)**: UI Localization (繁體中文 + language toggle), one-click Save to Database (`api_server.py`)
 - **Earlier Features**: C–H (Delta Badges, Valuation Cache, Plan Triggers, Morning Actions, Attention Sparkline, My Book P&L), #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill)
 
-**Test Suite**: 227 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`. API server: HTTP-based, no external dependencies.
+**Test Suite**: 255 tests, all passing. Report generation: ~1–2 min full fetch (32 tickers), <1s with `--no-news --no-valuation --no-macro`. API server: HTTP-based, no external dependencies.
 
 ## Quick Commands
 
@@ -265,4 +266,4 @@ Valuation fallback → Look for "Valuation fallback used" in warnings. Data Qual
 
 ---
 
-Last updated: 2026-06-08 (Features C–H completed: delta badges, valuation retry/cache, plan triggers, morning actions, sparkline, My Book P&L auto-weighting)
+Last updated: 2026-07-10 (Multi-market support: 台股/上櫃/加密貨幣 + per-market sector map with tabs and local taxonomies)

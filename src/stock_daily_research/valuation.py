@@ -38,9 +38,16 @@ YFINANCE_FIELD_MAP = {
 def fetch_yfinance_valuation(ticker: TickerConfig) -> ValuationSnapshot:
     retrieved_at = datetime.now(timezone.utc)
     yf_ticker = yf.Ticker(ticker.symbol)
-    info = _safe_info(yf_ticker)
+    # Yahoo does not expose quoteSummary fundamentals for many ETFs. Avoid that
+    # endpoint for assets configured without fundamentals; technical data remains available.
+    info = _safe_info(yf_ticker) if ticker.has_fundamentals else {}
     metrics = normalize_yfinance_metrics(info)
-    metrics.update(fetch_yfinance_eps_metrics(yf_ticker, metrics))
+    if ticker.has_earnings:
+        metrics.update(fetch_yfinance_eps_metrics(yf_ticker, metrics))
+    else:
+        # Assets without fundamentals have no analyst estimates; keep the keys so downstream
+        # consumers see a consistent metrics shape.
+        metrics.update(empty_estimate_metrics())
     metrics.update(fetch_technical_indicators(yf_ticker))
     return ValuationSnapshot(
         ticker=ticker.symbol,
@@ -221,14 +228,9 @@ def _safe_info(yf_ticker: Any) -> dict[str, Any]:
     return info or {}
 
 
-def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | None = None) -> dict[str, float | None]:
-    """Fetch EPS estimate and revision metrics from yfinance's analysis tables.
-
-    Static EPS fields come from quote info, while next-FY estimate / revisions
-    are best-effort from the analysis scraper. Missing analysis data degrades to
-    N/A because yfinance can be inconsistent by ticker and region.
-    """
-    metrics: dict[str, float | None] = {
+def empty_estimate_metrics() -> dict[str, float | None]:
+    """All analyst-estimate metric keys set to None."""
+    return {
         "next_fy_eps": None,
         "eps_growth_pct": None,
         "fy1_eps_revision_30d": None,
@@ -247,6 +249,16 @@ def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | No
         "latest_revenue_estimate": None,
         "latest_revenue_surprise_pct": None,
     }
+
+
+def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | None = None) -> dict[str, float | None]:
+    """Fetch EPS estimate and revision metrics from yfinance's analysis tables.
+
+    Static EPS fields come from quote info, while next-FY estimate / revisions
+    are best-effort from the analysis scraper. Missing analysis data degrades to
+    N/A because yfinance can be inconsistent by ticker and region.
+    """
+    metrics = empty_estimate_metrics()
 
     estimate = _safe_dataframe(lambda: yf_ticker.get_earnings_estimate())
     if estimate is None:

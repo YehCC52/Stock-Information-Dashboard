@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant-TW">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,6 +37,14 @@
       --info: #2563eb;
       --info-bg: #eff6ff;
       --shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+      /* Sector-map diverging tiles: 3 intensity steps per side + neutral. */
+      --map-up-1: rgba(22, 163, 74, 0.14);
+      --map-up-2: rgba(22, 163, 74, 0.30);
+      --map-up-3: rgba(22, 163, 74, 0.50);
+      --map-down-1: rgba(220, 38, 38, 0.12);
+      --map-down-2: rgba(220, 38, 38, 0.26);
+      --map-down-3: rgba(220, 38, 38, 0.45);
+      --map-flat: rgba(148, 163, 184, 0.16);
     }
 
     /* Dark tokens applied two ways: when OS prefers dark and no manual override,
@@ -62,6 +70,13 @@
         --info: #79c0ff;
         --info-bg: #1f2d3d;
         --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        --map-up-1: rgba(63, 185, 80, 0.16);
+        --map-up-2: rgba(63, 185, 80, 0.30);
+        --map-up-3: rgba(63, 185, 80, 0.45);
+        --map-down-1: rgba(255, 123, 114, 0.14);
+        --map-down-2: rgba(255, 123, 114, 0.27);
+        --map-down-3: rgba(255, 123, 114, 0.40);
+        --map-flat: rgba(139, 148, 158, 0.16);
       }
     }
     :root[data-theme="dark"] {
@@ -84,6 +99,13 @@
       --info: #79c0ff;
       --info-bg: #1f2d3d;
       --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      --map-up-1: rgba(63, 185, 80, 0.16);
+      --map-up-2: rgba(63, 185, 80, 0.30);
+      --map-up-3: rgba(63, 185, 80, 0.45);
+      --map-down-1: rgba(255, 123, 114, 0.14);
+      --map-down-2: rgba(255, 123, 114, 0.27);
+      --map-down-3: rgba(255, 123, 114, 0.40);
+      --map-flat: rgba(139, 148, 158, 0.16);
     }
     :root[data-theme="light"] {
       color-scheme: light;
@@ -812,6 +834,93 @@
     .focus-reason { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
     .heatmap-table { min-width: 560px; }
     .heatmap-table .symbols { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sector-map {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .map-group {
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      background: var(--surface-alt);
+      padding: 10px;
+      min-width: 0;
+    }
+    .map-group-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .map-group-name { font-weight: 600; font-size: 14px; }
+    .map-group-avg { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .map-group-trend { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+    .map-tiles { display: flex; flex-wrap: wrap; gap: 3px; }
+    .map-tile {
+      flex: 1 1 84px;
+      min-width: 72px;
+      max-width: 170px;
+      border-radius: 6px;
+      padding: 8px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      color: var(--text);
+      border: 1px solid transparent;
+    }
+    .map-tile:hover { text-decoration: none; border-color: var(--border); }
+    .map-tile-symbol { font-weight: 700; font-size: 13px; letter-spacing: 0.02em; }
+    .map-tile-change { font-size: 12px; font-variant-numeric: tabular-nums; }
+    .bin-up-1 { background: var(--map-up-1); }
+    .bin-up-2 { background: var(--map-up-2); }
+    .bin-up-3 { background: var(--map-up-3); }
+    .bin-down-1 { background: var(--map-down-1); }
+    .bin-down-2 { background: var(--map-down-2); }
+    .bin-down-3 { background: var(--map-down-3); }
+    .bin-flat { background: var(--map-flat); }
+    .bin-na { background: transparent; border: 1px dashed var(--border-soft); color: var(--muted); }
+    .map-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .map-legend .chip { padding: 2px 8px; border-radius: 4px; color: var(--text); font-variant-numeric: tabular-nums; }
+    .map-detail summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+    .map-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .map-tab {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      padding: 4px 12px;
+      cursor: pointer;
+    }
+    .map-tab:hover { color: var(--text); border-color: var(--accent); }
+    .map-tab.active {
+      color: var(--text);
+      font-weight: 600;
+      border-color: var(--accent);
+      background: var(--surface-soft);
+    }
+    .map-tab-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .map-market-panel { display: none; }
+    .map-market-panel.active { display: block; }
+    .map-panel-title { display: none; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+    .map-breadth { display: flex; gap: 10px; font-size: 13px; color: var(--muted); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+    @media (max-width: 760px) {
+      .market-workspace { grid-template-columns: 1fr; padding: 10px; }
+      .market-workspace-stats { grid-column: auto; }
+      .map-group-trend { margin-left: 0; flex-basis: 100%; }
+    }
     .position-row {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1001,7 +1110,100 @@
       align-items: center;
       margin-bottom: 12px;
     }
-    .control-label {
+    .market-workspace {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr) minmax(320px, 1fr);
+      gap: 12px;
+      align-items: center;
+      margin: 0 0 12px;
+      padding: 12px 14px;
+      border-top: 3px solid var(--info);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .market-workspace-copy { min-width: 0; }
+    .market-workspace-title {
+      display: block;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    .market-workspace-subtitle {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .market-workspace-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .market-workspace-stat {
+      min-width: 0;
+      padding: 6px 8px;
+      border-left: 1px solid var(--border-soft);
+    }
+    .market-workspace-stat strong {
+      display: block;
+      color: var(--text);
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+    }
+    .market-workspace-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .is-market-hidden, .is-market-empty { display: none !important; }
+    .market-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: min(100%, 520px);
+      gap: 4px;
+      margin: 0 0 12px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-alt);
+    }
+    .market-tab {
+      min-width: 0;
+      min-height: 38px;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      cursor: pointer;
+    }
+    .market-tab:hover { color: var(--text); background: var(--surface-soft); }
+    .market-tab.is-active {
+      color: var(--text);
+      background: var(--surface);
+      border-color: var(--border);
+      box-shadow: var(--shadow);
+    }
+    .market-workspace .market-tabs { width: 100%; margin: 0; }
+    .market-tab-count {
+      display: inline-flex;
+      justify-content: center;
+      min-width: 22px;
+      margin-left: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .valuation-view-note { color: var(--muted); font-size: 11px; }
+    .valuation-table.is-compact .valuation-secondary { display: none; }
+    .market-map-context { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .market-summary-action { color: var(--link); font-weight: 700; }    .control-label {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -1423,7 +1625,9 @@
       gap: 18px;
       margin-bottom: 18px;
     }
-    @media (max-width: 760px) { .macro-overlay { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) {
+      .market-workspace { grid-template-columns: 1fr; padding: 10px; }
+      .market-workspace-stats { grid-column: auto; } .macro-overlay { grid-template-columns: 1fr; } }
     .rates-list, .breadth-list { list-style: none; margin: 6px 0 8px; padding: 0; }
     .rate-row, .breadth-row {
       display: grid;
@@ -1800,22 +2004,42 @@
       margin-bottom: 10px;
       align-items: flex-start;
     }
+    .ticker-head > div:first-child {
+      min-width: 0;
+    }
     .ticker-actions {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
+      flex-direction: column;
+      align-items: flex-end;
       justify-content: flex-end;
-      gap: 6px;
-      max-width: 200px;
+      gap: 5px;
+      max-width: min(220px, 52%);
+      min-width: 0;
+    }
+    .quick-actions,
+    .status-badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 5px;
+      max-width: 100%;
     }
     .ticker-actions .icon-button {
       width: auto;
-      min-width: 34px;
-      max-width: 82px;
-      padding: 0 7px;
+      min-width: 30px;
+      max-width: 64px;
+      height: 28px;
+      padding: 0 6px;
       white-space: nowrap;
-      font-size: 14px;
+      font-size: 12px;
       line-height: 1;
+    }
+    .status-badges .badge,
+    .status-badges .plan-trigger-chip {
+      max-width: 106px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .review-status.reviewed { color: var(--good); background: var(--good-bg); }
     .review-status.in-progress { color: var(--info); background: var(--info-bg); }
@@ -2055,6 +2279,23 @@
     .compare-table-wrap td.change-neg { color: var(--danger); font-weight: 600; }
     .ticker-symbol { font-weight: 800; font-size: 18px; line-height: 1.1; }
     .ticker-name { color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .market-badge, .currency-code {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .market-badge {
+      margin-left: 6px;
+      padding: 2px 5px;
+      border: 1px solid var(--border-soft);
+      border-radius: 4px;
+      color: var(--info);
+      background: var(--info-bg);
+    }
+    .currency-code { margin-left: 4px; color: var(--muted); }
     .metrics {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2087,10 +2328,14 @@
     }
 
     @media (max-width: 1100px) {
+      .market-workspace { grid-template-columns: minmax(160px, 0.55fr) minmax(360px, 1.45fr); }
+      .market-workspace-stats { grid-column: 1 / -1; }
       .command-center { grid-template-columns: 1fr; }
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
+      .market-workspace { grid-template-columns: 1fr; padding: 10px; }
+      .market-workspace-stats { grid-column: auto; }
       .page { padding: 14px; }
       .header { flex-direction: column; align-items: flex-start; }
       .header-right { align-items: stretch; width: 100%; }
@@ -2170,6 +2415,10 @@
       .toc, details, .theme-toggle { display: none; }
       .section, .ticker-card, .stat { break-inside: avoid; box-shadow: none; }
       .table-wrap { max-height: none; overflow: visible; }
+      /* Sector map: print every market stacked, with its title, no tabs. */
+      .map-tabs { display: none; }
+      .map-market-panel { display: block; }
+      .map-panel-title { display: block; }
     }
   </style>
 </head>
@@ -2212,6 +2461,23 @@
         </div>
       </div>
     </header>
+    <section id="market-workspace" class="market-workspace" aria-label="&#x5E02;&#x5834;&#x5DE5;&#x4F5C;&#x5340;">
+      <div class="market-workspace-copy">
+        <span id="market-workspace-title" class="market-workspace-title">&#x7F8E;&#x80A1;&#x5DE5;&#x4F5C;&#x5340;</span>
+        <span id="market-workspace-subtitle" class="market-workspace-subtitle">&#x6458;&#x8981;&#x3001;&#x65B0;&#x805E;&#x3001;&#x4F30;&#x503C;&#x8207;&#x500B;&#x80A1;&#x5C07;&#x540C;&#x6B65;&#x5207;&#x63DB;</span>
+      </div>
+      <div class="market-tabs" role="tablist" aria-label="&#x5E02;&#x5834;&#x5207;&#x63DB;">
+        <button type="button" class="market-tab" role="tab" data-market-tab="us">&#x7F8E;&#x80A1;<span class="market-tab-count">0</span></button>
+        <button type="button" class="market-tab" role="tab" data-market-tab="taiwan">&#x53F0;&#x80A1;<span class="market-tab-count">0</span></button>
+        <button type="button" class="market-tab" role="tab" data-market-tab="crypto">&#x52A0;&#x5BC6;&#x8CA8;&#x5E63;<span class="market-tab-count">0</span></button>
+      </div>
+      <div class="market-workspace-stats" aria-live="polite">
+        <div class="market-workspace-stat"><strong id="market-stat-tickers">0</strong><span>&#x8FFD;&#x8E64;&#x6A19;&#x7684;</span></div>
+        <div class="market-workspace-stat"><strong id="market-stat-holdings">0</strong><span>&#x6301;&#x6709;&#x90E8;&#x4F4D;</span></div>
+        <div class="market-workspace-stat"><strong id="market-stat-attention">0</strong><span>&#x9700;&#x7559;&#x610F;</span></div>
+        <div class="market-workspace-stat"><strong id="market-stat-news">0</strong><span>&#x4ECA;&#x65E5;&#x65B0;&#x805E;</span></div>
+      </div>
+    </section>
 
     <nav class="toc" aria-label="Sections">
       {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">行動 {{ morning_actions|length }}</a>{% endif %}
@@ -2252,10 +2518,10 @@
     <section id="daily-summary" class="section daily-summary {{ daily_summary.tone }}" aria-label="Daily summary">
       <div class="daily-summary-head">
         <h2>今日摘要</h2>
-        <span class="daily-summary-detail">{{ daily_summary.headline }} · {{ daily_summary.detail }}</span>
+        <span id="market-summary-detail" class="daily-summary-detail">{{ daily_summary.headline }} · {{ daily_summary.detail }}</span>
       </div>
       <div class="daily-summary-body">
-        <ul class="daily-summary-list">
+        <ul id="market-summary-list" class="daily-summary-list">
           {% for item in daily_summary["items"] %}
           <li class="daily-summary-item {{ item.tone }}">
             <a href="{{ item.anchor }}">
@@ -2404,10 +2670,10 @@
               <tr>
                 <td><span class="badge">{{ grade }}</span></td>
                 <td class="symbol-cell"><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a></td>
-                <td>{{ row.action }}</td>
+                <td>{{ row.action|zh_text }}</td>
                 <td class="num">{{ row.score }}</td>
-                <td>{{ row.status }}</td>
-                <td>{{ row.reasons|join(' | ') }}</td>
+                <td>{{ row.status|zh_text }}</td>
+                <td>{{ row.reasons|join(' | ')|zh_text }}</td>
               </tr>
               {% endfor %}
             {% endfor %}
@@ -2418,64 +2684,64 @@
 
     <section id="research-queue" class="section section-primary">
       <div class="section-header">
-        <h2>Research Queue</h2>
+        <h2>研究待辦</h2>
       </div>
       <div class="focus-grid">
         <div class="focus-column review">
-          <h3><span class="focus-icon">Q</span>Review queue</h3>
+          <h3><span class="focus-icon">Q</span>優先檢視</h3>
           {% if history.review_queue %}
           <ul class="focus-list">
             {% for row in history.review_queue %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No research queue right now.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有待檢視項目。</div>{% endif %}
         </div>
         <div class="focus-column chase">
-          <h3><span class="focus-icon">T</span>Recent thesis changes</h3>
+          <h3><span class="focus-icon">T</span>論點變動</h3>
           {% if history.recent_thesis_changes %}
           <ul class="focus-list">
             {% for row in history.recent_thesis_changes %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No recent thesis-state changes.</div>{% endif %}
+          {% else %}<div class="section-empty">近期沒有投資論點狀態變化。</div>{% endif %}
         </div>
         <div class="focus-column pullback">
-          <h3><span class="focus-icon">E</span>Post-earnings due</h3>
+          <h3><span class="focus-icon">E</span>財報後待追蹤</h3>
           {% if history.post_earnings_due %}
           <ul class="focus-list">
             {% for row in history.post_earnings_due %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No post-earnings review due.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有待完成的財報後檢視。</div>{% endif %}
         </div>
       </div>
       <div class="focus-grid" style="margin-top: 10px;">
         <div class="focus-column review">
-          <h3><span class="focus-icon">D</span>Research drift</h3>
+          <h3><span class="focus-icon">D</span>研究狀態漂移</h3>
           {% if history.research_drift %}
           <ul class="focus-list">
             {% for row in history.research_drift %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No stale active thesis flagged.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有過久未更新的有效投資論點。</div>{% endif %}
         </div>
         <div class="focus-column chase">
-          <h3><span class="focus-icon">H</span>Archive</h3>
+          <h3><span class="focus-icon">H</span>歷史報告</h3>
           {% if history.archive_dates %}
           <ul class="focus-list">
             {% for report_date in history.archive_dates[:6] %}
             <li><span class="focus-rank">{{ loop.index }}</span><span><span class="focus-reason">{{ report_date }}</span></span></li>
             {% endfor %}
           </ul>
-          {% else %}<div class="section-empty">No archive runs saved yet.</div>{% endif %}
+          {% else %}<div class="section-empty">目前沒有已儲存的歷史報告。</div>{% endif %}
         </div>
         <div class="focus-column pullback">
-          <h3><span class="focus-icon">R</span>Research memory</h3>
-          <div class="section-empty">{{ history.history_days }}d history window loaded from SQLite.</div>
+          <h3><span class="focus-icon">R</span>研究記憶</h3>
+          <div class="section-empty">{{ history.history_days }} 天歷史資料已從 SQLite 載入。</div>
         </div>
       </div>
     </section>
@@ -2483,7 +2749,7 @@
     {% if book_today %}
     <section id="book-today" class="section section-primary">
       <div class="section-header">
-        <h2>My Book Today</h2>
+        <h2>今日持股</h2>
       </div>
       <div class="morning-grid">
         {% for row in book_today %}
@@ -2500,7 +2766,7 @@
     {% if book_impact %}
     <section id="book-impact" class="section section-secondary">
       <div class="section-header">
-        <h2>My Book Impact Today <span class="count">({{ book_impact|length }})</span></h2>
+        <h2>持股貢獻明細 <span class="count">({{ book_impact|length }})</span></h2>
       </div>
       <div class="table-wrap">
         <table>
@@ -2520,7 +2786,7 @@
               <td class="num change change-{{ row.move|change_class }}" title="{{ row.move_source }}">{{ row.move|format_pct }}</td>
               <td class="num">{{ row.weight|format_pct(sign=False) }}</td>
               <td class="num change change-{{ row.impact|change_class }}">{{ row.impact|format_pct }}</td>
-              <td>{{ row.action }}</td>
+              <td>{{ row.action|zh_text }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -2532,7 +2798,7 @@
     {% if report.premarket %}
     <section id="premarket" class="section section-primary">
       <div class="section-header">
-        <h2>Overnight / Premarket <span class="count">Market data timestamp: {{ report.premarket.retrieved_at|utc_timestamp }}</span></h2>
+        <h2>隔夜 / 盤前 <span class="count">行情時間：{{ report.premarket.retrieved_at|utc_timestamp }}</span></h2>
       </div>
       {% if report.premarket.benchmarks %}
       <div class="morning-grid" aria-label="Premarket benchmarks">
@@ -2598,43 +2864,43 @@
 
     <section id="today-catalysts" class="section section-primary">
       <div class="section-header">
-        <h2>Today's Catalysts</h2>
+        <h2>今日催化</h2>
       </div>
       <div class="catalyst-grid">
         <div class="catalyst-card">
-          <span class="label">Before open earnings</span>
+          <span class="label">盤前公布財報</span>
           {% if todays_catalysts.before_open %}
           <ul class="catalyst-list">
             {% for item in todays_catalysts.before_open %}
             <li><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a><span>{{ item.ticker.company_name }}</span></li>
             {% endfor %}
           </ul>
-          {% else %}<span class="sub">None on watchlist.</span>{% endif %}
+          {% else %}<span class="sub">觀察清單目前沒有項目。</span>{% endif %}
         </div>
         <div class="catalyst-card">
-          <span class="label">After close earnings</span>
+          <span class="label">盤後公布財報</span>
           {% if todays_catalysts.after_close %}
           <ul class="catalyst-list">
             {% for item in todays_catalysts.after_close %}
             <li><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a><span>{{ item.ticker.company_name }}</span></li>
             {% endfor %}
           </ul>
-          {% else %}<span class="sub">None on watchlist.</span>{% endif %}
+          {% else %}<span class="sub">觀察清單目前沒有項目。</span>{% endif %}
         </div>
         <div class="catalyst-card">
-          <span class="label">Macro today</span>
+          <span class="label">今日總經事件</span>
           {% if todays_catalysts.macro %}
           <ul class="catalyst-list">
             {% for event in todays_catalysts.macro %}
             <li><a href="{{ event.source_url }}" target="_blank" rel="noopener">{{ event.name }}</a><span>{{ event.event_datetime|twn_timestamp }} / {{ event.event_datetime|et_timestamp }}</span></li>
             {% endfor %}
           </ul>
-          {% else %}<span class="sub">No tracked macro event today.</span>{% endif %}
+          {% else %}<span class="sub">今日沒有追蹤中的總經事件。</span>{% endif %}
         </div>
         <div class="catalyst-card">
-          <span class="label">Revisit due today</span>
+          <span class="label">今日到期回看</span>
           <ul id="revisit-due-list" class="catalyst-list">
-            <li><span class="muted">Loading local revisit dates</span><span></span></li>
+            <li><span class="muted">正在載入回看日期</span><span></span></li>
           </ul>
         </div>
       </div>
@@ -2689,7 +2955,7 @@
     {% if portfolio and portfolio.holdings %}
     <section id="my-book" class="section my-book-section">
       <div class="section-header">
-        <h2>My Book Today <span class="count">({{ portfolio.holdings|length }} holdings)</span></h2>
+        <h2>持股總覽 <span class="count">({{ portfolio.holdings|length }} holdings)</span></h2>
         <span class="regime-pill" style="background:var(--info-bg);color:var(--info);" title="Sum of (daily % × weight) across holdings">
           Net impact {{ portfolio.total_impact_pct|format_pct }}
         </span>
@@ -2866,7 +3132,7 @@
     {% if report.market_sentiment %}
     <section id="market-sentiment" class="section section-secondary">
       <div class="section-header">
-        <h2>Market Sentiment <span class="count">({{ report.market_sentiment.source }})</span></h2>
+        <h2>市場情緒 <span class="count">({{ report.market_sentiment.source }})</span></h2>
       </div>
       <div class="sentiment-panel">
         <div class="sentiment-score">
@@ -2892,7 +3158,7 @@
       {% if report.market_context.rates %}
       <div id="rates" class="section section-primary">
         <div class="section-header">
-          <h2>Rates, Dollar &amp; Energy</h2>
+          <h2>利率、美元與能源</h2>
           {% set regime = report|market_regime %}
           {% if regime %}<span class="regime-pill" title="Combined yields + dollar + oil + sentiment framing">{{ regime }}</span>{% endif %}
         </div>
@@ -2910,6 +3176,7 @@
         {% set tip = report.market_context.rates|rates_interpretation %}
         {% if tip %}<div class="rates-interp">{{ tip }}</div>{% endif %}
         {% if macro_risk %}
+        <h3>總經風險儀表</h3>
         <div class="macro-risk" aria-label="Macro risk meter">
           {% for risk in macro_risk %}
           <div class="risk-meter {{ risk.level }}">
@@ -2926,7 +3193,7 @@
       {% if report.market_context.breadth %}
       <div id="breadth" class="section section-primary">
         <div class="section-header">
-          <h2>Breadth (20D)</h2>
+          <h2>市場廣度（20D）</h2>
         </div>
         <ul class="breadth-list">
           {% for b in report.market_context.breadth %}
@@ -2944,48 +3211,61 @@
     </section>
     {% endif %}
 
-    {% if sector_leadership %}
+    {% if sector_map_markets %}
     <section id="sector-leadership" class="section section-secondary">
       <div class="section-header">
-        <h2>Sector Leadership <span class="count">({{ sector_leadership|length }} groups)</span></h2>
+        <h2>產業地圖</h2>
       </div>
-      <div class="table-wrap">
-        <table class="heatmap-table">
-          <thead>
-            <tr>
-              <th>Group</th>
-              <th>Names</th>
-              <th class="num">1D</th>
-              <th class="num">5D</th>
-              <th class="num">20D</th>
-              <th class="num">Vs SPY 20D</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in sector_leadership %}
-            <tr>
-              <td class="symbol-cell">{{ row.label }}</td>
-              <td class="symbols" title="{{ row.symbols }}">{{ row.symbols }}</td>
-              <td class="num change change-{{ row.one_day|change_class }}">{{ row.one_day|format_pct }}</td>
-              <td class="num change change-{{ row.ret_5d|change_class }}">{{ row.ret_5d|format_pct }}</td>
-              <td class="num change change-{{ row.ret_20d|change_class }}">{{ row.ret_20d|format_pct }}</td>
-              <td class="num change change-{{ row.rel_spy|change_class }}">{{ row.rel_spy|format_pct }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div id="market-map-context" class="market-map-context">內容會跟隨頁首市場切換</div>
+
+      {% for panel in sector_map_markets %}
+      <div class="map-market-panel{% if loop.first %} active{% endif %}" data-market-panel="{{ panel.key }}">
+        <div class="map-panel-title">{{ panel.label }}</div>
+        <div class="map-breadth"><span>上漲 {{ panel.advancers }}</span><span>持平 {{ panel.flat }}</span><span>下跌 {{ panel.decliners }}</span></div>
+        <div class="sector-map">
+          {% for row in panel.rows %}
+          <div class="map-group">
+            <div class="map-group-head">
+              <span class="map-group-name">{{ row.label_zh }}</span>
+              <span class="map-group-avg change change-{{ row.one_day|change_class }}">{{ row.one_day|format_pct }}</span>
+              <span class="map-group-trend">5D {{ row.ret_5d|format_pct }} · 20D {{ row.ret_20d|format_pct }}</span>
+            </div>
+            <div class="map-tiles">
+              {% for tile in row.tiles %}
+              <a class="map-tile bin-{{ tile.bin }}" href="#{{ tile.anchor }}" title="{{ tile.company_name }}">
+                <span class="map-tile-symbol">{{ tile.symbol }}</span>
+                <span class="map-tile-change">{{ tile.change|format_pct }}</span>
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
       </div>
+      {% endfor %}
+      <details class="map-detail">
+        <summary>查看產業明細</summary>
+        <div class="table-wrap">
+          <table class="heatmap-table">
+            <thead><tr><th>市場</th><th>產業</th><th>標的</th><th class="num">1D</th><th class="num">5D</th><th class="num">20D</th></tr></thead>
+            <tbody>
+              {% for row in sector_leadership %}
+              <tr data-market="{{ row.market }}"><td>{{ row.market_label }}</td><td>{{ row.label_zh }}</td><td class="symbols">{{ row.symbols }}</td><td class="num change change-{{ row.one_day|change_class }}">{{ row.one_day|format_pct }}</td><td class="num change change-{{ row.ret_5d|change_class }}">{{ row.ret_5d|format_pct }}</td><td class="num change change-{{ row.ret_20d|change_class }}">{{ row.ret_20d|format_pct }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </section>
     {% endif %}
-
     <section id="changes" class="section section-tertiary">
       <div class="section-header">
-        <h2>What Changed Since Last Run <span class="count">{{ report.generated_at|twn_timestamp }}</span></h2>
+        <h2>上次報告後的變化 <span class="count">{{ report.generated_at|twn_timestamp }}</span></h2>
       </div>
       <div id="changes-body" class="change-list">
         {% if history.changes_since_last_run %}
           {% for row in history.changes_since_last_run %}
-          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title }}</strong><span>{{ row.detail }}</span></a>
+          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
           {% endfor %}
         {% else %}
         <div class="section-empty">No material changes versus the previous saved run.</div>
@@ -2995,15 +3275,15 @@
 
     <section id="changes-30d" class="section section-tertiary">
       <div class="section-header">
-        <h2>What Changed in 30d</h2>
+        <h2>30 天變化</h2>
       </div>
       <div class="change-list">
         {% if history.changes_30d %}
           {% for row in history.changes_30d %}
-          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title }}</strong><span>{{ row.detail }}</span></a>
+          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
           {% endfor %}
         {% else %}
-        <div class="section-empty">Not enough saved history yet for 30d comparisons.</div>
+        <div class="section-empty">目前累積的歷史資料不足，尚無法進行 30 天比較。</div>
         {% endif %}
       </div>
     </section>
@@ -3028,21 +3308,21 @@
 
     {% if report.warnings %}
     <section id="global-warnings" class="section section-secondary">
-      <h2>Global Warnings <span class="count">({{ report.warnings|length }})</span></h2>
+      <h2>全域警示 <span class="count">({{ report.warnings|length }})</span></h2>
       <ul class="warning-list">
-        {% for warning in report.warnings %}<li>{{ warning }}</li>{% endfor %}
+        {% for warning in report.warnings %}<li>{{ warning|zh_text }}</li>{% endfor %}
       </ul>
     </section>
     {% endif %}
 
     <section id="data-quality" class="section section-secondary">
-      <h2>Data Quality
-        <span class="count">(avg confidence {{ data_quality.average }}/100 · {{ data_quality.checked }} tickers)</span>
+      <h2>資料品質
+        <span class="count">(平均可信度 {{ data_quality.average }}/100 · {{ data_quality.checked }} 檔)</span>
       </h2>
       {% if data_quality.flagged %}
       <table class="dq-table">
         <thead>
-          <tr><th>Ticker</th><th class="num">Confidence</th><th>Tag</th><th>Flags</th></tr>
+          <tr><th>代碼</th><th class="num">可信度</th><th>等級</th><th>問題</th></tr>
         </thead>
         <tbody>
           {% for row in data_quality.flagged %}
@@ -3062,12 +3342,12 @@
         </tbody>
       </table>
       {% else %}
-      <div class="section-empty">All tickers scored 80+ confidence — no data-quality flags this run.</div>
+      <div class="section-empty">所有標的可信度皆達 80 分以上，本次沒有資料品質警示。</div>
       {% endif %}
     </section>
 
     <section id="macro" class="section section-secondary">
-      <h2>宏觀日曆 <span class="count">(next events)</span></h2>
+      <h2>總經日曆 <span class="count">(近期事件)</span></h2>
       {% if report.economic_events %}
       <div class="macro-row">
         {% for event in report.economic_events %}
@@ -3080,12 +3360,12 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="section-empty">No upcoming macro events found for this run.</div>
+      <div class="section-empty">本次沒有找到近期總經事件。</div>
       {% endif %}
     </section>
 
     <section id="earnings" class="section section-tertiary">
-      <h2>近期財報 <span class="count">(next 7 days)</span></h2>
+      <h2>近期財報 <span class="count">(未來 7 天)</span></h2>
       {% if earnings_soon %}
       <div class="earnings-row">
         {% for item in earnings_soon %}
@@ -3101,16 +3381,16 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="section-empty">No earnings dates within the next 7 days.</div>
+      <div class="section-empty">未來 7 天沒有已知財報日期。</div>
       {% endif %}
     </section>
 
     {% if news_clusters %}
     <section id="news-clusters" class="section section-tertiary news-clusters-section">
       <div class="section-header">
-        <h2>Event Clusters <span class="count">({{ news_clusters|length }})</span></h2>
+        <h2>事件群組 <span class="count">({{ news_clusters|length }})</span></h2>
       </div>
-      <div class="sort-hint">Same story reported by multiple outlets — grouped to cut duplicate headlines.</div>
+      <div class="sort-hint">相同事件由多家媒體報導時會合併顯示，減少重複資訊。</div>
       <ul class="cluster-list">
         {% for c in news_clusters %}
         <li class="cluster-item confidence-{{ c.confidence }}">
@@ -3119,12 +3399,12 @@
             <span class="badge event-badge event-{{ c.event_type }}">{{ c.event_type|event_label }}</span>
           </div>
           <div class="cluster-meta">
-            <span class="cluster-field"><span class="cf-label">Tickers</span>
+            <span class="cluster-field"><span class="cf-label">標的</span>
               {% for sym in c.tickers %}<a href="#{{ sym|ticker_anchor }}">{{ sym }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
             </span>
-            <span class="cluster-field"><span class="cf-label">Sources</span>{{ c.sources }} ({{ c.article_count }} articles)</span>
-            <span class="cluster-field"><span class="cf-label">Impact</span>{{ c.impact }}</span>
-            <span class="cluster-field"><span class="cf-label">Confidence</span><span class="conf-tag conf-{{ c.confidence }}">{{ c.confidence }}</span></span>
+            <span class="cluster-field"><span class="cf-label">來源</span>{{ c.sources }} ({{ c.article_count }} articles)</span>
+            <span class="cluster-field"><span class="cf-label">影響</span>{{ c.impact }}</span>
+            <span class="cluster-field"><span class="cf-label">可信度</span><span class="conf-tag conf-{{ c.confidence }}">{{ c.confidence }}</span></span>
           </div>
           <div class="cluster-action">{{ c.action }}</div>
         </li>
@@ -3135,7 +3415,7 @@
 
     <section id="news" class="section section-tertiary">
       <div class="section-header">
-        <h2>Important News <span class="count">({{ important_news[:5]|length }} picks / {{ important_news|length }} total)</span></h2>
+        <h2>重點新聞 <span class="count">({{ important_news[:5]|length }} picks / {{ important_news|length }} total)</span></h2>
         {% if important_news|length > 5 %}<button id="toggle-news" type="button" class="tool-button">顯示積壓</button>{% endif %}
       </div>
       {% if important_news %}
@@ -3160,39 +3440,41 @@
         {% endfor %}
       </ul>
       {% else %}
-      <div class="section-empty">No high-priority news (importance >=0.8) found for this run.</div>
+      <div class="section-empty">本次沒有達到重要性門檻的重點新聞。</div>
       {% endif %}
     </section>
 
     <section id="valuation" class="section section-tertiary">
       <div class="section-header">
-        <h2>Valuation Snapshot <span class="count">({{ report.ticker_reports|length }} tickers)</span></h2>
+        <h2>估值快照 <span class="count">({{ report.ticker_reports|length }} 檔)</span></h2>
         <button id="toggle-valuation" type="button" class="tool-button" aria-expanded="true">收合</button>
       </div>
       <div id="valuation-body">
       <div class="valuation-controls">
-        <label class="control-label" for="valuation-sort">Sort</label>
+        <label class="control-label" for="valuation-sort">排序</label>
         <select id="valuation-sort" class="control-select">
-          <option value="symbol">Ticker A-Z</option>
-          <option value="market_cap_desc">Market cap high-low</option>
-          <option value="forward_pe_asc">Forward P/E low-high</option>
-          <option value="forward_pe_desc">Forward P/E high-low</option>
-          <option value="rsi_asc">RSI low-high</option>
-          <option value="rsi_desc">RSI high-low</option>
-          <option value="earnings_soon">Earnings nearest</option>
+          <option value="symbol">代碼 A-Z</option>
+          <option value="market_cap_desc">市值由高至低</option>
+          <option value="forward_pe_asc">預估 P/E 由低至高</option>
+          <option value="forward_pe_desc">預估 P/E 由高至低</option>
+          <option value="rsi_asc">RSI 由低至高</option>
+          <option value="rsi_desc">RSI 由高至低</option>
+          <option value="earnings_soon">財報日期由近至遠</option>
         </select>
+        <button id="toggle-valuation-columns" type="button" class="tool-button" aria-pressed="false">完整欄位</button>
+        <span class="valuation-view-note">預設顯示決策常用欄位</span>
       </div>
       <div class="table-wrap">
-        <table>
+        <table id="valuation-table" class="valuation-table is-compact">
           <thead>
             <tr>
-              <th>Ticker</th>
+              <th>代碼</th>
               {% for key in valuation_keys %}
-              <th class="num">{{ key|metric_label }}</th>
-              {% if key == "last_close" %}<th class="num">Daily %</th>{% endif %}
-              {% if key == "market_cap" %}<th class="num">From High</th>{% endif %}
+              <th class="num{% if key not in ('last_close', 'rsi_14', 'market_cap', 'forward_pe', 'fy1_eps_revision_30d') %} valuation-secondary{% endif %}">{{ key|html_metric_label }}</th>
+              {% if key == "last_close" %}<th class="num">日漲跌</th>{% endif %}
+              {% if key == "market_cap" %}<th class="num valuation-secondary">距高點</th>{% endif %}
               {% endfor %}
-              <th class="num">Earnings</th>
+              <th class="num">財報</th>
             </tr>
           </thead>
           <tbody id="valuation-rows">
@@ -3200,16 +3482,16 @@
             {% set delta = item|earnings_delta %}
             {% set chg = item|daily_change %}
             {% set fh = item|from_52w_high %}
-            <tr data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}">
+            <tr data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}">
               <td class="symbol-cell"><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a></td>
               {% for key in valuation_keys %}
               {% set raw = item.valuation.metrics.get(key) if item.valuation else None %}
-              <td class="num {% if key in ('trailing_pe', 'forward_pe', 'ev_to_ebitda') %}pe-{{ raw|pe_class }}{% endif %}{% if key == 'rsi_14' %} rsi-{{ raw|rsi_class }}{% endif %}{% if key == 'gap_percent' %} change change-{{ raw|change_class }}{% endif %}{% if key in ('fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %} change change-{{ raw|eps_revision_class }}{% endif %}{% if key in ('eps_growth_pct', 'revenue_growth_pct') %} change change-{{ raw|change_class }}{% endif %}"{% if key == 'rsi_14' %} title="{{ raw|rsi_label }}"{% endif %}>{% if not item.valuation %}N/A{% elif key == 'volume_vs_20d' %}{{ raw|format_ratio }}{% elif key in ('gap_percent', 'fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %}{{ raw|format_pct }}{% elif key in ('atr_20_percent', 'eps_growth_pct', 'revenue_growth_pct') %}{{ raw|format_pct(sign=False) }}{% else %}{{ raw|metric_value }}{% endif %}</td>
+              <td class="num{% if key not in ('last_close', 'rsi_14', 'market_cap', 'forward_pe', 'fy1_eps_revision_30d') %} valuation-secondary{% endif %} {% if key in ('trailing_pe', 'forward_pe', 'ev_to_ebitda') %}pe-{{ raw|pe_class }}{% endif %}{% if key == 'rsi_14' %} rsi-{{ raw|rsi_class }}{% endif %}{% if key == 'gap_percent' %} change change-{{ raw|change_class }}{% endif %}{% if key in ('fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %} change change-{{ raw|eps_revision_class }}{% endif %}{% if key in ('eps_growth_pct', 'revenue_growth_pct') %} change change-{{ raw|change_class }}{% endif %}"{% if key == 'rsi_14' %} title="{{ raw|rsi_label }}"{% endif %}>{% if not item.valuation %}N/A{% elif key == 'volume_vs_20d' %}{{ raw|format_ratio }}{% elif key in ('gap_percent', 'fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %}{{ raw|format_pct }}{% elif key in ('atr_20_percent', 'eps_growth_pct', 'revenue_growth_pct') %}{{ raw|format_pct(sign=False) }}{% else %}{{ raw|metric_value }}{% endif %}</td>
               {% if key == "last_close" %}
               <td class="num change change-{{ chg|change_class }}">{{ chg|format_pct }}</td>
               {% endif %}
               {% if key == "market_cap" %}
-              <td class="num change change-{{ fh|change_class }}">{{ fh|format_pct }}</td>
+              <td class="num valuation-secondary change change-{{ fh|change_class }}">{{ fh|format_pct }}</td>
               {% endif %}
               {% endfor %}
               <td class="num">
@@ -3321,11 +3603,11 @@
         {% set pos = item|position_view %}
         {% set dq = item|data_quality %}
         {% set cluster = item|ticker_cluster %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
           <div class="ticker-head">
             <div>
-              <div class="ticker-symbol">{{ item.ticker.symbol }}</div>
-              <div class="ticker-name">{{ item.ticker.company_name }}</div>
+              <div class="ticker-symbol">{{ item.ticker.display_symbol }}<span class="market-badge">{{ item.ticker.market|market_label }}</span></div>
+              <div class="ticker-name">{{ item.ticker.company_name }}<span class="currency-code">{{ item.ticker.currency }}</span></div>
               {% if sector %}<div class="ticker-sector">{{ sector }}</div>{% endif %}
               {% if research.thesis_state or research.last_reviewed_at %}
               <div class="ticker-sector">
@@ -3336,18 +3618,22 @@
               {% if item.earnings and item.earnings.earnings_date %}<div class="countdown" data-countdown="{{ item.earnings.earnings_date.isoformat() }}" data-time-of-day="{{ item.earnings.time_of_day }}"></div>{% endif %}
             </div>
             <div class="ticker-actions">
-              <button type="button" class="icon-button pin-button" aria-label="加入焦點 {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}">焦點</button>
-              <button type="button" class="icon-button quick-done" aria-label="標記 {{ item.ticker.symbol }} 已看過" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已檢視">已看過</button>
-              <button type="button" class="icon-button quick-revisit" aria-label="明天再看 {{ item.ticker.symbol }}" data-quick-revisit="{{ item.ticker.symbol }}" title="把檢視日期設為今天 +1 天，或將既有日期往後推一天">明天</button>
-              {% if state == "hot" %}<span class="badge danger">{{ state|card_state_label }}</span>
-              {% elif state == "warn" %}<span class="badge warn">{{ state|card_state_label }}</span>
-              {% elif state == "warm" %}<span class="badge good">{{ state|card_state_label }}</span>
-              {% else %}<span class="badge">{{ state|card_state_label }}</span>{% endif %}
-              {% if fhigh is not none %}<span class="badge from-high-chip change change-{{ fhigh|change_class }}" title="距離 52 週高點">距高點 {{ fhigh|format_pct }}</span>{% endif %}
-              {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="右側分數 {{ insights.score.score }}/100">{{ insights.score.status|zh_text }}</span>{% endif %}
-              {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="Data confidence {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ') }}{% endif %}">Data {{ dq.tag }}</span>{% endif %}
-              <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|review_status_label }}</span>
-              {% for trig in plan_triggers_for(item.ticker.symbol) %}<span class="plan-trigger-chip tone-{{ trig.tone }}" title="{{ trig.headline }} — {{ trig.detail }}">{{ trig.label }}</span>{% endfor %}
+              <div class="quick-actions">
+                <button type="button" class="icon-button pin-button" aria-label="加入焦點 {{ item.ticker.symbol }}" aria-pressed="false" data-pin="{{ item.ticker.symbol }}" title="加入焦點">焦點</button>
+                <button type="button" class="icon-button quick-done" aria-label="標記 {{ item.ticker.symbol }} 已看過" data-quick-done="{{ item.ticker.symbol }}" title="標記財報、指引、估值、新聞、投資論點都已檢視">已看</button>
+                <button type="button" class="icon-button quick-revisit" aria-label="明天再看 {{ item.ticker.symbol }}" data-quick-revisit="{{ item.ticker.symbol }}" title="把檢視日期設為今天 +1 天，或將既有日期往後推一天">明天</button>
+              </div>
+              <div class="status-badges">
+                {% if state == "hot" %}<span class="badge danger">{{ state|card_state_label }}</span>
+                {% elif state == "warn" %}<span class="badge warn">{{ state|card_state_label }}</span>
+                {% elif state == "warm" %}<span class="badge good">{{ state|card_state_label }}</span>
+                {% else %}<span class="badge">{{ state|card_state_label }}</span>{% endif %}
+                {% if fhigh is not none %}<span class="badge from-high-chip change change-{{ fhigh|change_class }}" title="距離 52 週高點">距高點 {{ fhigh|format_pct }}</span>{% endif %}
+                {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="右側分數 {{ insights.score.score }}/100">{{ insights.score.status|zh_text }}</span>{% endif %}
+                {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="資料可信度 {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ')|zh_text }}{% endif %}">資料 {{ dq.tag|level_label }}</span>{% endif %}
+                <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|review_status_label }}</span>
+                {% for trig in plan_triggers_for(item.ticker.symbol) %}<span class="plan-trigger-chip tone-{{ trig.tone }}" title="{{ trig.headline|zh_text }} — {{ trig.detail|zh_text }}">{{ trig.label|zh_text }}</span>{% endfor %}
+              </div>
             </div>
           </div>
 
@@ -3404,7 +3690,7 @@
               </div>
               <div class="position-chip">
                 <span class="label">P/L</span>
-                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}{% if pos.pl_dollar is not none %} (${{ "{:+,.0f}".format(pos.pl_dollar) }}){% endif %}</span>
+                <span class="value change change-{{ pos.pl_pct|change_class }}">{{ pos.pl_pct|format_pct }}{% if pos.pl_dollar is not none %} ({{ item.ticker.currency }} {{ "{:+,.0f}".format(pos.pl_dollar) }}){% endif %}</span>
               </div>
               {% if pos.stop_loss is not none %}
               <div class="position-chip tone-{{ pos.stop_distance_tone }}" title="Distance from stop-loss">
@@ -3444,7 +3730,7 @@
                 {% endfor %}
               </ul>
               {% else %}
-              <div class="score-empty">No contributing factors recorded.</div>
+              <div class="score-empty">目前沒有可拆解的加減分因素。</div>
               {% endif %}
             </details>
             {% endif %}
@@ -3509,26 +3795,26 @@
           {% if pre_er %}
           <details class="pre-earnings" data-pre-earnings="{{ item.ticker.symbol }}" open>
             <summary>
-              <span class="pe-pill pre">Pre-earnings setup</span>
-              <span class="pe-meta">reports in {{ pre_er.days_until }}d{% if pre_er.action %} · {{ pre_er.action }}{% endif %}</span>
-              {% if pre_er.overextended %}<span class="pe-status extended">Extended</span>{% endif %}
+              <span class="pe-pill pre">財報前準備</span>
+              <span class="pe-meta">{{ pre_er.days_until }} 天後公布{% if pre_er.action %} · {{ pre_er.action|zh_text }}{% endif %}</span>
+              {% if pre_er.overextended %}<span class="pe-status extended">已延伸</span>{% endif %}
             </summary>
             <div class="pre-earnings-body">
               <div class="pre-metrics">
                 <div class="pre-metric">
-                  <span class="pre-k">Consensus EPS</span>
+                  <span class="pre-k">市場預估 EPS</span>
                   <span class="pre-v">{{ "%.2f"|format(pre_er.eps_estimate) if pre_er.eps_estimate is not none else "—" }}</span>
                 </div>
                 <div class="pre-metric">
-                  <span class="pre-k">Consensus rev</span>
+                  <span class="pre-k">市場預估營收</span>
                   <span class="pre-v">{{ "{:,.0f}".format(pre_er.revenue_estimate) if pre_er.revenue_estimate is not none else "—" }}</span>
                 </div>
                 <div class="pre-metric">
-                  <span class="pre-k">FY1 EPS rev 30D</span>
+                  <span class="pre-k">FY1 EPS 修正 30D</span>
                   <span class="pre-v {{ pre_er.eps_revision_30d|change_class }}">{{ pre_er.eps_revision_30d|format_pct }}</span>
                 </div>
                 <div class="pre-metric">
-                  <span class="pre-k">20D move</span>
+                  <span class="pre-k">20D 漲跌</span>
                   <span class="pre-v {{ pre_er.move_30d|change_class }}">{{ pre_er.move_30d|format_pct }}</span>
                 </div>
                 <div class="pre-metric">
@@ -3536,14 +3822,14 @@
                   <span class="pre-v {{ pre_er.rsi|rsi_class }}">{{ "%.0f"|format(pre_er.rsi) if pre_er.rsi is not none else "—" }}</span>
                 </div>
                 <div class="pre-metric">
-                  <span class="pre-k">From 52W high</span>
+                  <span class="pre-k">距 52 週高</span>
                   <span class="pre-v {{ pre_er.from_52w_high|change_class }}">{{ pre_er.from_52w_high|format_pct }}</span>
                 </div>
               </div>
               <div class="pre-questions">
-                <span class="pre-q-label">Key questions to resolve at the print</span>
+                <span class="pre-q-label">財報公布時要確認的問題</span>
                 {% for q in pre_er.questions %}
-                <textarea class="pre-q-input" data-eq-field="{{ loop.index0 }}" data-eq-symbol="{{ item.ticker.symbol }}" rows="1" placeholder="Question {{ loop.index }}">{{ q }}</textarea>
+                <textarea class="pre-q-input" data-eq-field="{{ loop.index0 }}" data-eq-symbol="{{ item.ticker.symbol }}" rows="1" placeholder="問題 {{ loop.index }}">{{ q }}</textarea>
                 {% endfor %}
               </div>
             </div>
@@ -3554,62 +3840,62 @@
           {% if post_er %}
           <details class="post-earnings" data-post-earnings="{{ item.ticker.symbol }}" data-earnings-date="{{ post_er.earnings_date.isoformat() }}">
             <summary>
-              <span class="pe-pill">Post-earnings review</span>
-              <span class="pe-meta">reported {{ post_er.days_ago }}d ago · {{ post_er.earnings_date.isoformat() }}</span>
+              <span class="pe-pill">財報後檢視</span>
+              <span class="pe-meta">{{ post_er.days_ago }} 天前公布 · {{ post_er.earnings_date.isoformat() }}</span>
               <span class="pe-status" data-pe-status="{{ item.ticker.symbol }}"></span>
             </summary>
             <div class="post-earnings-form">
               <div class="pe-row">
                 <label class="pe-label">EPS</label>
                 <div class="pe-buttons" data-pe-field="eps" data-pe-symbol="{{ item.ticker.symbol }}">
-                  <button type="button" data-pe-value="beat">Beat</button>
-                  <button type="button" data-pe-value="inline">In line</button>
-                  <button type="button" data-pe-value="miss">Miss</button>
+                  <button type="button" data-pe-value="beat">優於</button>
+                  <button type="button" data-pe-value="inline">符合</button>
+                  <button type="button" data-pe-value="miss">低於</button>
                 </div>
               </div>
               <div class="pe-row">
-                <label class="pe-label">Revenue</label>
+                <label class="pe-label">營收</label>
                 <div class="pe-buttons" data-pe-field="rev" data-pe-symbol="{{ item.ticker.symbol }}">
-                  <button type="button" data-pe-value="beat">Beat</button>
-                  <button type="button" data-pe-value="inline">In line</button>
-                  <button type="button" data-pe-value="miss">Miss</button>
+                  <button type="button" data-pe-value="beat">優於</button>
+                  <button type="button" data-pe-value="inline">符合</button>
+                  <button type="button" data-pe-value="miss">低於</button>
                 </div>
               </div>
               <div class="pe-row">
-                <label class="pe-label">Guidance</label>
+                <label class="pe-label">展望</label>
                 <div class="pe-buttons" data-pe-field="guide" data-pe-symbol="{{ item.ticker.symbol }}">
-                  <button type="button" data-pe-value="up">Up</button>
-                  <button type="button" data-pe-value="flat">Flat</button>
-                  <button type="button" data-pe-value="down">Down</button>
+                  <button type="button" data-pe-value="up">上修</button>
+                  <button type="button" data-pe-value="flat">持平</button>
+                  <button type="button" data-pe-value="down">下修</button>
                 </div>
               </div>
               <div class="pe-row">
-                <label class="pe-label" for="eps-surprise-{{ item.ticker.symbol }}">EPS surprise %</label>
+                <label class="pe-label" for="eps-surprise-{{ item.ticker.symbol }}">EPS 驚喜 %</label>
                 <input id="eps-surprise-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="eps_surprise" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="+8.5">
               </div>
               <div class="pe-row">
-                <label class="pe-label" for="rev-surprise-{{ item.ticker.symbol }}">Revenue surprise %</label>
+                <label class="pe-label" for="rev-surprise-{{ item.ticker.symbol }}">營收驚喜 %</label>
                 <input id="rev-surprise-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="rev_surprise" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="+2.1">
               </div>
               <div class="pe-row">
-                <label class="pe-label" for="fy1-eps-rev-after-{{ item.ticker.symbol }}">FY1 EPS revision after %</label>
+                <label class="pe-label" for="fy1-eps-rev-after-{{ item.ticker.symbol }}">財報後 FY1 EPS 修正 %</label>
                 <input id="fy1-eps-rev-after-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="fy1_eps_revision_after" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="+3.0">
               </div>
               <div class="pe-row">
-                <label class="pe-label" for="fy1-rev-rev-after-{{ item.ticker.symbol }}">FY1 revenue revision after %</label>
+                <label class="pe-label" for="fy1-rev-rev-after-{{ item.ticker.symbol }}">財報後 FY1 營收修正 %</label>
                 <input id="fy1-rev-rev-after-{{ item.ticker.symbol }}" class="control-input" type="number" step="0.1" data-pe-field="fy1_revenue_revision_after" data-pe-symbol="{{ item.ticker.symbol }}" placeholder="-1.0">
               </div>
-              <textarea class="pe-text" data-pe-field="gross_margin_change" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Gross margin: direction vs prior quarter / guide"></textarea>
-              <textarea class="pe-text" data-pe-field="management_keywords" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Management keywords: demand, backlog, pricing, caution..."></textarea>
+              <textarea class="pe-text" data-pe-field="gross_margin_change" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="毛利率：相較前季或指引的方向"></textarea>
+              <textarea class="pe-text" data-pe-field="management_keywords" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="管理層關鍵字：需求、訂單、定價、保守語氣..."></textarea>
               <div class="pe-row">
-                <label class="pe-label">Thesis changed?</label>
+                <label class="pe-label">論點是否改變？</label>
                 <div class="pe-buttons" data-pe-field="thesis_changed" data-pe-symbol="{{ item.ticker.symbol }}">
-                  <button type="button" data-pe-value="no">No</button>
-                  <button type="button" data-pe-value="yes">Yes</button>
+                  <button type="button" data-pe-value="no">否</button>
+                  <button type="button" data-pe-value="yes">是</button>
                 </div>
               </div>
-              <textarea class="pe-text" data-pe-field="conclusion" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Conclusion: thesis intact / cracked / pivoting"></textarea>
-              <textarea class="pe-text" data-pe-field="next_step" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="Next step: hold / add / trim / re-evaluate at $X"></textarea>
+              <textarea class="pe-text" data-pe-field="conclusion" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="結論：論點維持 / 出現裂縫 / 需要轉向"></textarea>
+              <textarea class="pe-text" data-pe-field="next_step" data-pe-symbol="{{ item.ticker.symbol }}" rows="2" placeholder="下一步：續抱 / 加碼 / 減碼 / 到 $X 再評估"></textarea>
             </div>
           </details>
           {% endif %}
@@ -3647,7 +3933,7 @@
                 </label>
               </div>
               <div class="tag-row">
-                <label class="control-label" for="tag-{{ item.ticker.symbol }}">Tag</label>
+                <label class="control-label" for="tag-{{ item.ticker.symbol }}">標籤</label>
                 <select id="tag-{{ item.ticker.symbol }}" class="tag-select" data-tag="{{ item.ticker.symbol }}">
                   <option value="">無</option>
                   <option value="High conviction">高度確信</option>
@@ -3710,27 +3996,27 @@
             <summary>投資計畫</summary>
             <div class="plan-grid">
               <label class="plan-field">
-                <span class="plan-label up">Bull case</span>
+                <span class="plan-label up">多方情境</span>
                 <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="bull_case" placeholder="Why this works"></textarea>
               </label>
               <label class="plan-field">
-                <span class="plan-label down">Bear case</span>
+                <span class="plan-label down">空方情境</span>
                 <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="bear_case" placeholder="What breaks the thesis"></textarea>
               </label>
               <label class="plan-field">
-                <span class="plan-label">Entry plan</span>
+                <span class="plan-label">進場計畫</span>
                 <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="entry_plan" placeholder="When / how to start"></textarea>
               </label>
               <label class="plan-field">
-                <span class="plan-label">Add zone</span>
+                <span class="plan-label">加碼區</span>
                 <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="add_zone" placeholder="Where to scale up"></textarea>
               </label>
               <label class="plan-field">
-                <span class="plan-label">Reduce zone</span>
+                <span class="plan-label">減碼區</span>
                 <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="reduce_zone" placeholder="Where to trim"></textarea>
               </label>
               <label class="plan-field">
-                <span class="plan-label down">Stop loss</span>
+                <span class="plan-label down">停損</span>
                 <textarea class="plan-input" rows="2" data-plan="{{ item.ticker.symbol }}" data-plan-field="stop_loss" placeholder="Hard exit rule"></textarea>
               </label>
             </div>
@@ -3745,7 +4031,7 @@
               {% endfor %}
             </ul>
             {% else %}
-            <p class="muted" style="margin: 8px 0 0;">No trusted news found.</p>
+            <p class="muted" style="margin: 8px 0 0;">沒有找到可信新聞。</p>
             {% endif %}
             {% if item.x_signals %}
             <ul>
@@ -3761,7 +4047,7 @@
     </section>
 
     <footer class="footer">
-      stock-daily-research | {{ report.report_date.isoformat() }} | <a href="#summary">Back to top</a>
+      stock-daily-research | {{ report.report_date.isoformat() }} | <a href="#summary">回到頂部</a>
       <div class="disclaimer" style="margin-top: 6px;">Personal research | Not investment advice</div>
     </footer>
   </main>
@@ -3809,6 +4095,7 @@
       var search = document.getElementById("quick-search");
       var focusFilter = document.getElementById("focus-filter");
       var stateFilter = document.getElementById("state-filter");
+      var marketTabs = Array.prototype.slice.call(document.querySelectorAll(".market-tab[data-market-tab]"));
       var scoreFilter = document.getElementById("score-filter");
       var earningsFilter = document.getElementById("earnings-filter");
       var rsiFilter = document.getElementById("rsi-filter");
@@ -3823,7 +4110,13 @@
       var modeHint = document.getElementById("mode-hint");
       var currentMode = "overview";
       var reportDate = "{{ report.report_date.isoformat() }}";
-      var showQuiet = false;
+      var showQuiet = true;
+      var MARKET_STORAGE_KEY = "stock-daily-market-tab";
+      var activeMarket = "us";
+      try {
+        var storedMarket = localStorage.getItem(MARKET_STORAGE_KEY);
+        if (["us", "taiwan", "crypto"].indexOf(storedMarket) >= 0) activeMarket = storedMarket;
+      } catch (e) {}
       var tickerState = initialResearch.tickers || {};
       // Expose the server-rendered research state so the "Save to DB" block can
       // fall back to it for tickers/fields not edited in this session.
@@ -4273,6 +4566,180 @@
         return true;
       }
 
+      function marketMatch(card) {
+        var value = card.dataset.market || "us";
+        if (activeMarket === "taiwan") return value === "twse" || value === "tpex";
+        return value === activeMarket;
+      }
+
+      function marketGroup(value) {
+        if (value === "twse" || value === "tpex") return "taiwan";
+        return value || "us";
+      }
+      function labelsForMarket(value) { return { us: "美股", taiwan: "台股", crypto: "加密貨幣" }[value] || "市場"; }
+
+
+      function marketsForElement(element) {
+        var found = [];
+        function add(value) {
+          value = marketGroup(value);
+          if (["us", "taiwan", "crypto"].indexOf(value) >= 0 && found.indexOf(value) < 0) found.push(value);
+        }
+        if (element.dataset.market) add(element.dataset.market);
+        if (element.dataset.symbol) {
+          var direct = cards.find(function (card) { return symbol(card) === element.dataset.symbol; });
+          if (direct) add(direct.dataset.market);
+        }
+        Array.prototype.forEach.call(element.querySelectorAll('a[href^="#ticker-"]'), function (anchor) {
+          var target = document.getElementById(anchor.getAttribute("href").slice(1));
+          if (target && target.classList.contains("ticker-card")) add(target.dataset.market);
+        });
+        return found;
+      }
+
+      function updateMarketSummary(selectedCards, values) {
+        var labels = { us: "美股", taiwan: "台股", crypto: "加密貨幣" };
+        var list = document.getElementById("market-summary-list");
+        var detail = document.getElementById("market-summary-detail");
+        var section = document.getElementById("daily-summary");
+        function priority(card) {
+          var stateWeight = { hot: 500, warn: 420, warm: 260, quiet: 80 }[card.dataset.state] || 0;
+          var earningsDays = parseInt(card.dataset.earningsDays, 10);
+          var earningsWeight = !isNaN(earningsDays) && earningsDays >= 0 && earningsDays <= 7 ? 180 - earningsDays * 12 : 0;
+          return stateWeight + earningsWeight + (card.dataset.hasRisk === "1" ? 220 : 0) +
+            (parseInt(card.dataset.newsCount, 10) || 0) * 18 +
+            (parseFloat(card.dataset.attentionScore) || 0) +
+            (card.dataset.positionStatus === "holding" ? 35 : 0);
+        }
+        var ranked = selectedCards.slice().sort(function (a, b) {
+          return priority(b) - priority(a) || symbol(a).localeCompare(symbol(b));
+        });
+        var attention = selectedCards.filter(function (card) { return card.dataset.state === "hot" || card.dataset.state === "warn" || card.dataset.hasRisk === "1"; }).length;
+        if (detail) detail.textContent = labels[activeMarket] + " " + selectedCards.length + " 檔 · " + attention + " 檔需優先留意 · " + values["market-stat-news"] + " 則新聞";
+        if (section) {
+          section.classList.remove("danger", "warn", "info");
+          section.classList.add(attention > 0 ? "warn" : "info");
+        }
+        if (!list) return;
+        if (!ranked.length) {
+          list.innerHTML = '<li class="daily-summary-item"><span class="daily-summary-text">目前市場沒有追蹤標的。</span></li>';
+          return;
+        }
+        list.innerHTML = ranked.slice(0, 3).map(function (card, index) {
+          var rawSymbol = symbol(card);
+          var displaySymbol = rawSymbol.replace(/\.(TW|TWO)$/i, "").replace(/-USD$/i, "");
+          var nameNode = card.querySelector(".ticker-name");
+          var company = nameNode && nameNode.childNodes.length ? String(nameNode.childNodes[0].textContent || "").trim() : (card.dataset.company || "");
+          var earningsDays = parseInt(card.dataset.earningsDays, 10);
+          var news = parseInt(card.dataset.newsCount, 10) || 0;
+          var reasons = [];
+          if (card.dataset.hasRisk === "1") reasons.push("出現風險訊號");
+          if (!isNaN(earningsDays) && earningsDays >= 0 && earningsDays <= 7) reasons.push(earningsDays === 0 ? "今日財報" : earningsDays + " 天內財報");
+          if (news > 0) reasons.push(news + " 則新聞");
+          if (card.dataset.positionStatus === "holding") reasons.push("持有部位");
+          if (!reasons.length) reasons.push("例行觀察");
+          var action = card.dataset.hasRisk === "1" ? "檢查風險與持股計畫" :
+            (!isNaN(earningsDays) && earningsDays >= 0 && earningsDays <= 7) ? "確認財報預期" :
+            news > 0 ? "閱讀最新消息" : "更新研究狀態";
+          var tone = card.dataset.hasRisk === "1" || card.dataset.state === "hot" ? "danger" : card.dataset.state === "warn" ? "warn" : "info";
+          return '<li class="daily-summary-item ' + tone + '"><a href="#' + escapeHtml(card.id) + '">' +
+            '<span class="daily-summary-label">' + (index === 0 ? "優先檢視" : "接續追蹤") + '</span>' +
+            '<span class="daily-summary-title">' + escapeHtml(displaySymbol + " " + company) + '</span>' +
+            '<span class="daily-summary-text">' + escapeHtml(reasons.join(" · ")) + ' · <span class="market-summary-action">' + escapeHtml(action) + '</span></span>' +
+            '</a></li>';
+        }).join("");
+      }
+      function updateMarketWorkspace() {
+        var selectedCards = cards.filter(marketMatch);
+        var marketNames = {
+          us: "\u7f8e\u80a1\u5de5\u4f5c\u5340",
+          taiwan: "\u53f0\u80a1\u5de5\u4f5c\u5340",
+          crypto: "\u52a0\u5bc6\u8ca8\u5e63\u5de5\u4f5c\u5340"
+        };
+        var title = document.getElementById("market-workspace-title");
+        if (title) title.textContent = marketNames[activeMarket];
+
+        var values = {
+          "market-stat-tickers": selectedCards.length,
+          "market-stat-holdings": selectedCards.filter(function (card) { return card.dataset.positionStatus === "holding"; }).length,
+          "market-stat-attention": selectedCards.filter(function (card) { return card.dataset.state === "hot" || card.dataset.state === "warn"; }).length,
+          "market-stat-news": selectedCards.reduce(function (sum, card) { return sum + (parseInt(card.dataset.newsCount, 10) || 0); }, 0)
+        };
+        Object.keys(values).forEach(function (id) {
+          var node = document.getElementById(id);
+          if (node) node.textContent = values[id];
+        });
+        ["us", "taiwan", "crypto"].forEach(function (key) {
+          var tab = document.querySelector('.market-tab[data-market-tab="' + key + '"] .market-tab-count');
+          if (tab) tab.textContent = cards.filter(function (card) { return marketGroup(card.dataset.market) === key; }).length;
+        });
+
+        var selectors = [
+          "#morning-actions .morning-action", "#daily-summary .daily-summary-item", "#hero .hero-card",
+          ".command-alert", "#todays-focus .focus-list li", "#capital-allocation tbody tr",
+          "#research-queue .focus-list li", "#today-catalysts li", "#post-earnings-scoreboard tbody tr",
+          "#overextended li", "#rule-alerts li", "#earnings .earnings-pill",
+          "#news-clusters .cluster-item", "#news .news-item", "#valuation-rows tr"
+        ].join(",");
+        Array.prototype.forEach.call(document.querySelectorAll(selectors), function (element) {
+          var markets = marketsForElement(element);
+          element.classList.toggle("is-market-hidden", markets.length > 0 && markets.indexOf(activeMarket) < 0);
+        });
+
+        var scopedSections = [
+          ["morning-actions", ".morning-action"], ["todays-focus", ".focus-list li"],
+          ["capital-allocation", "tbody tr"], ["research-queue", ".focus-list li"],
+          ["today-catalysts", "li"], ["post-earnings-scoreboard", "tbody tr"],
+          ["overextended", "li"], ["rule-alerts", "li"], ["earnings", ".earnings-pill"],
+          ["news-clusters", ".cluster-item"], ["news", ".news-item"], ["valuation", "#valuation-rows tr"]
+        ];
+        scopedSections.forEach(function (entry) {
+          var section = document.getElementById(entry[0]);
+          if (!section) return;
+          var items = Array.prototype.slice.call(section.querySelectorAll(entry[1]));
+          var visible = items.filter(function (item) { return !item.classList.contains("is-market-hidden"); });
+          section.classList.toggle("is-market-empty", items.length > 0 && visible.length === 0);
+        });
+
+        ["premarket", "market-sentiment"].forEach(function (id) {
+          var section = document.getElementById(id);
+          if (section) section.classList.toggle("is-market-hidden", activeMarket !== "us");
+        });
+        var hero = document.getElementById("hero");
+        var commandCenter = document.querySelector(".command-center");
+        if (hero) hero.classList.toggle("is-market-hidden", activeMarket !== "us");
+        if (commandCenter) commandCenter.classList.toggle("is-market-hidden", activeMarket !== "us");
+        var mapContext = document.getElementById("market-map-context");
+        if (mapContext) mapContext.textContent = labelsForMarket(activeMarket) + "產業分組，跟隨頁首市場切換";
+        var hasHoldings = selectedCards.some(function (card) { return card.dataset.positionStatus === "holding"; });
+        ["my-book", "book-today", "book-impact"].forEach(function (id) {
+          var section = document.getElementById(id);
+          if (section) section.classList.toggle("is-market-hidden", !hasHoldings);
+        });
+
+        updateMarketSummary(selectedCards, values);
+
+        var valuationCount = document.querySelector("#valuation h2 .count");
+        if (valuationCount) valuationCount.textContent = "(" + selectedCards.length + " \u6a94)";
+        var newsCount = document.querySelector("#news h2 .count");
+        if (newsCount) newsCount.textContent = "(" + values["market-stat-news"] + ")";
+
+        var briefValues = document.querySelectorAll("#daily-summary .brief-metric-value");
+        if (briefValues.length >= 6) {
+          briefValues[0].textContent = selectedCards.filter(function (card) { return card.dataset.state === "hot"; }).length;
+          briefValues[1].textContent = selectedCards.filter(function (card) { var gap = parseFloat(card.dataset.premarketChange || card.dataset.gapPct); return !isNaN(gap) && Math.abs(gap) >= 3; }).length;
+          briefValues[2].textContent = selectedCards.filter(function (card) { var days = parseInt(card.dataset.earningsDays, 10); return !isNaN(days) && days >= 0 && days <= 7; }).length;
+          briefValues[4].textContent = selectedCards.filter(function (card) { return reviewState(card) === "reviewed"; }).length + "/" + selectedCards.length;
+          var rsiValues = selectedCards.map(function (card) { return parseFloat(card.dataset.rsi); }).filter(function (value) { return !isNaN(value); });
+          briefValues[5].textContent = rsiValues.length ? Math.max.apply(null, rsiValues).toFixed(0) + "/" + Math.min.apply(null, rsiValues).toFixed(0) : "N/A";
+        }
+
+        Array.prototype.forEach.call(document.querySelectorAll(".toc a[href^='#']"), function (link) {
+          var section = document.querySelector(link.getAttribute("href"));
+          link.classList.toggle("is-market-hidden", !!section && (section.classList.contains("is-market-hidden") || section.classList.contains("is-market-empty")));
+        });
+      }
+
       function applyFilters() {
         var q = (search && search.value || "").trim().toLowerCase();
         var focus = focusFilter ? focusFilter.value : "all";
@@ -4285,27 +4752,30 @@
         var scoreStatus = scoreFilter ? scoreFilter.value : "all";
         var riskOnly = !!(riskFilter && riskFilter.checked);
         var watchlistOnly = document.body.classList.contains("watchlist-mode");
+        var marketTotal = cards.filter(marketMatch).length;
         var visible = 0;
 
         cards.forEach(function (card) {
           var textMatch = !q || symbol(card).toLowerCase().indexOf(q) >= 0 || (card.dataset.company || "").indexOf(q) >= 0;
           var stateMatch = state === "all" ? (showQuiet || focus !== "all" || watchlistOnly || card.dataset.state !== "quiet") : card.dataset.state === state;
+          var activeMarketMatch = marketMatch(card);
           var topicMatch = topic === "all" || (" " + (card.dataset.topics || "") + " ").indexOf(" " + topic + " ") >= 0;
           var sectorMatch = sector === "all" || (card.dataset.sector || "") === sector;
           var clusterMatch = cluster === "all" || (card.dataset.cluster || "") === cluster;
           var scoreMatch = scoreStatus === "all" || (card.dataset.rightSideStatus || "") === scoreStatus;
           var riskMatch = !riskOnly || card.dataset.hasRisk === "1";
           var pinnedMatch = !watchlistOnly || card.classList.contains("is-pinned");
-          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && clusterMatch && scoreMatch && riskMatch && workModeMatch(card);
+          var match = pinnedMatch && textMatch && focusMatch(card, focus) && stateMatch && activeMarketMatch && earningsMatch(card, earnings) && rsiMatch(card, rsi) && topicMatch && sectorMatch && clusterMatch && scoreMatch && riskMatch && workModeMatch(card);
           card.classList.toggle("is-hidden", !match);
           syncModeDetails(card, match);
           if (match) visible += 1;
         });
 
-        if (tickerCount) tickerCount.textContent = "(" + visible + "/" + cards.length + ")";
+        if (tickerCount) tickerCount.textContent = "(" + visible + "/" + marketTotal + ")";
         reorderCards();
         updateReviewSummary();
         renderCompare();
+        updateMarketWorkspace();
       }
 
       function syncModeDetails(card, visible) {
@@ -4553,7 +5023,7 @@
         var filled = PLAN_FIELDS.filter(function (field) {
           return (planState[field] || "").trim();
         }).length;
-        summary.textContent = filled ? "Investment plan (" + filled + "/6)" : "Investment plan";
+        summary.textContent = filled ? "投資計畫 (" + filled + "/6)" : "投資計畫";
       }
 
       function paintNotePreview(card) {
@@ -4566,7 +5036,7 @@
           preview.textContent = "";
           return;
         }
-        preview.textContent = "Note: " + (note.length > 92 ? note.slice(0, 89) + "..." : note);
+        preview.textContent = "筆記：" + (note.length > 92 ? note.slice(0, 89) + "..." : note);
         preview.classList.remove("is-hidden");
       }
 
@@ -4611,7 +5081,7 @@
         syncRevisitHero(due);
         if (!list) return;
         if (!due.length) {
-          list.innerHTML = "<li><span class=\"muted\">No revisit dates due today.</span><span></span></li>";
+          list.innerHTML = "<li><span class=\"muted\">今天沒有到期的回看項目。</span><span></span></li>";
           return;
         }
         list.innerHTML = due.slice(0, 10).map(function (row) {
@@ -4628,10 +5098,10 @@
           return;
         }
         var symbols = due.slice(0, 5).map(function (row) { return row.symbol; }).join(", ");
-        var subtitle = due.length + " ticker" + (due.length === 1 ? "" : "s");
+        var subtitle = due.length + " 檔需要回看";
         var markup = "<a class=\"hero-card imminent hero-kind-revisit\" data-local-revisit-hero=\"1\" href=\"#research-queue\">" +
           "<span class=\"hero-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><line x1=\"12\" y1=\"7\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"16\" x2=\"12.01\" y2=\"16\"/></svg></span>" +
-          "<div class=\"hero-body\"><span class=\"hero-label\">Revisit due</span><span class=\"hero-headline\">" + escapeHtml(symbols) + "</span><span class=\"hero-sub\">" + escapeHtml(subtitle) + "</span></div>" +
+          "<div class=\"hero-body\"><span class=\"hero-label\">今日回看</span><span class=\"hero-headline\">" + escapeHtml(symbols) + "</span><span class=\"hero-sub\">" + escapeHtml(subtitle) + "</span></div>" +
           "</a>";
         if (existing) existing.outerHTML = markup;
         else hero.insertAdjacentHTML("afterbegin", markup);
@@ -4781,7 +5251,12 @@
         var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
         select.addEventListener("change", function () {
           rows.slice().sort(function (a, b) {
-            if (select.value === "market_cap_desc") return sortNumberDesc(a.dataset.marketCap, b.dataset.marketCap, a.dataset.symbol, b.dataset.symbol);
+            if (select.value === "market_cap_desc") {
+              // Market caps are in local currency — only compare within a market.
+              var marketDiff = marketRank(a.dataset.market) - marketRank(b.dataset.market);
+              if (marketDiff) return marketDiff;
+              return sortNumberDesc(a.dataset.marketCap, b.dataset.marketCap, a.dataset.symbol, b.dataset.symbol);
+            }
             if (select.value === "forward_pe_asc") return sortNumberAsc(a.dataset.forwardPe, b.dataset.forwardPe, a.dataset.symbol, b.dataset.symbol);
             if (select.value === "forward_pe_desc") return sortNumberDesc(a.dataset.forwardPe, b.dataset.forwardPe, a.dataset.symbol, b.dataset.symbol);
             if (select.value === "rsi_asc") return sortNumberAsc(a.dataset.rsi, b.dataset.rsi, a.dataset.symbol, b.dataset.symbol);
@@ -4790,6 +5265,23 @@
             return (a.dataset.symbol || "").localeCompare(b.dataset.symbol || "");
           }).forEach(function (row) { tbody.appendChild(row); });
         });
+      }
+
+      function setupValuationColumns() {
+        var table = document.getElementById("valuation-table");
+        var button = document.getElementById("toggle-valuation-columns");
+        if (!table || !button) return;
+        button.addEventListener("click", function () {
+          var compact = table.classList.toggle("is-compact");
+          button.setAttribute("aria-pressed", compact ? "false" : "true");
+          button.textContent = compact ? "完整欄位" : "精簡欄位";
+        });
+      }
+      function marketRank(market) {
+        if (market === "us") return 0;
+        if (market === "twse" || market === "tpex") return 1;
+        if (market === "crypto") return 2;
+        return 3;
       }
 
       function sortNumberAsc(a, b, as, bs) {
@@ -5119,7 +5611,7 @@
         var body = document.getElementById("changes-body");
         if (!body) return;
         if (!prev) {
-          body.innerHTML = "<div class=\"section-empty\">No previous browser snapshot yet. This report has now been saved as the baseline.</div>";
+          body.innerHTML = "<div class=\"section-empty\">瀏覽器本機尚無前次快照；已將本次報告保存為基準。</div>";
           return;
         }
         var changes = [];
@@ -5127,42 +5619,42 @@
           var now = current.tickers[s];
           var before = prev.tickers[s] || {};
           if (now.state === "hot" && before.state !== "hot") {
-            changes.push(changeCard(s, "New hot ticker", "State moved to hot."));
+            changes.push(changeCard(s, "新增熱點", "狀態變為熱點。"));
           }
           var newTopNews = now.topNews.filter(function (newsKey) { return (before.topNews || []).indexOf(newsKey) < 0; });
           if (newTopNews.length) {
-            changes.push(changeCard(s, "New top news", newTopNews.length + " new top-tier headline(s)."));
+            changes.push(changeCard(s, "新增重點新聞", newTopNews.length + " 則新的重點新聞。"));
           }
           if (now.earningsDays != null && before.earningsDays != null && now.earningsDays >= 0 && now.earningsDays < before.earningsDays) {
-            changes.push(changeCard(s, "Earnings moved closer", earningsText(now.earningsDays) + " from " + earningsText(before.earningsDays) + "."));
+            changes.push(changeCard(s, "財報時間接近", "由 " + earningsText(before.earningsDays) + " 變成 " + earningsText(now.earningsDays) + "。"));
           }
           if (now.valuationRisk === "Extreme" && before.valuationRisk !== "Extreme") {
-            changes.push(changeCard(s, "Valuation moved extreme", "Risk bucket is now Extreme."));
+            changes.push(changeCard(s, "估值風險升高", "估值風險已進入極高區。"));
           }
           if (now.rsi != null && now.rsi >= 70 && (before.rsi == null || before.rsi < 70)) {
-            changes.push(changeCard(s, "RSI moved overbought", "RSI 14 is now " + now.rsi.toFixed(1) + "."));
+            changes.push(changeCard(s, "RSI 進入過熱", "RSI 14 現在是 " + now.rsi.toFixed(1) + "。"));
           }
           if (now.rsi != null && now.rsi <= 30 && (before.rsi == null || before.rsi > 30)) {
-            changes.push(changeCard(s, "RSI moved oversold", "RSI 14 is now " + now.rsi.toFixed(1) + "."));
+            changes.push(changeCard(s, "RSI 進入超賣", "RSI 14 現在是 " + now.rsi.toFixed(1) + "。"));
           }
           if (now.tag && now.tag !== before.tag) {
-            changes.push(changeCard(s, "New tag", now.tag + "."));
+            changes.push(changeCard(s, "新增標籤", now.tag + "。"));
           }
           if (now.thesis && now.thesis !== before.thesis) {
-            changes.push(changeCard(s, "Thesis state changed", now.thesis + "."));
+            changes.push(changeCard(s, "投資論點改變", thesisStateLabel(now.thesis) + "。"));
           }
           if (now.thesisTrigger && now.thesisTrigger !== before.thesisTrigger) {
-            changes.push(changeCard(s, "Thesis trigger changed", now.thesisTrigger + "."));
+            changes.push(changeCard(s, "論點觸發因素改變", thesisTriggerLabel(now.thesisTrigger) + "。"));
           }
           if (now.note && now.note !== before.note) {
-            changes.push(changeCard(s, "New note", (now.note.length > 80 ? now.note.slice(0, 77) + "..." : now.note) + "."));
+            changes.push(changeCard(s, "新增筆記", (now.note.length > 80 ? now.note.slice(0, 77) + "..." : now.note) + "。"));
           }
           if (now.review !== before.review && now.review === "reviewed") {
-            changes.push(changeCard(s, "Review completed", reviewLabel(now.review) + "."));
+            changes.push(changeCard(s, "檢視完成", reviewLabel(now.review) + "。"));
           }
         });
         if (!changes.length) {
-          body.innerHTML = "<div class=\"section-empty\">No material changes versus " + escapeHtml(prev.date || "previous report") + ".</div>";
+          body.innerHTML = "<div class=\"section-empty\">相較 " + escapeHtml(prev.date || "前次報告") + " 沒有重大變化。</div>";
           return;
         }
         body.innerHTML = changes.slice(0, 12).join("");
@@ -5364,6 +5856,45 @@
         download("compare-{{ report.report_date.isoformat() }}.json", JSON.stringify(rows, null, 2), "application/json;charset=utf-8", "Exported compare JSON: " + rows.length + " selected tickers");
       }
 
+      function setupMarketTabs() {
+        function paint() {
+          marketTabs.forEach(function (tab) {
+            var selected = tab.dataset.marketTab === activeMarket;
+            tab.classList.toggle("is-active", selected);
+            tab.setAttribute("aria-selected", selected ? "true" : "false");
+            tab.tabIndex = selected ? 0 : -1;
+          });
+        }
+        function selectMarket(value, silent) {
+          activeMarket = value;
+          try { localStorage.setItem(MARKET_STORAGE_KEY, value); } catch (e) {}
+          paint();
+          applyFilters();
+          // Keep the sector map's market tabs on the same market.
+          if (!silent) {
+            document.dispatchEvent(new CustomEvent("stock-daily:market", { detail: { market: value, source: "cards" } }));
+          }
+        }
+        marketTabs.forEach(function (tab, index) {
+          tab.addEventListener("click", function () { selectMarket(tab.dataset.marketTab); });
+          tab.addEventListener("keydown", function (event) {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            var offset = event.key === "ArrowRight" ? 1 : -1;
+            var next = (index + offset + marketTabs.length) % marketTabs.length;
+            marketTabs[next].focus();
+            selectMarket(marketTabs[next].dataset.marketTab);
+          });
+        });
+        document.addEventListener("stock-daily:market", function (event) {
+          var detail = event.detail || {};
+          if (detail.source === "cards") return;
+          if (["us", "taiwan", "crypto"].indexOf(detail.market) < 0) return;
+          if (detail.market !== activeMarket) selectMarket(detail.market, true);
+        });
+        paint();
+      }
+
       [search, focusFilter, stateFilter, scoreFilter, earningsFilter, rsiFilter, topicFilter, sectorFilter, clusterFilter, riskFilter].forEach(function (el) {
         if (!el) return;
         el.addEventListener(el === search ? "input" : "change", applyFilters);
@@ -5380,10 +5911,12 @@
       if (exportResearchBtn) exportResearchBtn.addEventListener("click", exportResearchState);
       if (exportEarningsBtn) exportEarningsBtn.addEventListener("click", exportEarnings);
 
+      setupMarketTabs();
       setupPins();
       setupUserState();
       setupCompare();
       setupValuationSort();
+      setupValuationColumns();
       setupCountdowns();
       setupCollapsers();
       setupWorkModes();
@@ -5498,8 +6031,8 @@
           "label_earnings": "財報",
           "label_rsi": "RSI",
           "label_topic": "主題",
-          "label_sector": "行業",
-          "label_cluster": "集群",
+          "label_sector": "產業",
+          "label_cluster": "群組",
           "label_risk": "風險",
           "option_all": "全部",
           "option_watchlist": "釘選項目",
@@ -5529,7 +6062,7 @@
           "thesis_revisit": "下次檢視",
           "thesis_none": "無",
           "msg_loading": "載入中...",
-          "msg_no_data": "無可用數據",
+          "msg_no_data": "無可用資料",
           "btn_pin": "焦點",
           "btn_pinned": "已加入",
           "btn_compare": "加入比較",
@@ -5728,6 +6261,24 @@
             saveStatus.className = "save-status is-error";
             saveBtn.disabled = false;
           });
+      });
+    })();
+
+    // Sector map follows the single market switcher at the top of the page.
+    (function () {
+      var panels = Array.prototype.slice.call(document.querySelectorAll(".map-market-panel[data-market-panel]"));
+      if (!panels.length) return;
+      var STORAGE_KEY = "stock-daily-market-tab";
+      function activate(key) {
+        var matched = panels.some(function (panel) { return panel.dataset.marketPanel === key; });
+        if (!matched) return;
+        panels.forEach(function (panel) { panel.classList.toggle("active", panel.dataset.marketPanel === key); });
+      }
+      var saved = "us";
+      try { saved = localStorage.getItem(STORAGE_KEY) || "us"; } catch (e) {}
+      activate(saved);
+      document.addEventListener("stock-daily:market", function (event) {
+        activate((event.detail || {}).market);
       });
     })();
   </script>

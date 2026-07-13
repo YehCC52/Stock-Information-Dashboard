@@ -163,7 +163,7 @@ class GoogleNewsRssProvider:
         """
         articles: list[NewsArticle] = []
         warnings: list[str] = []
-        domains = ticker.trusted_news_domains or ["reuters.com", "cnbc.com"]
+        domains = ticker.trusted_news_domains or ticker.default_news_domains
         min_published_at = datetime.now(timezone.utc) - timedelta(days=lookback_days)
         for domain in domains:
             try:
@@ -184,7 +184,11 @@ class GoogleNewsRssProvider:
         min_published_at: datetime,
     ) -> list[NewsArticle]:
         query = self._build_query(ticker, domain, lookback_days)
-        url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
+        url = (
+            f"https://news.google.com/rss/search?q={quote_plus(query)}"
+            f"&hl={quote_plus(ticker.news_language)}&gl={quote_plus(ticker.news_region)}"
+            f"&ceid={quote_plus(ticker.news_edition)}"
+        )
         response = self._request_with_retry(url)
         feed = feedparser.parse(response.content)
         articles: list[NewsArticle] = []
@@ -213,7 +217,7 @@ class GoogleNewsRssProvider:
         raise last_exc
 
     def _build_query(self, ticker: TickerConfig, domain: str, lookback_days: int) -> str:
-        terms = [ticker.symbol, f'"{ticker.company_name}"', *[f'"{alias}"' for alias in ticker.aliases]]
+        terms = [ticker.display_symbol, f'"{ticker.company_name}"', *[f'"{alias}"' for alias in ticker.aliases]]
         term_query = " OR ".join(terms)
         return f"({term_query}) site:{domain} when:{lookback_days}d"
 
@@ -303,7 +307,8 @@ def dedupe_articles(articles: list[NewsArticle]) -> list[NewsArticle]:
 
 
 def normalize_title(title: str) -> str:
-    normalized = re.sub(r"[^a-z0-9\s]+", " ", title.lower())
+    """Normalize Latin and CJK headlines without discarding Chinese identity terms."""
+    normalized = re.sub(r"[^\w\s]+", " ", title.lower(), flags=re.UNICODE)
     return " ".join(normalized.split())
 
 
@@ -338,20 +343,29 @@ def is_relevant_article(ticker: TickerConfig, title: str, summary: str = "") -> 
     del summary
     haystack = normalize_title(title)
     candidate_terms = company_identity_terms(ticker.company_name)
-    candidate_terms.extend(alias for alias in ticker.aliases if len(alias) >= 4)
+    candidate_terms.extend(
+        alias for alias in ticker.aliases if len(alias) >= 4 or any(ord(char) > 127 for char in alias)
+    )
 
     for term in candidate_terms:
         normalized = normalize_title(term)
-        if not normalized or len(normalized) < 4:
+        if not normalized or (normalized.isascii() and len(normalized) < 4):
             continue
-        if len(normalized) <= 5:
+        if normalized.isascii() and len(normalized) <= 5:
             if re.search(rf"\b{re.escape(normalized)}\b", haystack):
                 return True
         elif normalized in haystack:
             return True
 
-    if len(ticker.symbol) >= 5:
-        symbol = normalize_title(ticker.symbol)
+    symbol = normalize_title(ticker.display_symbol)
+    symbol_alone_ok = (
+        len(symbol) >= 5
+        or (ticker.market in {"twse", "tpex"} and symbol.isdigit() and len(symbol) == 4)
+        # Crypto tickers (BTC, ETH, SOL) are unambiguous in headlines from
+        # crypto-focused domains, unlike 3-letter stock symbols.
+        or (ticker.market == "crypto" and len(symbol) >= 3)
+    )
+    if symbol_alone_ok:
         if symbol and re.search(rf"\b{re.escape(symbol)}\b", haystack):
             return True
 

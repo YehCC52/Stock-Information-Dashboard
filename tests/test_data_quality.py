@@ -149,3 +149,23 @@ def test_confidence_deducts_lighter_source_quality_flags() -> None:
     assert detect_market_cap_price_mismatch(item.valuation.metrics) is not None
     assert detect_google_redirect_source(item) is not None
     assert detect_premarket_label_inconsistency(move) is not None
+
+
+def test_confidence_does_not_require_forward_pe_for_crypto() -> None:
+    snapshot = ValuationSnapshot(
+        ticker="BTC-USD", as_of_date=date(2026, 4, 28), source="yfinance",
+        metrics={"last_close": 60000.0, "previous_close": 59500.0, "market_cap": 1_200_000_000_000},
+        retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+    )
+    item = TickerReport(
+        ticker=TickerConfig(symbol="BTC-USD", company_name="Bitcoin", market="crypto"),
+        articles=[],
+        x_signals=[],
+        valuation=snapshot,
+        earnings=None,
+    )
+
+    result = confidence(item, date(2026, 4, 28))
+
+    assert result["missing_fields"] == []
+    assert result["score"] == 100

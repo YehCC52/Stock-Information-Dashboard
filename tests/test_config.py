@@ -196,3 +196,75 @@ tickers:
 
     with pytest.raises(ValueError, match="handle is required"):
         load_config(config_path)
+
+def test_load_config_infers_taiwan_market_defaults(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: 2330.tw
+    company_name: "\u53f0\u7063\u7a4d\u9ad4\u96fb\u8def\u88fd\u9020\u80a1\u4efd\u6709\u9650\u516c\u53f8"
+    aliases: ["\u53f0\u7a4d\u96fb"]
+""",
+    )
+
+    ticker = load_config(config_path).tickers[0]
+
+    assert ticker.symbol == "2330.TW"
+    assert ticker.market == "twse"
+    assert ticker.currency == "TWD"
+    assert ticker.display_symbol == "2330"
+    assert ticker.news_language == "zh-TW"
+    assert ticker.news_edition == "TW:zh-Hant"
+
+def test_load_config_allows_disabling_fundamentals_for_etfs(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: 0050.TW
+    company_name: 元大台灣50
+    has_fundamentals: false
+""",
+    )
+
+    ticker = load_config(config_path).tickers[0]
+
+    assert ticker.has_fundamentals is False
+    assert ticker.has_earnings is False
+
+
+def test_load_config_rejects_unknown_market(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: 2330.TW
+    company_name: Example Taiwan Company
+    market: moon
+""",
+    )
+
+    with pytest.raises(ValueError, match="market"):
+        load_config(config_path)
+
+
+def test_load_config_infers_crypto_market_defaults(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: btc-usd
+    company_name: Bitcoin
+    aliases: [Bitcoin]
+""",
+    )
+
+    ticker = load_config(config_path).tickers[0]
+
+    assert ticker.symbol == "BTC-USD"
+    assert ticker.market == "crypto"
+    assert ticker.currency == "USD"
+    assert ticker.display_symbol == "BTC"
+    assert ticker.has_earnings is False
+    assert "coindesk.com" in ticker.default_news_domains

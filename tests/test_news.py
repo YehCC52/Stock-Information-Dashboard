@@ -208,3 +208,34 @@ def test_fetch_for_ticker_isolates_per_domain_failures(monkeypatch) -> None:
 
     assert articles == [good_article]
     assert any("bad.com" in warning for warning in warnings)
+
+def test_taiwan_news_uses_local_edition_and_matches_chinese_identity() -> None:
+    ticker = TickerConfig(
+        symbol="2330.TW",
+        company_name="\u53f0\u7063\u7a4d\u9ad4\u96fb\u8def\u88fd\u9020\u80a1\u4efd\u6709\u9650\u516c\u53f8",
+        market="twse",
+        currency="TWD",
+        aliases=["\u53f0\u7a4d\u96fb"],
+    )
+    provider = GoogleNewsRssProvider()
+
+    assert normalize_title("\u53f0\u7a4d\u96fb\uff1a\u5148\u9032\u88fd\u7a0b\u9700\u6c42\u5347\u6eab") == "\u53f0\u7a4d\u96fb \u5148\u9032\u88fd\u7a0b\u9700\u6c42\u5347\u6eab"
+    assert is_relevant_article(ticker, "\u53f0\u7a4d\u96fb\u6cd5\u8aaa\u6703\u91cb\u51fa\u5148\u9032\u88fd\u7a0b\u5c55\u671b")
+    assert "2330" in provider._build_query(ticker, "cnyes.com", 3)
+    assert ticker.news_edition == "TW:zh-Hant"
+
+
+def test_crypto_news_matches_short_symbol_and_uses_crypto_domains() -> None:
+    ticker = TickerConfig(
+        symbol="BTC-USD",
+        company_name="Bitcoin",
+        market="crypto",
+        aliases=["Bitcoin", "\u6bd4\u7279\u5e63"],
+    )
+    provider = GoogleNewsRssProvider()
+
+    assert is_relevant_article(ticker, "BTC breaks above $80,000 as ETF inflows accelerate")
+    assert is_relevant_article(ticker, "Bitcoin ETF inflows hit weekly record")
+    assert not is_relevant_article(ticker, "Ethereum staking yields climb after upgrade")
+    assert ticker.default_news_domains == ["coindesk.com", "cointelegraph.com", "theblock.co"]
+    assert "BTC" in provider._build_query(ticker, "coindesk.com", 3)

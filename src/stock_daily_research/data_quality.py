@@ -228,11 +228,10 @@ def confidence(
     score -= sum(penalties)
 
     metrics = item.valuation.metrics if item.valuation else {}
-    missing = [
-        key
-        for key in ("last_close", "market_cap", "forward_pe")
-        if _as_float(metrics.get(key)) is None
-    ]
+    core_fields = ("last_close", "market_cap", "forward_pe")
+    if not item.ticker.has_earnings:
+        core_fields = ("last_close", "market_cap")
+    missing = [key for key in core_fields if _as_float(metrics.get(key)) is None]
     if missing:
         score -= 10
 
