@@ -261,7 +261,6 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         book_today=book_today_summary(report),
         book_impact=book_impact_ranking(report),
         sector_map_markets=map_markets,
-        sector_leadership=[row for panel in map_markets for row in panel["rows"]],
         premarket_triage=premarket_triage(report),
         priority_items=priority_items(report),
         rule_alerts=rule_alerts(report),
@@ -884,10 +883,11 @@ def level_label(value: object) -> str:
     return LEVEL_LABELS_ZH.get(text.lower(), zh_text(text))
 
 
-def zh_text(value: object) -> str:
-    """Display-only Traditional Chinese wording for common dashboard phrases."""
-    text = str(value or "")
-    replacements = {
+# zh_text replacement table, hoisted to module level: the filter runs thousands
+# of times per render and rebuilding the ~150-entry literal per call is pure
+# waste. Insertion order matters where entries overlap ("tickers" before
+# "ticker", "not-reviewed" before "reviewed").
+_ZH_REPLACEMENTS: dict[str, str] = {
         "Breakout confirmed": "突破確認",
         "Pullback buy zone": "回檔買點區",
         "Extended, do not chase": "已延伸，避免追高",
@@ -992,8 +992,13 @@ def zh_text(value: object) -> str:
         "Valuation and earnings fetching skipped by --no-valuation.": "已使用 --no-valuation 跳過估值與財報抓取。",
         "Macro calendar fetching skipped by --no-macro.": "已使用 --no-macro 跳過總經日曆抓取。",
         "Market sentiment skipped because valuation fetching is disabled.": "因估值抓取停用，已跳過市場情緒。",
-    }
-    for src, dest in replacements.items():
+}
+
+
+def zh_text(value: object) -> str:
+    """Display-only Traditional Chinese wording for common dashboard phrases."""
+    text = str(value or "")
+    for src, dest in _ZH_REPLACEMENTS.items():
         text = text.replace(src, dest)
     return text
 
@@ -2321,6 +2326,20 @@ def ticker_cluster(item: TickerReport) -> str | None:
     return None
 
 
+def holding_currencies(tickers: list[object]) -> set[str]:
+    """Currencies across holdings that can contribute to P&L math.
+
+    Shared predicate for the mixed-currency guards: a holding only affects
+    summed P&L when it has a share count, so a shares-less "holding" must not
+    trip the warning while the weight math happily proceeds.
+    """
+    return {
+        ticker.currency  # type: ignore[attr-defined]
+        for ticker in tickers
+        if ticker.position.status == "holding" and ticker.position.shares is not None  # type: ignore[attr-defined]
+    }
+
+
 def derive_portfolio_weights(report: DailyReport) -> DailyReport:
     """Fill in portfolio_weight for holdings that lack one, from position size.
 
@@ -2339,12 +2358,7 @@ def derive_portfolio_weights(report: DailyReport) -> DailyReport:
             continue
         sizes[tr.ticker.symbol] = pos.shares * price
 
-    holding_currencies = {
-        tr.ticker.currency
-        for tr in report.ticker_reports
-        if tr.ticker.position.status == "holding" and tr.ticker.position.shares is not None
-    }
-    if len(holding_currencies) > 1:
+    if len(holding_currencies([tr.ticker for tr in report.ticker_reports])) > 1:
         return report
     total = sum(sizes.values())
     if total <= 0:
@@ -2755,9 +2769,10 @@ SECTOR_GROUP_LABELS_ZH: dict[str, str] = {
 
 # Taiwan-market sector chains — matched against watchlist keywords/aliases.
 # Same exclusive first-match rule: specific chains sit above broad ones, so
-# 封測 (封裝/測試) is checked before 晶圓代工, and 代工 in the assembly group
-# can't steal 晶圓代工 names.
+# 載板 / PCB is checked before the broader 封測 (封裝/測試) group, and 代工 in
+# the assembly group cannot steal 晶圓代工 names.
 TW_SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("載板 / PCB", ("abf 載板", "bt 載板", "ic 載板", "載板", "substrate", "pcb", "hdi")),
     ("封測", ("封測", "封裝", "測試", "osat", "sip")),
     ("晶圓代工", ("晶圓代工", "晶圓", "先進製程", "cowos", "foundry")),
     ("IC 設計", ("ic 設計", "ic設計", "fabless", "矽智財")),
@@ -2852,38 +2867,42 @@ def sector_map_markets(report: DailyReport) -> list[dict[str, object]]:
         # SPY is only a sensible benchmark for the US session.
         rows = _sector_rows(items, spy_20d if key == "us" else None, key, label)
         if rows:
-            panels.append(_market_panel(key, label, rows, items))
+            panels.append(_market_panel(key, label, rows))
 
     leftover = [item for item in report.ticker_reports if item.ticker.market not in known_markets]
     if leftover:
         rows = _sector_rows(leftover, None, "other", "其他市場")
-        panels.append(_market_panel("other", "其他市場", rows, leftover))
+        panels.append(_market_panel("other", "其他市場", rows))
     return panels
 
 
-def _market_panel(
-    key: str,
-    label: str,
-    rows: list[dict[str, object]],
-    items: list[TickerReport],
-) -> dict[str, object]:
-    """Panel dict with market breadth (漲跌家數) over today's moves."""
+def _market_panel(key: str, label: str, rows: list[dict[str, object]]) -> dict[str, object]:
+    """Panel dict with market breadth (漲跌家數) derived from the map tiles.
+
+    Every ticker appears in exactly one tile (exclusive group assignment plus
+    the Other-watchlist catch-all), so tiles are the single source for both the
+    ticker count and today's advance/decline tally — breadth can never disagree
+    with the tiles it sits above.
+    """
     advancers = decliners = flat = 0
-    for item in items:
-        change = daily_change_pct(item)
-        if change is None:
-            continue
-        if change > 0:
-            advancers += 1
-        elif change < 0:
-            decliners += 1
-        else:
-            flat += 1
+    ticker_count = 0
+    for row in rows:
+        for tile in row["tiles"]:  # type: ignore[union-attr]
+            ticker_count += 1
+            change = tile["change"]
+            if not isinstance(change, (int, float)):
+                continue
+            if change > 0:
+                advancers += 1
+            elif change < 0:
+                decliners += 1
+            else:
+                flat += 1
     return {
         "key": key,
         "label": label,
         "rows": rows,
-        "ticker_count": len(items),
+        "ticker_count": ticker_count,
         "advancers": advancers,
         "decliners": decliners,
         "flat": flat,
@@ -2944,7 +2963,6 @@ def _sector_rows(
             "label_zh": SECTOR_GROUP_LABELS_ZH.get(label, label),
             "market": market_key,
             "market_label": market_label,
-            "members": members,
             "symbols": ", ".join(item.ticker.symbol for item in members[:6]),
             "tiles": [_map_tile(item) for item in by_cap],
             "one_day": one_day,

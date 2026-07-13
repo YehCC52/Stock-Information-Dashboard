@@ -893,25 +893,6 @@
     }
     .map-legend .chip { padding: 2px 8px; border-radius: 4px; color: var(--text); font-variant-numeric: tabular-nums; }
     .map-detail summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
-    .map-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
-    .map-tab {
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--surface);
-      color: var(--muted);
-      font: inherit;
-      font-size: 13px;
-      padding: 4px 12px;
-      cursor: pointer;
-    }
-    .map-tab:hover { color: var(--text); border-color: var(--accent); }
-    .map-tab.active {
-      color: var(--text);
-      font-weight: 600;
-      border-color: var(--accent);
-      background: var(--surface-soft);
-    }
-    .map-tab-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
     .map-market-panel { display: none; }
     .map-market-panel.active { display: block; }
     .map-panel-title { display: none; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
@@ -2415,8 +2396,7 @@
       .toc, details, .theme-toggle { display: none; }
       .section, .ticker-card, .stat { break-inside: avoid; box-shadow: none; }
       .table-wrap { max-height: none; overflow: visible; }
-      /* Sector map: print every market stacked, with its title, no tabs. */
-      .map-tabs { display: none; }
+      /* Sector map: print every market stacked, with its title. */
       .map-market-panel { display: block; }
       .map-panel-title { display: block; }
     }
@@ -2453,11 +2433,11 @@
           <span class="lang-label">中文</span>
         </button>
         <div class="focus-line">
-          <span><span class="focus-num">{{ summary.ticker_count }}</span> 檔股票</span>
+          <span><span id="market-header-ticker-count" class="focus-num">{{ summary.ticker_count }}</span> 檔股票</span>
           <span class="sep">|</span>
-          <span><span class="focus-num">{{ summary.earnings_soon_count }}</span> 財報 7 天內</span>
-          <span class="sep">|</span>
-          <span><span class="focus-num">{{ summary.economic_event_count }}</span> 總經事件</span>
+          <span><span id="market-header-earnings-count" class="focus-num">{{ summary.earnings_soon_count }}</span> 財報 7 天內</span>
+          <span id="market-header-macro-separator" class="sep">|</span>
+          <span id="market-header-macro"><span class="focus-num">{{ summary.economic_event_count }}</span> 總經事件</span>
         </div>
       </div>
     </header>
@@ -2467,9 +2447,9 @@
         <span id="market-workspace-subtitle" class="market-workspace-subtitle">&#x6458;&#x8981;&#x3001;&#x65B0;&#x805E;&#x3001;&#x4F30;&#x503C;&#x8207;&#x500B;&#x80A1;&#x5C07;&#x540C;&#x6B65;&#x5207;&#x63DB;</span>
       </div>
       <div class="market-tabs" role="tablist" aria-label="&#x5E02;&#x5834;&#x5207;&#x63DB;">
-        <button type="button" class="market-tab" role="tab" data-market-tab="us">&#x7F8E;&#x80A1;<span class="market-tab-count">0</span></button>
-        <button type="button" class="market-tab" role="tab" data-market-tab="taiwan">&#x53F0;&#x80A1;<span class="market-tab-count">0</span></button>
-        <button type="button" class="market-tab" role="tab" data-market-tab="crypto">&#x52A0;&#x5BC6;&#x8CA8;&#x5E63;<span class="market-tab-count">0</span></button>
+        <button type="button" class="market-tab" role="tab" data-market-tab="us">&#x7F8E;&#x80A1;<span class="market-tab-count">{{ summary.market_counts.get("us", 0) }}</span></button>
+        <button type="button" class="market-tab" role="tab" data-market-tab="taiwan">&#x53F0;&#x80A1;<span class="market-tab-count">{{ summary.market_counts.get("twse", 0) + summary.market_counts.get("tpex", 0) }}</span></button>
+        <button type="button" class="market-tab" role="tab" data-market-tab="crypto">&#x52A0;&#x5BC6;&#x8CA8;&#x5E63;<span class="market-tab-count">{{ summary.market_counts.get("crypto", 0) }}</span></button>
       </div>
       <div class="market-workspace-stats" aria-live="polite">
         <div class="market-workspace-stat"><strong id="market-stat-tickers">0</strong><span>&#x8FFD;&#x8E64;&#x6A19;&#x7684;</span></div>
@@ -2536,7 +2516,7 @@
           <div class="brief-metric {% if summary.hot_count %}alert danger{% endif %}"><span class="brief-metric-value">{{ summary.hot_count }}</span><span class="brief-metric-label">熱點</span></div>
           <div class="brief-metric {% if summary.premarket_gap_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.premarket_gap_count }}</span><span class="brief-metric-label">盤前缺口</span></div>
           <div class="brief-metric {% if summary.earnings_soon_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.earnings_soon_count }}</span><span class="brief-metric-label">財報 7 天內</span></div>
-          <div class="brief-metric {% if summary.economic_event_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.economic_event_count }}</span><span class="brief-metric-label">總經事件</span></div>
+          <div id="market-summary-macro" class="brief-metric {% if summary.economic_event_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.economic_event_count }}</span><span class="brief-metric-label">總經事件</span></div>
           <div class="brief-metric"><span class="brief-metric-value" id="reviewed-count">{{ summary.reviewed_count }} / {{ summary.ticker_count }}</span><span class="brief-metric-label">已檢視</span></div>
           <div class="brief-metric {% if summary.rsi_overbought_count or summary.rsi_oversold_count %}alert{% endif %}"><span class="brief-metric-value">{{ summary.rsi_overbought_count }} / {{ summary.rsi_oversold_count }}</span><span class="brief-metric-label">RSI 高/低</span></div>
         </div>
@@ -3154,7 +3134,7 @@
     {% endif %}
 
     {% if report.market_context and (report.market_context.rates or report.market_context.breadth) %}
-    <section class="macro-overlay">
+    <section id="market-context" class="macro-overlay">
       {% if report.market_context.rates %}
       <div id="rates" class="section section-primary">
         <div class="section-header">
@@ -3232,7 +3212,7 @@
             </div>
             <div class="map-tiles">
               {% for tile in row.tiles %}
-              <a class="map-tile bin-{{ tile.bin }}" href="#{{ tile.anchor }}" title="{{ tile.company_name }}">
+              <a class="map-tile bin-{{ tile.bin }}" href="#{{ tile.anchor }}" title="{{ tile.company }} — 1D {{ tile.change|format_pct }}｜5D {{ tile.ret_5d|format_pct }}｜20D {{ tile.ret_20d|format_pct }}">
                 <span class="map-tile-symbol">{{ tile.symbol }}</span>
                 <span class="map-tile-change">{{ tile.change|format_pct }}</span>
               </a>
@@ -3249,9 +3229,9 @@
           <table class="heatmap-table">
             <thead><tr><th>市場</th><th>產業</th><th>標的</th><th class="num">1D</th><th class="num">5D</th><th class="num">20D</th></tr></thead>
             <tbody>
-              {% for row in sector_leadership %}
+              {% for panel in sector_map_markets %}{% for row in panel.rows %}
               <tr data-market="{{ row.market }}"><td>{{ row.market_label }}</td><td>{{ row.label_zh }}</td><td class="symbols">{{ row.symbols }}</td><td class="num change change-{{ row.one_day|change_class }}">{{ row.one_day|format_pct }}</td><td class="num change change-{{ row.ret_5d|change_class }}">{{ row.ret_5d|format_pct }}</td><td class="num change change-{{ row.ret_20d|change_class }}">{{ row.ret_20d|format_pct }}</td></tr>
-              {% endfor %}
+              {% endfor %}{% endfor %}
             </tbody>
           </table>
         </div>
@@ -3265,7 +3245,7 @@
       <div id="changes-body" class="change-list">
         {% if history.changes_since_last_run %}
           {% for row in history.changes_since_last_run %}
-          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
+          <a class="change-item" data-symbol="{{ row.symbol }}" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
           {% endfor %}
         {% else %}
         <div class="section-empty">No material changes versus the previous saved run.</div>
@@ -3280,7 +3260,7 @@
       <div class="change-list">
         {% if history.changes_30d %}
           {% for row in history.changes_30d %}
-          <a class="change-item" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
+          <a class="change-item" data-symbol="{{ row.symbol }}" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
           {% endfor %}
         {% else %}
         <div class="section-empty">目前累積的歷史資料不足，尚無法進行 30 天比較。</div>
@@ -3296,7 +3276,7 @@
       </div>
       <div class="alert-list">
         {% for alert in rule_alerts %}
-        <a class="alert-item {{ alert.tone }}{% if loop.index0 >= 6 %} alert-extra is-hidden{% endif %}" href="{{ alert.anchor }}">
+        <a class="alert-item {{ alert.tone }}{% if loop.index0 >= 6 %} alert-extra is-hidden{% endif %}" data-symbol="{{ alert.symbol }}" href="{{ alert.anchor }}">
           <span class="alert-label">{{ alert.symbol }}</span>
           <span class="alert-title">{{ alert.title }}</span>
           <span class="alert-detail">{{ alert.detail }}</span>
@@ -3326,7 +3306,7 @@
         </thead>
         <tbody>
           {% for row in data_quality.flagged %}
-          <tr>
+          <tr data-symbol="{{ row.symbol }}">
             <td><a href="#{{ row.symbol|ticker_anchor }}">{{ row.symbol }}</a></td>
             <td class="num">{{ row.score }}</td>
             <td><span class="badge dq-{{ row.tag }}">{{ row.tag }}</span></td>
@@ -4679,7 +4659,9 @@
           ".command-alert", "#todays-focus .focus-list li", "#capital-allocation tbody tr",
           "#research-queue .focus-list li", "#today-catalysts li", "#post-earnings-scoreboard tbody tr",
           "#overextended li", "#rule-alerts li", "#earnings .earnings-pill",
-          "#news-clusters .cluster-item", "#news .news-item", "#valuation-rows tr"
+          "#news-clusters .cluster-item", "#news .news-item", "#valuation-rows tr",
+          "#changes .change-item", "#changes-30d .change-item", "#rule-alerts .alert-item",
+          "#data-quality tbody tr", "#book-today .morning-tile", "#book-impact tbody tr"
         ].join(",");
         Array.prototype.forEach.call(document.querySelectorAll(selectors), function (element) {
           var markets = marketsForElement(element);
@@ -4691,7 +4673,9 @@
           ["capital-allocation", "tbody tr"], ["research-queue", ".focus-list li"],
           ["today-catalysts", "li"], ["post-earnings-scoreboard", "tbody tr"],
           ["overextended", "li"], ["rule-alerts", "li"], ["earnings", ".earnings-pill"],
-          ["news-clusters", ".cluster-item"], ["news", ".news-item"], ["valuation", "#valuation-rows tr"]
+          ["news-clusters", ".cluster-item"], ["news", ".news-item"], ["valuation", "#valuation-rows tr"],
+          ["changes", ".change-item"], ["changes-30d", ".change-item"], ["rule-alerts", ".alert-item"],
+          ["data-quality", "tbody tr"], ["book-today", ".morning-tile"], ["book-impact", "tbody tr"]
         ];
         scopedSections.forEach(function (entry) {
           var section = document.getElementById(entry[0]);
@@ -4701,10 +4685,12 @@
           section.classList.toggle("is-market-empty", items.length > 0 && visible.length === 0);
         });
 
-        ["premarket", "market-sentiment"].forEach(function (id) {
+        ["premarket", "market-sentiment", "today-catalysts", "macro"].forEach(function (id) {
           var section = document.getElementById(id);
           if (section) section.classList.toggle("is-market-hidden", activeMarket !== "us");
         });
+        var marketContext = document.getElementById("market-context");
+        if (marketContext) marketContext.classList.toggle("is-market-hidden", activeMarket !== "us");
         var hero = document.getElementById("hero");
         var commandCenter = document.querySelector(".command-center");
         if (hero) hero.classList.toggle("is-market-hidden", activeMarket !== "us");
@@ -4712,10 +4698,14 @@
         var mapContext = document.getElementById("market-map-context");
         if (mapContext) mapContext.textContent = labelsForMarket(activeMarket) + "產業分組，跟隨頁首市場切換";
         var hasHoldings = selectedCards.some(function (card) { return card.dataset.positionStatus === "holding"; });
-        ["my-book", "book-today", "book-impact"].forEach(function (id) {
+        var allHoldingsMatch = cards.filter(function (card) { return card.dataset.positionStatus === "holding"; }).every(marketMatch);
+        ["book-today", "book-impact"].forEach(function (id) {
           var section = document.getElementById(id);
           if (section) section.classList.toggle("is-market-hidden", !hasHoldings);
         });
+
+        var myBook = document.getElementById("my-book");
+        if (myBook) myBook.classList.toggle("is-market-hidden", !hasHoldings || !allHoldingsMatch);
 
         updateMarketSummary(selectedCards, values);
 
@@ -4734,6 +4724,19 @@
           briefValues[5].textContent = rsiValues.length ? Math.max.apply(null, rsiValues).toFixed(0) + "/" + Math.min.apply(null, rsiValues).toFixed(0) : "N/A";
         }
 
+        var headerTickerCount = document.getElementById("market-header-ticker-count");
+        if (headerTickerCount) headerTickerCount.textContent = selectedCards.length;
+        var headerEarningsCount = document.getElementById("market-header-earnings-count");
+        if (headerEarningsCount) headerEarningsCount.textContent = selectedCards.filter(function (card) {
+          var days = parseInt(card.dataset.earningsDays, 10);
+          return !isNaN(days) && days >= 0 && days <= 7;
+        }).length;
+        var headerMacro = document.getElementById("market-header-macro");
+        if (headerMacro) headerMacro.classList.toggle("is-market-hidden", activeMarket !== "us");
+        var headerMacroSeparator = document.getElementById("market-header-macro-separator");
+        if (headerMacroSeparator) headerMacroSeparator.classList.toggle("is-market-hidden", activeMarket !== "us");
+        var marketSummaryMacro = document.getElementById("market-summary-macro");
+        if (marketSummaryMacro) marketSummaryMacro.classList.toggle("is-market-hidden", activeMarket !== "us");
         Array.prototype.forEach.call(document.querySelectorAll(".toc a[href^='#']"), function (link) {
           var section = document.querySelector(link.getAttribute("href"));
           link.classList.toggle("is-market-hidden", !!section && (section.classList.contains("is-market-hidden") || section.classList.contains("is-market-empty")));
@@ -4775,7 +4778,6 @@
         reorderCards();
         updateReviewSummary();
         renderCompare();
-        updateMarketWorkspace();
       }
 
       function syncModeDetails(card, visible) {
@@ -5865,15 +5867,16 @@
             tab.tabIndex = selected ? 0 : -1;
           });
         }
-        function selectMarket(value, silent) {
+        function selectMarket(value) {
           activeMarket = value;
           try { localStorage.setItem(MARKET_STORAGE_KEY, value); } catch (e) {}
           paint();
           applyFilters();
-          // Keep the sector map's market tabs on the same market.
-          if (!silent) {
-            document.dispatchEvent(new CustomEvent("stock-daily:market", { detail: { market: value, source: "cards" } }));
-          }
+          // Market membership is static per render, so the workspace pass runs
+          // only on market switches — not on every filter/search keystroke.
+          updateMarketWorkspace();
+          // The sector map's panel switcher listens for this event.
+          document.dispatchEvent(new CustomEvent("stock-daily:market", { detail: { market: value } }));
         }
         marketTabs.forEach(function (tab, index) {
           tab.addEventListener("click", function () { selectMarket(tab.dataset.marketTab); });
@@ -5885,12 +5888,6 @@
             marketTabs[next].focus();
             selectMarket(marketTabs[next].dataset.marketTab);
           });
-        });
-        document.addEventListener("stock-daily:market", function (event) {
-          var detail = event.detail || {};
-          if (detail.source === "cards") return;
-          if (["us", "taiwan", "crypto"].indexOf(detail.market) < 0) return;
-          if (detail.market !== activeMarket) selectMarket(detail.market, true);
         });
         paint();
       }
@@ -5926,6 +5923,7 @@
       enhanceFocusFromLocalState();
       renderRevisitDueToday();
       applyFilters();
+      updateMarketWorkspace();
     })();
 
     (function () {

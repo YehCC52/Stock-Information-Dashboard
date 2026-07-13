@@ -280,6 +280,14 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert 'function updateMarketSummary(' in output
     assert 'function updateMarketWorkspace()' in output
     assert 'is-market-hidden' in output
+    assert 'market-header-ticker-count' in output
+    assert 'id="market-context"' in output
+    assert '"#changes .change-item"' in output
+    assert '"#changes-30d .change-item"' in output
+    assert '"#rule-alerts .alert-item"' in output
+    assert '"#data-quality tbody tr"' in output
+    assert 'allHoldingsMatch' in output
+    assert 'market-summary-macro' in output
     assert 'class="map-tabs"' not in output
     assert '<button type="button" class="map-tab' not in output
     assert 'id="valuation-table" class="valuation-table is-compact"' in output
@@ -2892,7 +2900,6 @@ def test_sector_map_markets_splits_us_tw_crypto() -> None:
     )
 
     panels = sector_map_markets(report)
-
     assert [p["key"] for p in panels] == ["us", "taiwan", "crypto"]
     assert [p["label"] for p in panels] == ["美股", "台股", "加密貨幣"]
     assert [p["ticker_count"] for p in panels] == [1, 2, 1]
@@ -2933,6 +2940,9 @@ def test_tw_sector_groups_cover_local_chains() -> None:
         ticker_reports=[
             tw_item("3711.TW", "日月光投資控股", ["半導體封裝", "半導體測試", "SiP"]),
             tw_item("2330.TW", "台灣積體電路", ["晶圓代工", "半導體", "CoWoS"]),
+            tw_item("3037.TW", "欣興電子", ["ABF 載板", "IC 載板", "高階 HDI", "半導體封裝"]),
+            tw_item("8046.TW", "南亞電路板", ["ABF 載板", "BT 載板", "半導體封裝"]),
+            tw_item("3189.TW", "景碩科技", ["ABF 載板", "BT 載板", "半導體封裝"]),
             # tpex (上櫃) shares the 台股 panel with twse.
             tw_item("6770.TWO", "力積電", ["功率半導體", "MOSFET"], market="tpex"),
             tw_item("2327.TW", "國巨", ["被動元件", "MLCC"]),
@@ -2946,6 +2956,7 @@ def test_tw_sector_groups_cover_local_chains() -> None:
 
     assert len(panels) == 1 and panels[0]["key"] == "taiwan"
     by_label = {row["label"]: [t["symbol"] for t in row["tiles"]] for row in panels[0]["rows"]}
+    assert by_label["載板 / PCB"] == ["3037", "8046", "3189"]
     assert by_label["封測"] == ["3711"]
     assert by_label["晶圓代工"] == ["2330"]
     assert by_label["功率元件"] == ["6770"]

@@ -217,6 +217,22 @@ tickers:
     assert ticker.news_language == "zh-TW"
     assert ticker.news_edition == "TW:zh-Hant"
 
+def test_load_config_decodes_quoted_unicode_keywords(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        r"""
+tickers:
+  - symbol: 3037.tw
+    company_name: Unimicron
+    keywords:
+      - "ABF \u8f09\u677f"
+""",
+    )
+
+    ticker = load_config(config_path).tickers[0]
+
+    assert ticker.keywords == ["ABF 載板"]
+
 def test_load_config_allows_disabling_fundamentals_for_etfs(tmp_path: Path) -> None:
     config_path = _write(
         tmp_path / "watchlist.yaml",
@@ -268,3 +284,17 @@ tickers:
     assert ticker.display_symbol == "BTC"
     assert ticker.has_earnings is False
     assert "coindesk.com" in ticker.default_news_domains
+
+
+def test_load_config_rejects_unknown_exchange_suffix(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: 0700.HK
+    company_name: Tencent Holdings
+""",
+    )
+
+    with pytest.raises(ValueError, match="unrecognized exchange suffix"):
+        load_config(config_path)
