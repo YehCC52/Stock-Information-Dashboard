@@ -12,6 +12,7 @@ from .models import (
     AppSettings,
     EarningsSettings,
     InvestmentPlan,
+    MARKET_DEFAULTS,
     MacroSettings,
     ManualMacroEvent,
     NewsSettings,
@@ -144,6 +145,16 @@ def _load_notification_settings(data: dict[str, Any]) -> NotificationSettings:
     )
 
 
+def _infer_market(symbol: str) -> str:
+    if symbol.endswith(".TW"):
+        return "twse"
+    if symbol.endswith(".TWO"):
+        return "tpex"
+    if symbol.endswith("-USD"):
+        return "crypto"
+    return "us"
+
+
 def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
     symbol = data.get("symbol")
     company_name = data.get("company_name")
@@ -151,9 +162,17 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
         raise ValueError(f"tickers[{index}].symbol is required")
     if not company_name:
         raise ValueError(f"tickers[{index}].company_name is required")
+    normalized_symbol = str(symbol).upper()
+    market = str(data.get("market") or _infer_market(normalized_symbol)).lower()
+    if market not in MARKET_DEFAULTS:
+        allowed = ", ".join(sorted(MARKET_DEFAULTS))
+        raise ValueError(f"tickers[{index}].market must be one of {allowed}, got {market!r}")
     return TickerConfig(
-        symbol=str(symbol).upper(),
+        symbol=normalized_symbol,
         company_name=str(company_name),
+        market=market,
+        currency=str(data.get("currency") or MARKET_DEFAULTS[market]["currency"]).upper(),
+        has_fundamentals=bool(data.get("has_fundamentals", True)),
         aliases=[str(value) for value in data.get("aliases", [])],
         keywords=[str(value) for value in data.get("keywords", [])],
         trusted_news_domains=[str(value).lower() for value in data.get("trusted_news_domains", [])],

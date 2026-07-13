@@ -22,7 +22,7 @@ from .models import DailyReport, TickerConfig, TickerReport, TickerResearchState
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
-from .report import derive_portfolio_weights, write_report
+from .report import derive_portfolio_weights, report_output_dir, write_report
 from .storage import (
     export_research_state_file,
     import_research_state_file,
@@ -121,6 +121,9 @@ def run_daily(
         research_states = _apply_plan_defaults(research_states, config.tickers)
         tickers = _apply_position_overrides(config.tickers, research_states)
         post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
+        holding_currencies = {ticker.currency for ticker in tickers if ticker.position.status == "holding"}
+        if len(holding_currencies) > 1:
+            global_warnings.append("Mixed-currency holdings detected; combined unrealized P/L is intentionally hidden.")
 
         news_provider = GoogleNewsRssProvider()
         manual_x_signals = load_manual_x_signals(config.settings.x_signals.manual_file, tickers)
@@ -167,7 +170,7 @@ def run_daily(
             ticker_reports = _apply_estimate_revision_history(conn, ticker_reports, actual_report_date)
             ticker_reports = _apply_earnings_fallbacks(conn, ticker_reports, actual_report_date)
 
-        report_path = Path(output_dir) / f"{actual_report_date.isoformat()}.html"
+        report_path = report_output_dir(output_dir, actual_report_date) / f"{actual_report_date.isoformat()}.html"
         preliminary_report = DailyReport(
             report_date=actual_report_date,
             generated_at=generated_at,
@@ -490,11 +493,12 @@ def _fetch_one_ticker(
                     f"Valuation fetch failed after {_VALUATION_MAX_RETRIES + 1} attempts: {last_exc}"
                 )
 
-        try:
-            earnings = fetch_yfinance_earnings_date(ticker)
-        except Exception as exc:
-            logger.warning("Earnings date fetch failed for %s", ticker.symbol, exc_info=True)
-            warnings.append(f"Earnings date fetch failed: {exc}")
+        if ticker.has_earnings:
+            try:
+                earnings = fetch_yfinance_earnings_date(ticker)
+            except Exception as exc:
+                logger.warning("Earnings date fetch failed for %s", ticker.symbol, exc_info=True)
+                warnings.append(f"Earnings date fetch failed: {exc}")
 
     return TickerReport(
         ticker=ticker,

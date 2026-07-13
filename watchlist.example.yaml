@@ -29,6 +29,28 @@ settings:
       disable_web_page_preview: true
 
 tickers:
+  # Taiwan stocks use Yahoo Finance exchange suffixes. `market` is optional for
+  # .TW / .TWO symbols, but declaring it keeps the intent obvious.
+  # - symbol: 2330.TW
+  #   company_name: 台灣積體電路製造股份有限公司
+  #   market: twse
+  #   aliases: [台積電, TSMC]
+  #   keywords: [晶圓代工, 半導體]
+  #   position:
+  #     status: watchlist
+  #   trusted_news_domains: [money.udn.com, cnyes.com, moneydj.com]
+
+  # Crypto uses Yahoo Finance -USD pairs. `market` is optional for -USD
+  # symbols. No earnings/analyst-estimate fetches are made for crypto.
+  # - symbol: BTC-USD
+  #   company_name: Bitcoin
+  #   market: crypto
+  #   aliases: [Bitcoin, 比特幣]
+  #   keywords: [crypto, ETF flows, halving]
+  #   position:
+  #     status: watchlist
+  #   trusted_news_domains: [coindesk.com, cointelegraph.com, theblock.co]
+
   - symbol: NVDA
     company_name: NVIDIA Corporation
     aliases:

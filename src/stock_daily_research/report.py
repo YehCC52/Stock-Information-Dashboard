@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .data_quality import confidence as data_quality_confidence
-from .models import DailyReport, MarketContext, NewsArticle, PositionConfig, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
+from .models import DailyReport, MARKET_LABELS, MarketContext, NewsArticle, PositionConfig, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
@@ -60,12 +60,92 @@ METRIC_LABELS = {
     "industry": "Industry",
 }
 
+HTML_METRIC_LABELS = {
+    "last_close": "收盤價",
+    "previous_close": "前收",
+    "daily_change": "日漲跌",
+    "rsi_14": "RSI 14",
+    "fifty_two_week_high": "52週高",
+    "fifty_two_week_low": "52週低",
+    "from_52w_high": "距高點",
+    "sma_5": "SMA 5D",
+    "sma_20": "SMA 20D",
+    "sma_60": "SMA 60D",
+    "sma_120": "SMA 120D",
+    "volume_vs_20d": "成交量 / 20D",
+    "atr_20": "ATR 20D",
+    "atr_20_percent": "ATR %",
+    "move_vs_atr": "波動 / ATR",
+    "gap_percent": "缺口 %",
+    "market_cap": "市值",
+    "enterprise_value": "企業價值",
+    "trailing_pe": "過去12月 P/E",
+    "forward_pe": "預估 P/E",
+    "ttm_eps": "TTM EPS",
+    "forward_eps": "預估 EPS",
+    "next_fy_eps": "下一財年 EPS",
+    "eps_growth_pct": "EPS 成長",
+    "fy1_eps_revision_30d": "FY1 EPS 修正 30D",
+    "next_q_revenue": "下季營收",
+    "next_q_revenue_growth_pct": "下季營收成長",
+    "next_fy_revenue": "下一財年營收",
+    "revenue_growth_pct": "營收成長",
+    "fy1_revenue_revision_30d": "FY1 營收修正 30D",
+    "next_q_revenue_revision_30d": "下季營收修正 30D",
+    "latest_eps_surprise_pct": "最近 EPS 驚喜",
+    "latest_revenue_surprise_pct": "最近營收驚喜",
+    "peg_ratio": "PEG",
+    "price_to_sales": "P/S",
+    "price_to_book": "P/B",
+    "ev_to_revenue": "EV/營收",
+    "ev_to_ebitda": "EV/EBITDA",
+    "sector": "產業",
+    "industry": "細分產業",
+}
+
+EVENT_LABELS_ZH = {
+    "earnings": "財報",
+    "guidance": "展望",
+    "ai": "AI",
+    "deal": "交易",
+    "regulation": "監管",
+    "lawsuit": "訴訟",
+    "antitrust": "反壟斷",
+    "supply": "供應鏈",
+    "product": "產品",
+    "analyst": "分析師",
+    "analyst_call": "分析師",
+    "management": "管理層",
+    "macro": "總經",
+    "market": "市場",
+    "other": "其他",
+}
+
+SOURCE_RELIABILITY_LABELS_ZH = {
+    "official/company": "官方/公司",
+    "tier 1 media": "一線媒體",
+    "commentary": "評論",
+    "trusted media": "可信媒體",
+}
+
+LEVEL_LABELS_ZH = {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "info": "資訊",
+}
+
 
 @dataclass(frozen=True)
 class ReportPaths:
     markdown: Path
     html: Path
     brief: Path
+
+
+def report_output_dir(output_dir: str | Path, report_date: date) -> Path:
+    """Return the year/month archive directory for a daily report."""
+    return Path(output_dir) / f"{report_date.year:04d}" / f"{report_date.month:02d}"
 
 
 def _build_environment(template_dir: str | Path | None = None, *, autoescape_html: bool = False) -> Environment:
@@ -105,6 +185,11 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["card_state_label"] = card_state_label
     env.filters["ticker_anchor"] = lambda symbol: f"ticker-{symbol.lower()}"
     env.filters["event_label"] = event_label
+    env.filters["event_label_zh"] = event_label_zh
+    env.filters["html_metric_label"] = html_metric_label
+    env.filters["source_reliability_label"] = source_reliability_label
+    env.filters["level_label"] = level_label
+    env.filters["market_label"] = market_label
     env.filters["news_rationale"] = news_rationale
     env.globals["news_triage_label"] = lambda item, article: news_triage_label(item, article, report.report_date)
     from .market_context import market_regime, rates_interpretation
@@ -155,6 +240,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         plan_triggers_by_symbol.setdefault(str(trigger["ticker"]), []).append(trigger)
     env.globals["plan_triggers_for"] = lambda symbol: plan_triggers_by_symbol.get(symbol, [])
     template = env.get_template("daily_report.html.j2")
+    map_markets = sector_map_markets(report)
     return template.render(
         report=report,
         metric_labels=METRIC_LABELS,
@@ -174,7 +260,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         capital_allocation=capital_allocation_queue(report),
         book_today=book_today_summary(report),
         book_impact=book_impact_ranking(report),
-        sector_leadership=sector_leadership(report),
+        sector_map_markets=map_markets,
+        sector_leadership=[row for panel in map_markets for row in panel["rows"]],
         premarket_triage=premarket_triage(report),
         priority_items=priority_items(report),
         rule_alerts=rule_alerts(report),
@@ -210,7 +297,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
 
 
 def write_report(report: DailyReport, output_dir: str | Path) -> ReportPaths:
-    output_path = Path(output_dir)
+    output_path = report_output_dir(output_dir, report.report_date)
     output_path.mkdir(parents=True, exist_ok=True)
     markdown_path = output_path / f"{report.report_date.isoformat()}.md"
     html_path = output_path / f"{report.report_date.isoformat()}.html"
@@ -250,6 +337,9 @@ def build_summary(report: DailyReport) -> dict[str, int]:
         for state in report.research_states.values()
         if state.review_status == "reviewed"
     )
+    market_counts: dict[str, int] = {}
+    for item in report.ticker_reports:
+        market_counts[item.ticker.market] = market_counts.get(item.ticker.market, 0) + 1
     return {
         "ticker_count": ticker_count,
         "tickers_with_news": tickers_with_news,
@@ -262,7 +352,12 @@ def build_summary(report: DailyReport) -> dict[str, int]:
         "rsi_overbought_count": rsi_overbought_count,
         "rsi_oversold_count": rsi_oversold_count,
         "reviewed_count": reviewed_count,
+        "market_counts": market_counts,
     }
+
+
+def market_label(value: str) -> str:
+    return MARKET_LABELS.get(value, value.upper())
 
 
 def research_state_for(report: DailyReport, symbol: str) -> TickerResearchState:
@@ -766,6 +861,29 @@ def card_state_label(value: object) -> str:
     return labels.get(text, text.title())
 
 
+def html_metric_label(value: object) -> str:
+    key = str(value or "")
+    return HTML_METRIC_LABELS.get(key, METRIC_LABELS.get(key, key))
+
+
+def event_label_zh(event_type: object) -> str:
+    key = str(event_type or "")
+    return EVENT_LABELS_ZH.get(key, zh_text(event_label(key)))
+
+
+def source_reliability_label(reliability: object) -> str:
+    if isinstance(reliability, dict):
+        label = str(reliability.get("label") or "")
+    else:
+        label = str(reliability or "")
+    return SOURCE_RELIABILITY_LABELS_ZH.get(label, zh_text(label))
+
+
+def level_label(value: object) -> str:
+    text = str(value or "")
+    return LEVEL_LABELS_ZH.get(text.lower(), zh_text(text))
+
+
 def zh_text(value: object) -> str:
     """Display-only Traditional Chinese wording for common dashboard phrases."""
     text = str(value or "")
@@ -826,6 +944,54 @@ def zh_text(value: object) -> str:
         "Oil": "油價",
         "volume": "成交量",
         "today": "今日",
+        "tomorrow": "明日",
+        "tickers": "檔",
+        "ticker": "檔",
+        "holdings": "持股",
+        "holding": "持股",
+        "events": "事件",
+        "event": "事件",
+        "Top-news count increased": "重點新聞增加",
+        "Thesis state changed": "投資論點狀態改變",
+        "Review status changed": "檢視狀態改變",
+        "Valuation risk changed": "估值風險改變",
+        "More data warnings": "資料警示增加",
+        "More top-news": "重點新聞增加",
+        "Attention score rose": "關注分數上升",
+        "Thesis moved": "投資論點改變",
+        "post-earnings review due": "待做財報後檢視",
+        "post-earnings review": "財報後檢視",
+        "thesis": "投資論點",
+        "news burst": "新聞放量",
+        "valuation with active thesis": "估值偏高且論點仍有效",
+        "last reviewed": "上次檢視",
+        "never reviewed": "尚未檢視",
+        "warning(s)": "個警示",
+        "reported": "已公布",
+        "unmarked": "未標記",
+        "not-reviewed": "未檢視",
+        "in-progress": "檢視中",
+        "reviewed": "已檢視",
+        "official/company": "官方/公司",
+        "tier 1 media": "一線媒體",
+        "trusted media": "可信媒體",
+        "commentary": "評論",
+        "P/E >=100": "P/E >=100",
+        "Beat": "優於",
+        "Miss": "低於",
+        "In line": "符合",
+        "Up": "上修",
+        "Flat": "持平",
+        "Down": "下修",
+        "Unscored": "尚未評分",
+        "Watch / no fresh capital": "觀察，暫不投入新資金",
+        "Wait for pullback": "等待回檔",
+        "Hold / add only on confirmation": "續抱，確認後再加碼",
+        "Reduce / avoid": "減碼或暫避",
+        "No fresh capital": "暫不投入新資金",        "News fetching skipped by --no-news.": "已使用 --no-news 跳過新聞抓取。",
+        "Valuation and earnings fetching skipped by --no-valuation.": "已使用 --no-valuation 跳過估值與財報抓取。",
+        "Macro calendar fetching skipped by --no-macro.": "已使用 --no-macro 跳過總經日曆抓取。",
+        "Market sentiment skipped because valuation fetching is disabled.": "因估值抓取停用，已跳過市場情緒。",
     }
     for src, dest in replacements.items():
         text = text.replace(src, dest)
@@ -2149,16 +2315,9 @@ def clusters_in_use(report: DailyReport) -> list[str]:
 
 def ticker_cluster(item: TickerReport) -> str | None:
     """Which custom cluster does this ticker belong to (based on keywords)?"""
-    symbol = item.ticker.symbol.lower()
-    keywords_text = " ".join([
-        item.ticker.symbol.lower(),
-        item.ticker.company_name.lower(),
-        " ".join(item.ticker.keywords).lower(),
-    ])
     for label, terms in SECTOR_GROUPS:
-        for term in terms:
-            if term.lower() in keywords_text or term.lower() in symbol:
-                return label.lower()
+        if _matches_sector_group(item, terms):
+            return label.lower()
     return None
 
 
@@ -2180,6 +2339,13 @@ def derive_portfolio_weights(report: DailyReport) -> DailyReport:
             continue
         sizes[tr.ticker.symbol] = pos.shares * price
 
+    holding_currencies = {
+        tr.ticker.currency
+        for tr in report.ticker_reports
+        if tr.ticker.position.status == "holding" and tr.ticker.position.shares is not None
+    }
+    if len(holding_currencies) > 1:
+        return report
     total = sum(sizes.values())
     if total <= 0:
         return report
@@ -2256,6 +2422,7 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
         rows.append({
             "symbol": tr.ticker.symbol,
             "company": tr.ticker.company_name,
+            "currency": tr.ticker.currency,
             "weight": round(float(weight), 2),
             "change_pct": change_pct,
             "book_impact": book_impact,
@@ -2299,10 +2466,12 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
     total_impact = round(sum(r["book_impact"] or 0 for r in rows), 3)
     total_weight = round(sum(float(r["weight"]) for r in rows), 2)
 
+    holding_currencies = sorted({str(r["currency"]) for r in rows if r.get("currency")})
+    mixed_currency = len(holding_currencies) > 1
     total_cost = sum(r["cost_basis"] for r in rows if isinstance(r["cost_basis"], (int, float)))
     total_mv = sum(r["market_value"] for r in rows if isinstance(r["market_value"], (int, float)))
-    total_pl_dollar = round(total_mv - total_cost, 2) if total_cost > 0 else None
-    total_pl_pct = round((total_mv - total_cost) / total_cost * 100.0, 2) if total_cost > 0 else None
+    total_pl_dollar = round(total_mv - total_cost, 2) if total_cost > 0 and not mixed_currency else None
+    total_pl_pct = round((total_mv - total_cost) / total_cost * 100.0, 2) if total_cost > 0 and not mixed_currency else None
 
     sectors = sector_concentration(report)
     stop_warnings = stop_distance_warnings(report)
@@ -2332,6 +2501,8 @@ def portfolio_impact_summary(report: DailyReport) -> dict[str, object]:
         "total_weight_pct": total_weight,
         "total_pl_dollar": total_pl_dollar,
         "total_pl_pct": total_pl_pct,
+        "currencies": holding_currencies,
+        "mixed_currency": mixed_currency,
         "sectors": sectors,
         "stop_warnings": stop_warnings,
         "addable_cash": addable_cash,
@@ -2430,6 +2601,8 @@ def sector_concentration(report: DailyReport) -> list[dict[str, object]]:
             raw = tr.valuation.metrics.get("sector")
             if isinstance(raw, str):
                 sector = raw
+        if not sector and tr.ticker.market == "crypto":
+            sector = "Crypto"
         sector = (sector or "Unspecified").strip() or "Unspecified"
         bucket = buckets.setdefault(sector, {"sector": sector, "weight": 0.0, "tickers": []})
         bucket["weight"] = float(bucket["weight"]) + float(weight)
@@ -2549,54 +2722,233 @@ def macro_risk_meter(context: MarketContext | None) -> list[dict[str, str]]:
     return rows
 
 
+# Order matters: assignment is exclusive (first match wins), so the more
+# specific groups sit above the broader ones — Memory before Semis keeps MU in
+# Memory; Internet/ads before software keeps GOOGL out of the "cloud" bucket.
+# ETF sits after Crypto so BTC's "ETF flows" keyword doesn't hijack it.
 SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Semis", ("semiconductor", "semi", "chip", "gpu", "soxx", "nvda", "amd", "avgo", "tsm", "asml", "arm")),
-    ("Mega-cap software", ("software", "cloud", "azure", "copilot", "msft", "crm", "adbe", "orcl")),
-    ("Memory", ("memory", "dram", "nand", "hbm", "ssd", "mu", "wdc", "stx")),
-    ("EV", ("ev", "electric vehicle", "autonomous", "tesla", "tsla", "rivn", "nio")),
+    ("Memory", ("memory", "dram", "nand", "hbm", "ssd", "wdc", "stx", "記憶體")),
+    ("Semis", ("semiconductor", "semi", "chip", "gpu", "soxx", "nvda", "amd", "avgo", "tsm", "asml", "arm", "半導體", "晶圓")),
     ("Internet / ads", ("advertising", "ads", "search", "social", "internet", "googl", "meta", "amzn")),
-    ("AI infra", ("ai", "data center", "server", "networking", "accelerator", "gpu")),
+    ("Mega-cap software", ("software", "cloud", "azure", "copilot", "msft", "crm", "adbe", "orcl")),
+    ("EV", ("electric vehicle", "autonomous", "tesla", "tsla", "rivn", "nio", "電動車")),
+    ("Consumer hardware", ("iphone", "consumer electronics", "wearables", "smartphone", "aapl")),
+    ("Space", ("space launch", "rocket", "satellite", "spacex", "rklb")),
+    ("Crypto", ("crypto", "bitcoin", "ethereum", "blockchain", "btc-usd", "eth-usd", "加密")),
+    ("ETF / Index", ("etf", "指數", "index fund")),
+    ("AI infra", ("ai", "data center", "server", "networking", "accelerator", "gpu", "伺服器")),
+)
+
+SECTOR_GROUP_LABELS_ZH: dict[str, str] = {
+    "Semis": "半導體",
+    "Mega-cap software": "大型軟體",
+    "Memory": "記憶體",
+    "EV": "電動車",
+    "Internet / ads": "網路 / 廣告",
+    "Consumer hardware": "消費電子",
+    "Space": "太空",
+    "Crypto": "加密貨幣",
+    "ETF / Index": "ETF / 指數",
+    "AI infra": "AI 基礎設施",
+    "Other watchlist": "其他觀察",
+}
+
+# Taiwan-market sector chains — matched against watchlist keywords/aliases.
+# Same exclusive first-match rule: specific chains sit above broad ones, so
+# 封測 (封裝/測試) is checked before 晶圓代工, and 代工 in the assembly group
+# can't steal 晶圓代工 names.
+TW_SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("封測", ("封測", "封裝", "測試", "osat", "sip")),
+    ("晶圓代工", ("晶圓代工", "晶圓", "先進製程", "cowos", "foundry")),
+    ("IC 設計", ("ic 設計", "ic設計", "fabless", "矽智財")),
+    ("記憶體", ("記憶體", "dram", "nand")),
+    ("功率元件", ("功率元件", "功率半導體", "mosfet", "igbt", "碳化矽", "氮化鎵")),
+    ("被動元件", ("被動元件", "mlcc", "電容", "電阻", "電感")),
+    ("電源 / 重電", ("電源", "重電", "變壓器", "充電樁")),
+    ("散熱", ("散熱", "均熱", "水冷")),
+    ("光通訊 / 網通", ("光通訊", "光收發", "矽光子", "cpo", "網通")),
+    ("AI 伺服器 / 組裝", ("伺服器", "組裝", "ems", "代工", "機殼")),
+    ("金融", ("金融", "金控", "銀行", "壽險")),
+    ("航運", ("航運", "貨櫃", "散裝")),
+    ("ETF / 指數", ("etf", "指數")),
+)
+
+# Crypto pairs all end in -USD, so this is a catch-all single group.
+CRYPTO_SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("加密貨幣", ("crypto", "bitcoin", "ethereum", "blockchain", "加密", "-usd")),
+)
+
+# Keys are MARKET_PANELS panel keys, not raw ticker markets.
+SECTOR_GROUPS_BY_MARKET: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
+    "taiwan": TW_SECTOR_GROUPS,
+    "crypto": CRYPTO_SECTOR_GROUPS,
+}
+
+# Sector-map view panels: (panel key, member ticker markets, display label).
+# twse + tpex share one 台股 panel — they trade in the same session. Keys must
+# match the ticker-card market tabs ("us" / "taiwan" / "crypto") so both UIs
+# share one market state in the report.
+MARKET_PANELS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("us", ("us",), "美股"),
+    ("taiwan", ("twse", "tpex"), "台股"),
+    ("crypto", ("crypto",), "加密貨幣"),
 )
 
 
-def sector_leadership(report: DailyReport) -> list[dict[str, object]]:
+def map_change_bin(value: object) -> str:
+    """Diverging bin for the sector-map tile: intensity in 3 steps per side.
+
+    Thresholds ±0.5 / ±1.5 / ±3.0 (%) keep the map at 7 color classes; |v| ≤ 0.5
+    reads as neutral so small noise doesn't paint the map.
+    """
+    if not isinstance(value, (int, float)) or value != value:
+        return "na"
+    if value >= 3.0:
+        return "up-3"
+    if value >= 1.5:
+        return "up-2"
+    if value > 0.5:
+        return "up-1"
+    if value <= -3.0:
+        return "down-3"
+    if value <= -1.5:
+        return "down-2"
+    if value < -0.5:
+        return "down-1"
+    return "flat"
+
+
+def _map_tile(item: TickerReport) -> dict[str, object]:
+    change = daily_change_pct(item)
+    return {
+        "symbol": item.ticker.display_symbol,
+        "anchor": f"ticker-{item.ticker.symbol.lower()}",
+        "company": item.ticker.company_name,
+        "change": change,
+        "bin": map_change_bin(change),
+        "ret_5d": _metric_float(item, "return_5d"),
+        "ret_20d": _metric_float(item, "return_20d"),
+        "market_cap": _metric_float(item, "market_cap"),
+    }
+
+
+def sector_map_markets(report: DailyReport) -> list[dict[str, object]]:
+    """Sector map split into one panel per market (美股 / 台股 / 加密貨幣).
+
+    Markets trade in different sessions, so group averages are only meaningful
+    within one market. Panels follow MARKET_PANELS order; markets absent from
+    the watchlist render no panel. An unknown future market gets its own panel
+    at the end rather than being silently dropped.
+    """
     spy_20d = None
     if report.market_context and report.market_context.benchmark_returns:
         spy_20d = report.market_context.benchmark_returns.get("spy_20d")
+
+    panels: list[dict[str, object]] = []
+    known_markets: set[str] = set()
+    for key, markets, label in MARKET_PANELS:
+        known_markets.update(markets)
+        items = [item for item in report.ticker_reports if item.ticker.market in markets]
+        # SPY is only a sensible benchmark for the US session.
+        rows = _sector_rows(items, spy_20d if key == "us" else None, key, label)
+        if rows:
+            panels.append(_market_panel(key, label, rows, items))
+
+    leftover = [item for item in report.ticker_reports if item.ticker.market not in known_markets]
+    if leftover:
+        rows = _sector_rows(leftover, None, "other", "其他市場")
+        panels.append(_market_panel("other", "其他市場", rows, leftover))
+    return panels
+
+
+def _market_panel(
+    key: str,
+    label: str,
+    rows: list[dict[str, object]],
+    items: list[TickerReport],
+) -> dict[str, object]:
+    """Panel dict with market breadth (漲跌家數) over today's moves."""
+    advancers = decliners = flat = 0
+    for item in items:
+        change = daily_change_pct(item)
+        if change is None:
+            continue
+        if change > 0:
+            advancers += 1
+        elif change < 0:
+            decliners += 1
+        else:
+            flat += 1
+    return {
+        "key": key,
+        "label": label,
+        "rows": rows,
+        "ticker_count": len(items),
+        "advancers": advancers,
+        "decliners": decliners,
+        "flat": flat,
+    }
+
+
+def sector_leadership(report: DailyReport) -> list[dict[str, object]]:
+    """Flat sector rows across all market panels, for the detail table."""
+    return [row for panel in sector_map_markets(report) for row in panel["rows"]]
+
+
+def _sector_rows(
+    items: list[TickerReport],
+    benchmark_20d: object,
+    market_key: str,
+    market_label: str,
+) -> list[dict[str, object]]:
+    """Group one market's tickers into sector rows ranked by today's move.
+
+    Each market uses its own sector taxonomy (SECTOR_GROUPS_BY_MARKET) — the
+    台股 panel groups by local chains like 封測/功率元件/被動元件 rather than
+    the US watchlist themes. Assignment is exclusive — the first matching group
+    wins — so a ticker never shows up twice on the sector map. Each row also
+    carries `tiles` (per-member map cells, biggest market cap first) and
+    `label_zh`.
+    """
+    sector_groups = SECTOR_GROUPS_BY_MARKET.get(market_key, SECTOR_GROUPS)
+    grouped: dict[str, list[TickerReport]] = {label: [] for label, _ in sector_groups}
+    other: list[TickerReport] = []
+    for item in items:
+        for label, terms in sector_groups:
+            if _matches_sector_group(item, terms):
+                grouped[label].append(item)
+                break
+        else:
+            other.append(item)
+    if other:
+        grouped["Other watchlist"] = other
+
     rows: list[dict[str, object]] = []
-    assigned: set[str] = set()
-    for label, terms in SECTOR_GROUPS:
-        members = [
-            item for item in report.ticker_reports
-            if _matches_sector_group(item, terms)
-        ]
+    for label, members in grouped.items():
         if not members:
             continue
-        assigned.update(item.ticker.symbol for item in members)
         one_day = _avg_metric(members, daily_change_pct)
         ret_5d = _avg_metric(members, lambda item: _metric_float(item, "return_5d"))
         ret_20d = _avg_metric(members, lambda item: _metric_float(item, "return_20d"))
-        rel_spy = ret_20d - spy_20d if ret_20d is not None and isinstance(spy_20d, (int, float)) else None
+        rel_spy = (
+            ret_20d - benchmark_20d
+            if ret_20d is not None and isinstance(benchmark_20d, (int, float))
+            else None
+        )
+        by_cap = sorted(
+            members,
+            key=lambda item: -(_metric_float(item, "market_cap") or 0.0),
+        )
         rows.append({
             "label": label,
+            "label_zh": SECTOR_GROUP_LABELS_ZH.get(label, label),
+            "market": market_key,
+            "market_label": market_label,
             "members": members,
             "symbols": ", ".join(item.ticker.symbol for item in members[:6]),
+            "tiles": [_map_tile(item) for item in by_cap],
             "one_day": one_day,
             "ret_5d": ret_5d,
-            "ret_20d": ret_20d,
-            "rel_spy": rel_spy,
-        })
-
-    other = [item for item in report.ticker_reports if item.ticker.symbol not in assigned]
-    if other:
-        ret_20d = _avg_metric(other, lambda item: _metric_float(item, "return_20d"))
-        rel_spy = ret_20d - spy_20d if ret_20d is not None and isinstance(spy_20d, (int, float)) else None
-        rows.append({
-            "label": "Other watchlist",
-            "members": other,
-            "symbols": ", ".join(item.ticker.symbol for item in other[:6]),
-            "one_day": _avg_metric(other, daily_change_pct),
-            "ret_5d": _avg_metric(other, lambda item: _metric_float(item, "return_5d")),
             "ret_20d": ret_20d,
             "rel_spy": rel_spy,
         })
@@ -2668,7 +3020,22 @@ def _matches_sector_group(item: TickerReport, terms: tuple[str, ...]) -> bool:
         str(item.valuation.metrics.get("sector", "")) if item.valuation else "",
         str(item.valuation.metrics.get("industry", "")) if item.valuation else "",
     ]).lower()
-    return any(term in text for term in terms)
+    return any(_sector_term_matches(text, term) for term in terms)
+
+
+def _sector_term_matches(text: str, term: str) -> bool:
+    """Match a sector-group term, guarding short ASCII tokens with boundaries.
+
+    Bare substring matching let "mu" fire inside "communication", "ai" inside
+    "sustain", "ems" inside "systems". Short alphanumeric ASCII tokens (≤4
+    chars: symbols and acronyms like ai / tsm / hbm / etf) therefore require
+    non-alphanumeric neighbours; longer terms and CJK terms keep substring
+    semantics ("semiconductor" in "semiconductors", "封裝" in "半導體封裝").
+    """
+    term = term.lower()
+    if len(term) <= 4 and term.isascii() and term.isalnum():
+        return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text) is not None
+    return term in text
 
 
 def _metric_float(item: TickerReport, key: str) -> float | None:
@@ -2819,14 +3186,25 @@ def from_52w_low_pct(item: TickerReport) -> float | None:
     return (last - low) / low * 100.0
 
 
+_MARKET_SORT_RANK: dict[str, int] = {
+    market: rank for rank, (_key, markets, _label) in enumerate(MARKET_PANELS) for market in markets
+}
+
+
 def sort_by_market_cap(items: list[TickerReport]) -> list[TickerReport]:
-    """Sort tickers by market cap descending. Tickers with missing/NaN market cap go last."""
-    def key(item: TickerReport) -> tuple[int, float, str]:
+    """Sort tickers by market, then market cap descending within each market.
+
+    Market caps are in local currency (TWD vs USD), so a global sort would rank
+    2330's 26T TWD ahead of every US name; comparing caps is only meaningful
+    within one market. Missing/NaN market cap goes last within its market.
+    """
+    def key(item: TickerReport) -> tuple[int, int, float, str]:
+        rank = _MARKET_SORT_RANK.get(item.ticker.market, len(MARKET_PANELS))
         if item.valuation:
             mc = item.valuation.metrics.get("market_cap")
             if isinstance(mc, (int, float)) and mc == mc:
-                return (0, -float(mc), item.ticker.symbol)
-        return (1, 0.0, item.ticker.symbol)
+                return (rank, 0, -float(mc), item.ticker.symbol)
+        return (rank, 1, 0.0, item.ticker.symbol)
     return sorted(items, key=key)
 
 

@@ -7,6 +7,7 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
+from .report import report_output_dir
 from .runner import run_daily
 from .storage import export_research_state_file, import_research_state_file, init_db
 
@@ -19,7 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a personal daily stock research report.")
     parser.add_argument("--config", default="watchlist.yaml", help="Path to watchlist YAML config.")
     parser.add_argument("--date", default=None, help="Report date in YYYY-MM-DD format. Defaults to today.")
-    parser.add_argument("--output-dir", default="reports", help="Directory for Markdown reports.")
+    parser.add_argument("--output-dir", default="reports", help="Base directory for reports (organized as YYYY/MM).")
     parser.add_argument("--db", default="data/stock_daily.sqlite3", help="SQLite database path.")
     parser.add_argument("--init-config", action="store_true", help="Copy watchlist.example.yaml to watchlist.yaml if missing.")
     parser.add_argument("--no-news", action="store_true", help="Skip online news fetching.")
@@ -53,7 +54,7 @@ def main() -> None:
         import_research_state_path=args.import_research_state,
         history_days=max(7, int(args.history_days)),
     )
-    print(f"Generated report for {report.report_date.isoformat()} in {args.output_dir}")
+    print(f"Generated report for {report.report_date.isoformat()} in {report_output_dir(args.output_dir, report.report_date)}")
 
 
 def init_config(config_path: Path) -> None:

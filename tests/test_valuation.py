@@ -176,3 +176,65 @@ def test_fetch_yfinance_eps_metrics_falls_back_to_forward_eps_and_growth_calc() 
 
     assert metrics["next_fy_eps"] == 10.0
     assert metrics["eps_growth_pct"] == 25.0
+
+
+def test_fetch_yfinance_valuation_skips_estimate_fetch_for_crypto(monkeypatch) -> None:
+    import stock_daily_research.valuation as valuation_mod
+    from stock_daily_research.models import TickerConfig
+
+    class FakeYfTicker:
+        def get_info(self):
+            return {
+                "regularMarketPrice": 60000.0,
+                "regularMarketPreviousClose": 59000.0,
+                "marketCap": 1_200_000_000_000,
+            }
+
+    monkeypatch.setattr(valuation_mod.yf, "Ticker", lambda _symbol: FakeYfTicker())
+    monkeypatch.setattr(valuation_mod, "fetch_technical_indicators", lambda _t: {"rsi_14": 55.0})
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("analyst-estimate fetch should be skipped for crypto")
+
+    monkeypatch.setattr(valuation_mod, "fetch_yfinance_eps_metrics", boom)
+
+    ticker = TickerConfig(symbol="BTC-USD", company_name="Bitcoin", market="crypto")
+    snapshot = valuation_mod.fetch_yfinance_valuation(ticker)
+
+    assert snapshot.metrics["last_close"] == 60000.0
+    assert snapshot.metrics["market_cap"] == 1_200_000_000_000
+    # Estimate keys stay present (as None) so the metrics shape is consistent.
+    assert snapshot.metrics["next_fy_eps"] is None
+    assert snapshot.metrics["latest_eps_surprise_pct"] is None
+
+def test_fetch_yfinance_valuation_skips_fundamentals_for_etf(monkeypatch) -> None:
+    import stock_daily_research.valuation as valuation_mod
+    from stock_daily_research.models import TickerConfig
+
+    class FakeYfTicker:
+        def get_info(self):
+            raise AssertionError("ETF fundamentals endpoint should not be called")
+
+    monkeypatch.setattr(valuation_mod.yf, "Ticker", lambda _symbol: FakeYfTicker())
+    monkeypatch.setattr(
+        valuation_mod,
+        "fetch_technical_indicators",
+        lambda _ticker: {"last_close": 52.4, "rsi_14": 51.0},
+    )
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("ETF analyst-estimate endpoint should not be called")
+
+    monkeypatch.setattr(valuation_mod, "fetch_yfinance_eps_metrics", boom)
+
+    ticker = TickerConfig(
+        symbol="0050.TW",
+        company_name="元大台灣50",
+        market="twse",
+        has_fundamentals=False,
+    )
+    snapshot = valuation_mod.fetch_yfinance_valuation(ticker)
+
+    assert snapshot.metrics["last_close"] == 52.4
+    assert snapshot.metrics["rsi_14"] == 51.0
+    assert snapshot.metrics["next_fy_eps"] is None
