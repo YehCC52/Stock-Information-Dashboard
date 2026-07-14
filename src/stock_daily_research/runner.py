@@ -22,7 +22,8 @@ from .models import DailyReport, TickerConfig, TickerReport, TickerResearchState
 from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
-from .report import derive_portfolio_weights, holding_currencies, report_output_dir, write_report
+from .taiwan_market import TaiwanMarketDataProvider
+from .report import derive_portfolio_weights, holding_currencies, report_output_dir, right_side_check, write_report
 from .storage import (
     export_research_state_file,
     import_research_state_file,
@@ -56,6 +57,7 @@ def run_daily(
     fetch_news: bool = True,
     fetch_valuation: bool = True,
     fetch_macro: bool = True,
+    fetch_taiwan_data: bool = True,
     notify_telegram: bool = False,
     max_workers: int = DEFAULT_FETCH_WORKERS,
     progress: bool = True,
@@ -79,6 +81,8 @@ def run_daily(
         global_warnings.append("Valuation and earnings fetching skipped by --no-valuation.")
     if not fetch_macro:
         global_warnings.append("Macro calendar fetching skipped by --no-macro.")
+    if not fetch_taiwan_data:
+        global_warnings.append("Taiwan monthly revenue and institutional data fetching skipped by --no-taiwan-data.")
 
     market_sentiment = None
     market_context = None
@@ -151,6 +155,18 @@ def run_daily(
             progress=progress,
             prefetched_valuations=prefetched_valuations,
         )
+        if fetch_taiwan_data:
+            try:
+                taiwan_result = TaiwanMarketDataProvider().fetch(tickers, actual_report_date)
+                global_warnings.extend(taiwan_result.warnings)
+                ticker_reports = [
+                    replace(item, taiwan_market=taiwan_result.snapshots.get(item.ticker.symbol))
+                    for item in ticker_reports
+                ]
+            except Exception as exc:
+                logger.warning("Taiwan market data fetch failed", exc_info=True)
+                global_warnings.append(f"Taiwan market data fetch failed: {exc}")
+
         economic_events = []
         if fetch_macro and config.settings.macro.enabled:
             macro_result = OfficialMacroCalendarProvider().fetch(
@@ -181,9 +197,21 @@ def run_daily(
             premarket=premarket,
             research_states=research_states,
             post_earnings_reviews=post_earnings_reviews,
+            settings=config.settings,
         )
+        benchmarks = market_context.benchmark_returns if market_context else {}
+        right_side_signals = {
+            item.ticker.symbol: signal
+            for item in ticker_reports
+            if (signal := right_side_check(item, benchmarks=benchmarks, portfolio=config.settings.portfolio)) is not None
+        }
         save_report(conn, preliminary_report)
-        save_report_run(conn, preliminary_report, html_path=report_path)
+        save_report_run(
+            conn,
+            preliminary_report,
+            html_path=report_path,
+            right_side_signals=right_side_signals,
+        )
         ticker_history = load_ticker_history(
             conn,
             ticker_symbols,

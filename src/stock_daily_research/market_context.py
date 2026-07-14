@@ -33,6 +33,16 @@ BREADTH_PAIRS: tuple[tuple[str, str, str], ...] = (
     ("SOXX vs SPY", "SOXX", "SPY"),
 )
 
+# Stable keys let report rules select a benchmark by the ticker's declared market.
+BENCHMARK_SYMBOLS: tuple[tuple[str, str], ...] = (
+    ("spy", "SPY"),
+    ("qqq", "QQQ"),
+    ("soxx", "SOXX"),
+    ("twii", "^TWII"),
+    ("btc", "BTC-USD"),
+)
+BENCHMARK_HORIZONS: tuple[int, ...] = (20, 60, 120)
+
 
 def fetch_market_context() -> MarketContext:
     """Pull rates, breadth, and benchmark returns. Failures degrade silently."""
@@ -75,10 +85,15 @@ def fetch_market_context() -> MarketContext:
         ))
 
     benchmark_returns: dict[str, float] = {}
-    for symbol in ("SPY", "QQQ"):
-        ret = _n_day_return(symbol, 20)
-        if ret is not None:
-            benchmark_returns[f"{symbol.lower()}_20d"] = round(ret, 2)
+    for key, symbol in BENCHMARK_SYMBOLS:
+        closes = _close_history(symbol, period="1y")
+        if not closes:
+            warnings.append(f"{symbol} benchmark history unavailable.")
+            continue
+        for horizon in BENCHMARK_HORIZONS:
+            ret = _n_day_return_from_closes(closes, horizon)
+            if ret is not None:
+                benchmark_returns[f"{key}_{horizon}d"] = round(ret, 2)
 
     return MarketContext(
         rates=rates,
@@ -101,6 +116,10 @@ def _close_history(symbol: str, *, period: str = "1mo") -> list[float] | None:
 
 def _n_day_return(symbol: str, n: int) -> float | None:
     closes = _close_history(symbol, period="3mo")
+    return _n_day_return_from_closes(closes, n)
+
+
+def _n_day_return_from_closes(closes: list[float] | None, n: int) -> float | None:
     if not closes or len(closes) <= n:
         return None
     last = closes[-1]

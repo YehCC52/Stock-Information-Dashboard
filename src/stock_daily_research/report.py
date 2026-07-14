@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .data_quality import confidence as data_quality_confidence
-from .models import DailyReport, MARKET_LABELS, MarketContext, NewsArticle, PositionConfig, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
+from .models import DailyReport, MARKET_LABELS, MarketContext, NewsArticle, PositionConfig, PortfolioSettings, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
@@ -202,7 +202,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     benchmarks = {}
     if report.market_context and report.market_context.benchmark_returns:
         benchmarks = report.market_context.benchmark_returns
-    env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks)
+    portfolio_settings = report.settings.portfolio if report.settings else None
+    env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks, portfolio=portfolio_settings)
     env.filters["right_side_score"] = lambda item: right_side_score(item, benchmarks)
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
@@ -227,6 +228,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         premarket_move=premarket_move_for(report, item.ticker.symbol),
     )
     env.filters["format_pct"] = format_pct
+    env.filters["format_tw_shares"] = format_tw_shares
+    env.filters["format_tw_revenue"] = format_tw_revenue
     env.filters["change_class"] = change_class
     env.filters["format_ratio"] = format_ratio
     env.filters["rsi_class"] = rsi_class
@@ -252,6 +255,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         news_clusters=event_clusters(report),
         hero=morning_briefing_cards(report),
         daily_summary=daily_summary(report),
+        right_side_validation=right_side_signal_validation(report),
         morning_actions=morning_actions(report),
         todays_catalysts=todays_catalysts(report),
         post_earnings_items=post_earnings_items(report),
@@ -270,6 +274,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         overextended=overextended_tickers(report),
         data_quality=data_quality_overview(report),
         portfolio=portfolio_impact_summary(report),
+        related_tickers=related_ticker_links(report),
         clusters=clusters_in_use(report),
         valuation_keys=[
             "last_close",
@@ -357,6 +362,53 @@ def build_summary(report: DailyReport) -> dict[str, int]:
 
 def market_label(value: str) -> str:
     return MARKET_LABELS.get(value, value.upper())
+
+
+def format_tw_shares(value: object) -> str:
+    """Format Taiwan market flow in shares, with a compact Chinese unit."""
+    if not isinstance(value, (int, float)) or not isfinite(float(value)):
+        return "N/A"
+    number = float(value)
+    sign = "+" if number > 0 else ""
+    magnitude = abs(number)
+    if magnitude >= 100_000_000:
+        return f"{sign}{number / 100_000_000:.2f}\u5104\u80a1"
+    if magnitude >= 10_000:
+        return f"{sign}{number / 10_000:.1f}\u842c\u80a1"
+    return f"{sign}{number:,.0f}\u80a1"
+
+
+def format_tw_revenue(value: object) -> str:
+    """Format TWSE monthly revenue, which is disclosed in thousands of TWD."""
+    if not isinstance(value, (int, float)) or not isfinite(float(value)):
+        return "N/A"
+    amount_twd = float(value) * 1_000
+    yi = chr(0x5104)
+    yuan = chr(0x5143)
+    if abs(amount_twd) >= 100_000_000:
+        return f"{amount_twd / 100_000_000:,.1f}{yi}{yuan}"
+    if abs(amount_twd) >= 10_000:
+        return f"{amount_twd / 10_000:,.1f}{chr(0x842c)}{yuan}"
+    return f"{amount_twd:,.0f}{yuan}"
+
+def related_ticker_links(report: DailyReport) -> dict[str, list[dict[str, str]]]:
+    """Return explicit cross-market ticker links that exist in this report."""
+    by_symbol = {item.ticker.symbol: item for item in report.ticker_reports}
+    result: dict[str, list[dict[str, str]]] = {}
+    for item in report.ticker_reports:
+        links: list[dict[str, str]] = []
+        for symbol in item.ticker.related_symbols:
+            related = by_symbol.get(symbol.upper())
+            if related is None or related.ticker.symbol == item.ticker.symbol:
+                continue
+            links.append({
+                "symbol": related.ticker.symbol,
+                "display_symbol": related.ticker.display_symbol,
+                "market": market_label(related.ticker.market),
+            })
+        if links:
+            result[item.ticker.symbol] = links
+    return result
 
 
 def research_state_for(report: DailyReport, symbol: str) -> TickerResearchState:
@@ -894,7 +946,47 @@ _ZH_REPLACEMENTS: dict[str, str] = {
         "Mixed / neutral": "中性",
         "Thesis weakening": "投資論點轉弱",
         "Avoid": "暫避",
-        "Reviewed": "已檢視",
+        "Trend healthy": "趨勢良好",
+        "Volatility contraction": "\u6ce2\u52d5\u6536\u6582",
+        "Breakout validation": "\u7a81\u7834\u9a57\u8b49",
+        "Risk box": "\u98a8\u96aa\u76d2",
+        "Base tightening": "\u578b\u614b\u6536\u6582",
+        "Base still loose": "\u6ce2\u52d5\u5c1a\u672a\u6536\u6582",
+        "Base data incomplete": "\u6536\u6582\u8cc7\u6599\u4e0d\u8db3",
+        "Breakout holding": "\u7a81\u7834\u5f8c\u5b88\u7a69",
+        "Breakout failed": "\u7a81\u7834\u5931\u6557",
+        "Breakout needs volume": "\u7a81\u7834\u91cf\u80fd\u4e0d\u8db3",
+        "No recent breakout": "\u5c1a\u672a\u89f8\u767c\u7a81\u7834",
+        "Risk controlled": "\u98a8\u96aa\u53ef\u63a7",
+        "Risk needs smaller size": "\u98a8\u96aa\u504f\u5bec\uff0c\u7e2e\u5c0f\u90e8\u4f4d",
+        "Risk too wide": "\u98a8\u96aa\u904e\u5bec",
+        "Risk box unavailable": "\u98a8\u96aa\u76d2\u8cc7\u6599\u4e0d\u8db3",
+        "Right-side ready": "\u53f3\u5074\u689d\u4ef6\u5230\u4f4d",
+        "Base building": "\u6536\u6582\u7b49\u5f85\u7a81\u7834",
+        "Wait for confirmation": "\u7b49\u5f85\u53f3\u5074\u78ba\u8a8d",
+        "Protect capital first": "\u5148\u63a7\u5236\u98a8\u96aa",
+        "Pivot": "\u6a1e\u7d10",
+        "Entry": "\u53c3\u8003\u9032\u5834",
+        "Invalidation": "\u5931\u6548\u50f9",
+        "2R checkpoint": "2R \u6aa2\u67e5\u9ede",
+        "BB width percentile": "\u5e03\u6797\u5bec\u5ea6\u767e\u5206\u4f4d",
+        "5D volume": "5 \u65e5\u91cf\u80fd",        "Market alignment": "\u5e02\u5834\u540c\u6b65",
+        "Market and RS aligned": "\u5e02\u5834\u8207\u76f8\u5c0d\u5f37\u5ea6\u540c\u6b65",
+        "Market trend weak": "\u5e02\u5834\u8da8\u52e2\u504f\u5f31",
+        "Relative strength lagging": "\u76f8\u5c0d\u5f37\u5ea6\u843d\u5f8c",
+        "Max size": "\u6700\u5927\u55ae\u4f4d\u6578",        "Pullback watch": "回檔可觀察",
+        "Trend weakening": "趨勢轉弱",
+        "Bullish MA stack": "均線多頭排列",
+        "Bearish MA stack": "均線空頭排列",
+        "Mixed MA stack": "均線排列分歧",
+        "20D distance": "距 20D",
+        "20D slope (5d)": "20D 近 5 日斜率",
+        "Volume": "量能",
+        "20D average": "20D 均量",
+        "Breakout above prior 20D high": "收盤突破前 20 日高點",
+        "Breakdown below prior 20D low": "收盤跌破前 20 日低點",
+        "Close below 60D support": "收盤跌破 60D 支撐",
+        "20D below 60D": "20D 低於 60D",        "Reviewed": "已檢視",
         "In progress": "檢視中",
         "Not reviewed": "未檢視",
         "watching": "觀察中",
@@ -1067,36 +1159,86 @@ def earnings_action(item: TickerReport, anchor: date) -> str | None:
     return None
 
 
-def relative_strength(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, float]:
-    """Return ticker's 20D return spread vs SPY and QQQ.
+def _market_benchmark_pairs(item: TickerReport) -> tuple[tuple[str, str, str], ...]:
+    """Return the comparable benchmarks for the ticker's declared market."""
+    market = item.ticker.market
+    if market in {"twse", "tpex"}:
+        return (("vs_twii", "twii", "TWII"),)
+    if market == "crypto":
+        if item.ticker.symbol.upper() == "BTC-USD":
+            return ()
+        return (("vs_btc", "btc", "BTC"),)
+    return (
+        ("vs_spy", "spy", "SPY"),
+        ("vs_qqq", "qqq", "QQQ"),
+    )
 
-    benchmarks maps "spy_20d" / "qqq_20d" → return %. Returns
-    {"vs_spy": spread, "vs_qqq": spread} for whichever is available.
-    """
+
+def relative_strength(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, float]:
+    """Return 20-session relative-strength spreads against market peers."""
     if not item.valuation:
         return {}
     ticker_return = _as_float(item.valuation.metrics.get("return_20d"))
     if ticker_return is None:
         return {}
     out: dict[str, float] = {}
-    for bench_label, bench_key in (("vs_spy", "spy_20d"), ("vs_qqq", "qqq_20d")):
-        bench_return = benchmarks.get(bench_key)
+    for result_key, benchmark_key, _label in _market_benchmark_pairs(item):
+        bench_return = benchmarks.get(f"{benchmark_key}_20d")
         if isinstance(bench_return, (int, float)):
-            out[bench_label] = round(ticker_return - bench_return, 2)
+            out[result_key] = round(ticker_return - bench_return, 2)
     return out
+
+
+def relative_strength_profile(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, object]:
+    """Summarize market-relative strength across 20/60/120 sessions."""
+    if not item.valuation:
+        return {}
+    pairs = _market_benchmark_pairs(item)
+    if not pairs:
+        return {}
+
+    horizon_spreads: dict[int, float] = {}
+    for horizon in (20, 60, 120):
+        ticker_return = _as_float(item.valuation.metrics.get(f"return_{horizon}d"))
+        if ticker_return is None:
+            continue
+        peers = [
+            value
+            for _result_key, benchmark_key, _label in pairs
+            if isinstance((value := benchmarks.get(f"{benchmark_key}_{horizon}d")), (int, float))
+        ]
+        if peers:
+            horizon_spreads[horizon] = round(ticker_return - sum(peers) / len(peers), 2)
+    if not horizon_spreads:
+        return {}
+
+    spreads = list(horizon_spreads.values())
+    positive = sum(1 for value in spreads if value > 0)
+    return {
+        "market": item.ticker.market,
+        "benchmark_label": " / ".join(label for _key, _bench, label in pairs),
+        "horizon_spreads": horizon_spreads,
+        "available_horizons": len(spreads),
+        "positive_horizons": positive,
+        "average_spread": round(sum(spreads) / len(spreads), 2),
+    }
 
 
 def format_relative_strength(rs: dict[str, float]) -> list[str]:
     """Compact phrases like '+2.3% vs SPY 20D'."""
     parts: list[str] = []
-    for key, label in (("vs_spy", "vs SPY 20D"), ("vs_qqq", "vs QQQ 20D")):
+    labels = (
+        ("vs_spy", "vs SPY 20D"),
+        ("vs_qqq", "vs QQQ 20D"),
+        ("vs_twii", "vs TWII 20D"),
+        ("vs_btc", "vs BTC 20D"),
+    )
+    for key, label in labels:
         if key in rs:
             value = rs[key]
             sign = "+" if value >= 0 else ""
             parts.append(f"{sign}{value:.1f}% {label}")
     return parts
-
-
 # Right-side trading status labels — used by both the badge and the insights row.
 RIGHT_SIDE_STATUSES = (
     "Breakout confirmed",
@@ -1261,6 +1403,275 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
         "reasons": formatted_reasons,
     }
 
+
+def technical_playbook(item: TickerReport) -> dict[str, object] | None:
+    """Classify a ticker's technical state from explicit, inspectable rules.
+
+    This is deliberately separate from ``right_side_score``: it only evaluates
+    price structure, MA slope, distance, volume, and a prior 20-session level.
+    It is a repeatable review aid, not a trade instruction.
+    """
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    last = _as_float(metrics.get("last_close"))
+    sma20 = _as_float(metrics.get("sma_20"))
+    sma60 = _as_float(metrics.get("sma_60"))
+    sma120 = _as_float(metrics.get("sma_120"))
+    if last is None or sma20 in (None, 0) or sma60 is None or sma120 is None:
+        return None
+
+    distance20 = round((last - sma20) / sma20 * 100.0, 2)
+    slope20 = _as_float(metrics.get("sma_20_slope_5d"))
+    volume = _as_float(metrics.get("volume_vs_20d"))
+    prior_high = _as_float(metrics.get("prior_20d_high"))
+    prior_low = _as_float(metrics.get("prior_20d_low"))
+    rsi = _as_float(metrics.get("rsi_14"))
+
+    bullish_stack = last > sma20 > sma60 > sma120
+    bearish_stack = last < sma20 < sma60 < sma120
+    base_up = sma20 > sma60 > sma120
+    breaking_down = prior_low is not None and last < prior_low
+    weakening = (
+        last < sma60
+        or sma20 < sma60
+        or breaking_down
+        or (last < sma20 and slope20 is not None and slope20 <= -1.0)
+    )
+    breakout = bool(
+        bullish_stack
+        and prior_high is not None
+        and last > prior_high
+        and volume is not None
+        and volume >= 1.5
+    )
+    extended = base_up and (distance20 >= 8.0 or (rsi is not None and rsi >= 70.0))
+    pullback = bool(
+        base_up
+        and -3.0 <= distance20 <= 3.0
+        and (rsi is None or 40.0 <= rsi <= 65.0)
+        and (volume is None or volume <= 1.2)
+    )
+
+    criteria: list[str] = []
+    if bullish_stack:
+        criteria.append("Bullish MA stack")
+    elif bearish_stack:
+        criteria.append("Bearish MA stack")
+    else:
+        criteria.append("Mixed MA stack")
+    criteria.append(f"20D distance {distance20:+.1f}%")
+    if slope20 is not None:
+        criteria.append(f"20D slope (5d) {slope20:+.1f}%")
+    if volume is not None:
+        criteria.append(f"Volume {volume:.1f}x 20D average")
+    if breakout:
+        criteria.append("Breakout above prior 20D high")
+    elif breaking_down:
+        criteria.append("Breakdown below prior 20D low")
+    elif last < sma60:
+        criteria.append("Close below 60D support")
+    elif sma20 < sma60:
+        criteria.append("20D below 60D")
+    if rsi is not None:
+        criteria.append(f"RSI {rsi:.0f}")
+
+    if breakout:
+        status, tone, priority = "Breakout confirmed", "up", 5
+    elif weakening:
+        status, tone, priority = "Trend weakening", "down", 5
+    elif extended:
+        status, tone, priority = "Extended, do not chase", "extended", 4
+    elif pullback:
+        status, tone, priority = "Pullback watch", "up", 4
+    elif bullish_stack:
+        status, tone, priority = "Trend healthy", "up", 3
+    else:
+        status, tone, priority = "Mixed / neutral", "mixed", 1
+
+    return {
+        "status": status,
+        "tone": tone,
+        "priority": priority,
+        "criteria": criteria[:6],
+    }
+
+def _market_alignment_check(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, object] | None:
+    profile = relative_strength_profile(item, benchmarks)
+    available = int(profile.get("available_horizons", 0))
+    if not available:
+        return None
+    positive = int(profile["positive_horizons"])
+    average = float(profile["average_spread"])
+    label = str(profile["benchmark_label"])
+    detail = f"{label} | {positive}/{available} horizons | {average:+.1f}pp average"
+    required = 2 if available >= 2 else 1
+    if positive >= required and average > 0:
+        return {"label": "Market alignment", "status": "Market and RS aligned", "tone": "up", "passed": True, "detail": detail}
+    if average <= -3:
+        return {"label": "Market alignment", "status": "Relative strength lagging", "tone": "down", "passed": False, "detail": detail}
+    return {"label": "Market alignment", "status": "Market trend weak", "tone": "mixed", "passed": False, "detail": detail}
+
+
+def right_side_check(
+    item: TickerReport,
+    *,
+    benchmarks: dict[str, float] | None = None,
+    portfolio: PortfolioSettings | None = None,
+) -> dict[str, object] | None:
+    """Return a mechanical right-side checklist with visible entry-risk math."""
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    last = _as_float(metrics.get("last_close"))
+    technical_keys = (
+        "atr_contraction_ratio", "bb_width_20_percentile", "volume_5d_vs_20d",
+        "breakout_days_ago", "prior_20d_low", "atr_20",
+    )
+    if last is None or last <= 0 or not any(_as_float(metrics.get(key)) is not None for key in technical_keys):
+        return None
+
+    atr_ratio = _as_float(metrics.get("atr_contraction_ratio"))
+    bb_percentile = _as_float(metrics.get("bb_width_20_percentile"))
+    volume_ratio = _as_float(metrics.get("volume_5d_vs_20d"))
+    contraction_signals: list[bool] = []
+    contraction_detail: list[str] = []
+    if atr_ratio is not None:
+        contraction_signals.append(atr_ratio <= 0.8)
+        contraction_detail.append(f"ATR 10/20 {atr_ratio:.2f}x")
+    if bb_percentile is not None:
+        contraction_signals.append(bb_percentile <= 25.0)
+        contraction_detail.append(f"BB width percentile {bb_percentile:.0f}%")
+    if volume_ratio is not None:
+        contraction_signals.append(volume_ratio <= 0.8)
+        contraction_detail.append(f"5D volume {volume_ratio:.2f}x")
+    if len(contraction_signals) >= 2 and sum(contraction_signals) >= 2:
+        contraction = {"label": "Volatility contraction", "status": "Base tightening", "tone": "up", "passed": True}
+    elif len(contraction_signals) >= 2:
+        contraction = {"label": "Volatility contraction", "status": "Base still loose", "tone": "mixed", "passed": False}
+    else:
+        contraction = {"label": "Volatility contraction", "status": "Base data incomplete", "tone": "mixed", "passed": False}
+    contraction["detail"] = " | ".join(contraction_detail) or "N/A"
+
+    breakout_days = _as_float(metrics.get("breakout_days_ago"))
+    breakout_pivot = _as_float(metrics.get("breakout_pivot"))
+    breakout_hold = _as_float(metrics.get("breakout_hold_pct"))
+    breakout_volume = _as_float(metrics.get("breakout_volume_vs_20d"))
+    if breakout_days is None or breakout_pivot is None or breakout_hold is None:
+        breakout = {
+            "label": "Breakout validation", "status": "No recent breakout", "tone": "mixed", "passed": False,
+            "detail": "N/A",
+        }
+    else:
+        detail = f"Pivot {_trade_price(breakout_pivot)} | {int(breakout_days)}d | {breakout_hold:+.1f}%"
+        if breakout_volume is not None:
+            detail += f" | Volume {breakout_volume:.1f}x"
+        if breakout_hold < 0:
+            breakout = {"label": "Breakout validation", "status": "Breakout failed", "tone": "down", "passed": False, "detail": detail}
+        elif breakout_volume is None or breakout_volume < 1.2:
+            breakout = {"label": "Breakout validation", "status": "Breakout needs volume", "tone": "mixed", "passed": False, "detail": detail}
+        else:
+            breakout = {"label": "Breakout validation", "status": "Breakout holding", "tone": "up", "passed": True, "detail": detail}
+
+    planned_stop = _as_float(item.ticker.position.stop_loss) if item.ticker.position else None
+    prior_low = _as_float(metrics.get("prior_20d_low"))
+    atr_20 = _as_float(metrics.get("atr_20"))
+    stop_candidates = [
+        candidate
+        for candidate in (planned_stop, prior_low, last - 2.0 * atr_20 if atr_20 is not None else None)
+        if candidate is not None and 0 < candidate < last
+    ]
+    if not stop_candidates:
+        risk = {
+            "label": "Risk box", "status": "Risk box unavailable", "tone": "mixed", "passed": False,
+            "detail": "N/A",
+        }
+    else:
+        stop = max(stop_candidates)
+        per_unit_risk = last - stop
+        risk_pct = per_unit_risk / last * 100.0
+        checkpoint = last + 2.0 * per_unit_risk
+        detail = (
+            f"Entry {_trade_price(last)} | Invalidation {_trade_price(stop)} | "
+            f"{risk_pct:.1f}% | 2R checkpoint {_trade_price(checkpoint)}"
+        )
+        budget = None
+        if portfolio:
+            budget = portfolio.risk_budget_by_currency.get(item.ticker.currency.upper())
+        if budget is not None and per_unit_risk > 0:
+            units = int(budget // per_unit_risk)
+            detail += f" | Max size {units} units ({item.ticker.currency} {budget:,.0f} risk)"
+        if risk_pct <= 5.0:
+            risk = {"label": "Risk box", "status": "Risk controlled", "tone": "up", "passed": True, "detail": detail}
+        elif risk_pct <= 8.0:
+            risk = {"label": "Risk box", "status": "Risk needs smaller size", "tone": "mixed", "passed": False, "detail": detail}
+        else:
+            risk = {"label": "Risk box", "status": "Risk too wide", "tone": "down", "passed": False, "detail": detail}
+
+    checks = [contraction, breakout, risk]
+    market_check = _market_alignment_check(item, benchmarks or {})
+    if market_check:
+        checks.append(market_check)
+    ready_count = sum(1 for check in checks if check["passed"])
+    if breakout["tone"] == "down" or risk["tone"] == "down":
+        status, tone = "Protect capital first", "down"
+    elif ready_count == len(checks):
+        status, tone = "Right-side ready", "up"
+    elif contraction["passed"] and risk["passed"]:
+        status, tone = "Base building", "mixed"
+    else:
+        status, tone = "Wait for confirmation", "mixed"
+    return {
+        "status": status,
+        "tone": tone,
+        "ready_count": ready_count,
+        "check_count": len(checks),
+        "checks": checks,
+    }
+
+
+def right_side_signal_validation(
+    report: DailyReport,
+    horizons: tuple[int, ...] = (5, 10, 20),
+) -> dict[str, object]:
+    """Measure completed right-side signals using archived report observations."""
+    outcomes: dict[int, list[float]] = {horizon: [] for horizon in horizons}
+    pending: dict[int, int] = {horizon: 0 for horizon in horizons}
+    recorded = 0
+    for points in report.ticker_history.values():
+        ordered = sorted(points, key=lambda point: (point.report_date, point.generated_at))
+        active_signal = False
+        for index, point in enumerate(ordered):
+            ready = point.right_side_status == "Right-side ready" and point.last_close is not None and point.last_close > 0
+            if not ready:
+                active_signal = False
+                continue
+            if active_signal:
+                continue
+            active_signal = True
+            recorded += 1
+            for horizon in horizons:
+                if index + horizon >= len(ordered):
+                    pending[horizon] += 1
+                    continue
+                exit_price = ordered[index + horizon].last_close
+                if exit_price is None or exit_price <= 0:
+                    pending[horizon] += 1
+                    continue
+                outcomes[horizon].append((exit_price - point.last_close) / point.last_close * 100.0)
+    rows = []
+    for horizon in horizons:
+        values = outcomes[horizon]
+        rows.append({
+            "sessions": horizon,
+            "sample_size": len(values),
+            "win_rate": round(sum(value > 0 for value in values) / len(values) * 100.0, 1) if values else None,
+            "average_return": round(sum(values) / len(values), 2) if values else None,
+            "pending": pending[horizon],
+        })
+    return {"signals_recorded": recorded, "horizons": rows}
+def _trade_price(value: float) -> str:
+    return f"{value:.4f}" if abs(value) < 10 else f"{value:.2f}"
 
 def post_earnings_status(item: TickerReport, anchor: date) -> dict[str, object] | None:
     """If the ticker reported earnings within the last N days, return a small
@@ -4150,7 +4561,7 @@ def _stretched_valuation_tickers(report: DailyReport) -> list[TickerReport]:
     return [tr for _, tr in stretched]
 
 
-def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, float] | None = None) -> dict[str, list[str]]:
+def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, float] | None = None, portfolio: PortfolioSettings | None = None) -> dict[str, object]:
     """Auto-derived signals for a ticker card. Pure data summarization, no sentiment."""
     setup: list[str] = []
     risk: list[str] = []
@@ -4237,6 +4648,8 @@ def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, f
                 rs_tone = "mixed"
 
     score_info = right_side_score(item, benchmarks)
+    technical = technical_playbook(item)
+    right_side = right_side_check(item, benchmarks=benchmarks, portfolio=portfolio)
 
     return {
         "setup": setup,
@@ -4250,6 +4663,8 @@ def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, f
         "watch": watch,
         "action": action,
         "score": score_info,
+        "technical": technical,
+        "right_side": right_side,
     }
 
 

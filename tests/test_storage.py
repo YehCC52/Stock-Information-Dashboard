@@ -551,7 +551,18 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
         save_report(conn, old_report)
         save_report_run(conn, old_report)
         save_report(conn, new_report)
-        save_report_run(conn, new_report)
+        save_report_run(
+            conn,
+            new_report,
+            right_side_signals={
+                "NVDA": {
+                    "status": "Right-side ready",
+                    "tone": "up",
+                    "ready_count": 4,
+                    "check_count": 4,
+                }
+            },
+        )
         history = load_ticker_history(conn, ["NVDA"], report_date=date(2026, 4, 28), history_days=30)["NVDA"]
 
     assert len(history) == 2
@@ -561,6 +572,10 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
     assert history[0].valuation_risk == "High"
     assert history[0].daily_change_pct == 10.0
     assert history[0].earnings_days == 23
+    assert history[0].last_close == 110.0
+    assert history[0].right_side_status == "Right-side ready"
+    assert history[0].right_side_ready_count == 4
+    assert history[0].right_side_check_count == 4
     assert history[1].thesis_state == "building"
 
 

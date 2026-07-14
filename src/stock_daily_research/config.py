@@ -191,6 +191,7 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
         position=_load_position(data.get("position", {})),
         plan=_load_plan(data.get("plan", {})),
         research=_load_research_defaults(data.get("research", {})),
+        related_symbols=[str(value).upper() for value in data.get("related_symbols", [])],
     )
 
 
@@ -239,7 +240,21 @@ def _load_portfolio_settings(data: dict[str, Any]) -> PortfolioSettings:
         addable_cash=_optional_float(data.get("addable_cash")),
         max_sector_weight=_optional_float(data.get("max_sector_weight")),
         max_single_weight=_optional_float(data.get("max_single_weight")),
+        risk_budget_by_currency=_read_risk_budgets(data.get("risk_budget_by_currency")),
     )
+
+
+def _read_risk_budgets(raw: Any) -> dict[str, float]:
+    if raw in (None, ""):
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("portfolio.risk_budget_by_currency must be a mapping")
+    budgets: dict[str, float] = {}
+    for currency, value in raw.items():
+        amount = _optional_float(value)
+        if amount is not None and amount > 0:
+            budgets[str(currency).upper()] = amount
+    return budgets
 
 
 def _optional_float(value: Any) -> float | None:

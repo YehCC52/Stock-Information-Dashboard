@@ -26,6 +26,7 @@ def main() -> None:
     parser.add_argument("--no-news", action="store_true", help="Skip online news fetching.")
     parser.add_argument("--no-valuation", action="store_true", help="Skip yfinance valuation and earnings fetching.")
     parser.add_argument("--no-macro", action="store_true", help="Skip official macro calendar fetching.")
+    parser.add_argument("--no-taiwan-data", action="store_true", help="Skip official Taiwan monthly revenue and institutional data fetching.")
     parser.add_argument("--notify-telegram", action="store_true", help="Send a Telegram summary after generating the report.")
     parser.add_argument("--import-research-state", default=None, help="Import research state JSON into SQLite before generating the report.")
     parser.add_argument("--export-research-state", default=None, help="Export research state JSON from SQLite and exit.")
@@ -50,6 +51,7 @@ def main() -> None:
         fetch_news=not args.no_news,
         fetch_valuation=not args.no_valuation,
         fetch_macro=not args.no_macro,
+        fetch_taiwan_data=not args.no_taiwan_data,
         notify_telegram=args.notify_telegram,
         import_research_state_path=args.import_research_state,
         history_days=max(7, int(args.history_days)),

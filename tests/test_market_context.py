@@ -106,3 +106,12 @@ def test_market_regime_defensive_when_yields_up_and_low_sentiment() -> None:
 def test_market_regime_returns_empty_without_data() -> None:
     assert market_regime(None, sentiment_score=50) == ""
     assert market_regime(_ctx([]), sentiment_score=50) == ""
+
+
+def test_n_day_return_from_closes_supports_long_market_horizons() -> None:
+    from stock_daily_research.market_context import _n_day_return_from_closes
+
+    closes = [float(value) for value in range(1, 122)]
+
+    assert _n_day_return_from_closes(closes, 120) == 12000.0
+    assert _n_day_return_from_closes(closes, 121) is None
