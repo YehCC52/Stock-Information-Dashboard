@@ -298,3 +298,38 @@ tickers:
 
     with pytest.raises(ValueError, match="unrecognized exchange suffix"):
         load_config(config_path)
+
+
+def test_load_config_reads_cross_market_related_symbols(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+tickers:
+  - symbol: tsm
+    company_name: TSMC ADR
+    related_symbols: [2330.tw]
+""",
+    )
+
+    ticker = load_config(config_path).tickers[0]
+
+    assert ticker.related_symbols == ["2330.TW"]
+
+def test_load_config_reads_positive_risk_budget_by_currency(tmp_path: Path) -> None:
+    config_path = _write(
+        tmp_path / "watchlist.yaml",
+        """
+settings:
+  portfolio:
+    risk_budget_by_currency:
+      usd: 125
+      TWD: 3000
+tickers:
+  - symbol: NVDA
+    company_name: NVIDIA Corporation
+""",
+    )
+
+    portfolio = load_config(config_path).settings.portfolio
+
+    assert portfolio.risk_budget_by_currency == {"USD": 125.0, "TWD": 3000.0}

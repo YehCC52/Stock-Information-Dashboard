@@ -63,6 +63,7 @@ class PortfolioSettings:
     addable_cash: float | None = None
     max_sector_weight: float | None = None
     max_single_weight: float | None = None
+    risk_budget_by_currency: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,7 @@ class TickerConfig:
     position: PositionConfig = field(default_factory=PositionConfig)
     plan: InvestmentPlan = field(default_factory=InvestmentPlan)
     research: ResearchDefaults = field(default_factory=ResearchDefaults)
+    related_symbols: list[str] = field(default_factory=list)
 
     @property
     def display_symbol(self) -> str:
@@ -448,6 +450,32 @@ class TickerHistoryPoint:
     warning_count: int = 0
     attention_score: float = 0.0
     news_burst_score: float = 0.0
+    last_close: float | None = None
+    right_side_status: str = ""
+    right_side_tone: str = ""
+    right_side_ready_count: int = 0
+    right_side_check_count: int = 0
+
+
+@dataclass(frozen=True)
+class TaiwanMarketSnapshot:
+    ticker: str
+    revenue_month: str = ""
+    monthly_revenue: float | None = None
+    monthly_revenue_mom_pct: float | None = None
+    monthly_revenue_yoy_pct: float | None = None
+    cash_dividend_per_share: float | None = None
+    dividend_year: str = ""
+    foreign_net_shares: float | None = None
+    investment_trust_net_shares: float | None = None
+    dealer_net_shares: float | None = None
+    foreign_net_shares_5d: float | None = None
+    investment_trust_net_shares_5d: float | None = None
+    institutional_net_buy_days_5d: int | None = None
+    institutional_flow_days: int = 0
+    institutional_as_of: date | None = None
+    source: str = ""
+    retrieved_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -458,6 +486,7 @@ class TickerReport:
     valuation: ValuationSnapshot | None
     earnings: EarningsDate | None
     warnings: list[str] = field(default_factory=list)
+    taiwan_market: TaiwanMarketSnapshot | None = None
 
 
 @dataclass(frozen=True)

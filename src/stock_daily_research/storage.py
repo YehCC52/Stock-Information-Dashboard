@@ -156,6 +156,11 @@ CREATE TABLE IF NOT EXISTS news_daily_summary (
   warning_count INTEGER NOT NULL DEFAULT 0,
   attention_score REAL NOT NULL DEFAULT 0,
   news_burst_score REAL NOT NULL DEFAULT 0,
+  last_close REAL,
+  right_side_status TEXT NOT NULL DEFAULT '',
+  right_side_tone TEXT NOT NULL DEFAULT '',
+  right_side_ready_count INTEGER NOT NULL DEFAULT 0,
+  right_side_check_count INTEGER NOT NULL DEFAULT 0,
   UNIQUE(report_run_id, ticker)
 );
 
@@ -255,6 +260,11 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     for pe_column in ("gross_margin_change", "management_keywords", "thesis_changed"):
         _ensure_column(conn, "post_earnings_reviews", pe_column, "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "news_daily_summary", "last_close", "REAL")
+    _ensure_column(conn, "news_daily_summary", "right_side_status", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "news_daily_summary", "right_side_tone", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "news_daily_summary", "right_side_ready_count", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "news_daily_summary", "right_side_check_count", "INTEGER NOT NULL DEFAULT 0")
     _cleanup_earnings_duplicates(conn)
     _dedupe_news_daily_summary(conn)
     conn.commit()
@@ -957,6 +967,7 @@ def save_report_run(
     report: DailyReport,
     *,
     html_path: str | Path = "",
+    right_side_signals: dict[str, dict[str, object]] | None = None,
 ) -> int:
     html_text = str(html_path)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -978,8 +989,10 @@ def save_report_run(
         move.symbol: move.change_pct
         for move in (report.premarket.watchlist_movers if report.premarket else [])
     }
+    signals = right_side_signals or {}
     for item in report.ticker_reports:
         state = report.research_states.get(item.ticker.symbol, TickerResearchState(ticker=item.ticker.symbol))
+        signal = signals.get(item.ticker.symbol, {})
         baseline_top_news = _load_prior_top_news_baseline(conn, item.ticker.symbol, report.report_date, days=30)
         top_news_count = sum(1 for article in item.articles if article.importance_score >= 1.0)
         news_burst_score = float(top_news_count) - baseline_top_news
@@ -999,8 +1012,9 @@ def save_report_run(
             INSERT INTO news_daily_summary
             (report_run_id, report_date, generated_at, ticker, thesis_state, review_status,
              last_reviewed_at, news_count, top_news_count, valuation_risk, rsi, daily_change_pct,
-             premarket_change_pct, earnings_days, warning_count, attention_score, news_burst_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             premarket_change_pct, earnings_days, warning_count, attention_score, news_burst_score,
+             last_close, right_side_status, right_side_tone, right_side_ready_count, right_side_check_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(report_date, ticker) DO UPDATE SET
               report_run_id = excluded.report_run_id,
               generated_at = excluded.generated_at,
@@ -1016,7 +1030,12 @@ def save_report_run(
               earnings_days = excluded.earnings_days,
               warning_count = excluded.warning_count,
               attention_score = excluded.attention_score,
-              news_burst_score = excluded.news_burst_score
+              news_burst_score = excluded.news_burst_score,
+              last_close = excluded.last_close,
+              right_side_status = excluded.right_side_status,
+              right_side_tone = excluded.right_side_tone,
+              right_side_ready_count = excluded.right_side_ready_count,
+              right_side_check_count = excluded.right_side_check_count
             """,
             (
                 run_id,
@@ -1036,6 +1055,11 @@ def save_report_run(
                 len(item.warnings),
                 round(attention_score, 2),
                 round(news_burst_score, 2),
+                _metric_float(item.valuation.metrics.get("last_close")) if item.valuation else None,
+                str(signal.get("status", "")),
+                str(signal.get("tone", "")),
+                int(signal.get("ready_count", 0) or 0),
+                int(signal.get("check_count", 0) or 0),
             ),
         )
     conn.commit()
@@ -1057,7 +1081,8 @@ def load_ticker_history(
         f"""
         SELECT report_date, generated_at, ticker, thesis_state, review_status, last_reviewed_at,
                news_count, top_news_count, valuation_risk, rsi, daily_change_pct, premarket_change_pct,
-               earnings_days, warning_count, attention_score, news_burst_score
+               earnings_days, warning_count, attention_score, news_burst_score, last_close,
+               right_side_status, right_side_tone, right_side_ready_count, right_side_check_count
         FROM news_daily_summary
         WHERE ticker IN ({placeholders})
           AND report_date >= ?
@@ -1084,6 +1109,11 @@ def load_ticker_history(
             warning_count=int(row[13] or 0),
             attention_score=float(row[14] or 0.0),
             news_burst_score=float(row[15] or 0.0),
+            last_close=row[16],
+            right_side_status=row[17] or "",
+            right_side_tone=row[18] or "",
+            right_side_ready_count=int(row[19] or 0),
+            right_side_check_count=int(row[20] or 0),
         )
         result.setdefault(point.ticker, []).append(point)
     return result

@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from stock_daily_research.models import (
     DailyReport,
@@ -288,6 +288,8 @@ def test_render_html_report_includes_interactive_dashboard_controls() -> None:
     assert '"#data-quality tbody tr"' in output
     assert 'allHoldingsMatch' in output
     assert 'market-summary-macro' in output
+    assert 'class="morning-tile" data-market="us" href="#ticker-nvda"' in output
+    assert "element.matches('a[href^="#ticker-"]')" in output
     assert 'class="map-tabs"' not in output
     assert '<button type="button" class="map-tab' not in output
     assert 'id="valuation-table" class="valuation-table is-compact"' in output
@@ -443,6 +445,7 @@ def test_render_html_report_marks_imminent_earnings() -> None:
     output = render_html_report(report)
 
     assert "earnings-pill imminent" in output
+    assert 'class="earnings-pill imminent" data-market="us"' in output
     assert "即將公布" in output
     assert ">今日<" in output
 
@@ -846,6 +849,145 @@ def _score_item(metrics: dict) -> TickerReport:
         ),
     )
 
+
+def test_technical_playbook_classifies_breakout_pullback_extended_and_weakening() -> None:
+    from stock_daily_research.report import technical_playbook
+
+    breakout = technical_playbook(_score_item({
+        "last_close": 120.0,
+        "sma_20": 110.0, "sma_60": 100.0, "sma_120": 90.0,
+        "sma_20_slope_5d": 1.2, "prior_20d_high": 118.0,
+        "volume_vs_20d": 1.8, "rsi_14": 60.0,
+    }))
+    assert breakout is not None
+    assert breakout["status"] == "Breakout confirmed"
+    assert "Breakout above prior 20D high" in breakout["criteria"]
+
+    pullback = technical_playbook(_score_item({
+        "last_close": 101.0,
+        "sma_20": 100.0, "sma_60": 95.0, "sma_120": 90.0,
+        "sma_20_slope_5d": 0.5, "prior_20d_high": 110.0,
+        "volume_vs_20d": 0.8, "rsi_14": 55.0,
+    }))
+    assert pullback is not None
+    assert pullback["status"] == "Pullback watch"
+
+    extended = technical_playbook(_score_item({
+        "last_close": 112.0,
+        "sma_20": 100.0, "sma_60": 95.0, "sma_120": 90.0,
+        "sma_20_slope_5d": 0.8, "prior_20d_high": 116.0,
+        "volume_vs_20d": 1.0, "rsi_14": 62.0,
+    }))
+    assert extended is not None
+    assert extended["status"] == "Extended, do not chase"
+
+    weakening = technical_playbook(_score_item({
+        "last_close": 80.0,
+        "sma_20": 90.0, "sma_60": 95.0, "sma_120": 100.0,
+        "sma_20_slope_5d": -1.5, "prior_20d_high": 100.0, "prior_20d_low": 82.0,
+        "volume_vs_20d": 1.0, "rsi_14": 40.0,
+    }))
+    assert weakening is not None
+    assert weakening["status"] == "Trend weakening"
+    assert "Breakdown below prior 20D low" in weakening["criteria"]
+
+
+def test_render_html_report_includes_technical_playbook() -> None:
+    item = _score_item({
+        "last_close": 120.0,
+        "sma_20": 110.0, "sma_60": 100.0, "sma_120": 90.0,
+        "sma_20_slope_5d": 1.2, "prior_20d_high": 118.0,
+        "volume_vs_20d": 1.8, "rsi_14": 60.0,
+    })
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    output = render_html_report(report)
+
+    assert 'class="insight-row technical tech-up"' in output
+    assert 'data-technical-priority="5"' in output
+    assert 'class="technical-breakdown"' in output
+
+def test_right_side_check_marks_a_tight_base_with_held_breakout_as_ready() -> None:
+    from stock_daily_research.report import right_side_check
+
+    item = _score_item({
+        "last_close": 103.5,
+        "prior_20d_low": 100.0,
+        "atr_20": 1.5,
+        "atr_contraction_ratio": 0.65,
+        "bb_width_20_percentile": 15.0,
+        "volume_5d_vs_20d": 0.70,
+        "breakout_days_ago": 2.0,
+        "breakout_pivot": 101.0,
+        "breakout_hold_pct": 2.48,
+        "breakout_volume_vs_20d": 1.6,
+    })
+
+    result = right_side_check(item)
+
+    assert result is not None
+    assert result["status"] == "Right-side ready"
+    assert result["ready_count"] == 3
+    checks = {check["label"]: check for check in result["checks"]}
+    assert checks["Volatility contraction"]["status"] == "Base tightening"
+    assert checks["Breakout validation"]["status"] == "Breakout holding"
+    assert checks["Risk box"]["status"] == "Risk controlled"
+    assert "2R checkpoint" in checks["Risk box"]["detail"]
+
+
+def test_right_side_check_rejects_a_failed_breakout_even_when_risk_is_small() -> None:
+    from stock_daily_research.report import right_side_check
+
+    item = _score_item({
+        "last_close": 99.0,
+        "prior_20d_low": 90.0,
+        "atr_20": 2.0,
+        "atr_contraction_ratio": 0.70,
+        "bb_width_20_percentile": 20.0,
+        "volume_5d_vs_20d": 0.75,
+        "breakout_days_ago": 2.0,
+        "breakout_pivot": 100.0,
+        "breakout_hold_pct": -1.0,
+        "breakout_volume_vs_20d": 1.8,
+    })
+
+    result = right_side_check(item)
+
+    assert result is not None
+    assert result["status"] == "Protect capital first"
+    assert result["tone"] == "down"
+    breakout = next(check for check in result["checks"] if check["label"] == "Breakout validation")
+    assert breakout["status"] == "Breakout failed"
+
+
+def test_render_html_report_includes_right_side_check() -> None:
+    item = _score_item({
+        "last_close": 103.5,
+        "prior_20d_low": 100.0,
+        "atr_20": 1.5,
+        "atr_contraction_ratio": 0.65,
+        "bb_width_20_percentile": 15.0,
+        "volume_5d_vs_20d": 0.70,
+        "breakout_days_ago": 2.0,
+        "breakout_pivot": 101.0,
+        "breakout_hold_pct": 2.48,
+        "breakout_volume_vs_20d": 1.6,
+    })
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    output = render_html_report(report)
+
+    assert 'class="insight-row right-side-check check-up"' in output
+    assert 'class="right-side-breakdown"' in output
+    assert 'class="right-side-check-row tone-up"' in output
 
 def test_right_side_score_breakout_confirmed() -> None:
     from stock_daily_research.report import right_side_score
@@ -3032,3 +3174,145 @@ def test_sort_by_market_cap_keeps_markets_separate() -> None:
     ])
 
     assert [tr.ticker.symbol for tr in ordered] == ["NVDA", "AAPL", "2330.TW", "5425.TWO", "BTC-USD"]
+
+
+def test_html_report_renders_taiwan_snapshot_and_cross_market_link() -> None:
+    from stock_daily_research.models import TaiwanMarketSnapshot
+    from stock_daily_research.report import format_tw_revenue, format_tw_shares, related_ticker_links
+
+    us_item = TickerReport(
+        ticker=TickerConfig(symbol="TSM", company_name="TSMC ADR", related_symbols=["2330.TW"]),
+        articles=[], x_signals=[], valuation=None, earnings=None,
+    )
+    tw_item = TickerReport(
+        ticker=TickerConfig(symbol="2330.TW", company_name="TSMC", market="twse", currency="TWD", related_symbols=["TSM"]),
+        articles=[], x_signals=[], valuation=None, earnings=None,
+        taiwan_market=TaiwanMarketSnapshot(
+            ticker="2330.TW", revenue_month="202606", monthly_revenue=100_000_000,
+            monthly_revenue_yoy_pct=18.7, cash_dividend_per_share=5.0, dividend_year="2025",
+            foreign_net_shares=123_400, investment_trust_net_shares=-50_000,
+            dealer_net_shares=1_000, institutional_as_of=date(2026, 7, 14), source="TWSE OpenAPI / T86",
+        ),
+    )
+    report = DailyReport(
+        report_date=date(2026, 7, 14), generated_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        ticker_reports=[us_item, tw_item],
+    )
+
+    links = related_ticker_links(report)
+    output = render_html_report(report)
+
+    assert links["TSM"][0]["symbol"] == "2330.TW"
+    assert links["2330.TW"][0]["symbol"] == "TSM"
+    assert 'class="cross-market-links"' in output
+    assert 'href="#ticker-2330.tw"' in output
+    assert 'class="tw-market-snapshot"' in output
+    assert "TWSE OpenAPI / T86" in output
+    assert format_tw_shares(123_400).endswith(chr(int("80a1", 16)))
+    assert format_tw_revenue(1_390_000) == "13.9" + chr(int("5104", 16)) + chr(int("5143", 16))
+
+def test_relative_strength_uses_taiwan_benchmark_instead_of_us_benchmarks() -> None:
+    from stock_daily_research.report import relative_strength, relative_strength_profile
+
+    item = TickerReport(
+        ticker=TickerConfig(symbol="2330.TW", company_name="TSMC", market="twse", currency="TWD"),
+        articles=[],
+        x_signals=[],
+        earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="2330.TW",
+            as_of_date=date(2026, 5, 12),
+            source="yfinance",
+            metrics={"return_20d": 12.0, "return_60d": 20.0, "return_120d": 35.0},
+            retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ),
+    )
+    benchmarks = {
+        "spy_20d": 1.0,
+        "qqq_20d": 2.0,
+        "twii_20d": 8.0,
+        "twii_60d": 12.0,
+        "twii_120d": 25.0,
+    }
+
+    assert relative_strength(item, benchmarks) == {"vs_twii": 4.0}
+    profile = relative_strength_profile(item, benchmarks)
+    assert profile["benchmark_label"] == "TWII"
+    assert profile["positive_horizons"] == 3
+
+
+def test_right_side_check_uses_explicit_risk_budget_without_guessing_account_size() -> None:
+    from stock_daily_research.models import PortfolioSettings
+    from stock_daily_research.report import right_side_check
+
+    item = TickerReport(
+        ticker=TickerConfig(
+            symbol="X",
+            company_name="X Inc",
+            currency="USD",
+            position=PositionConfig(stop_loss=100.0),
+        ),
+        articles=[],
+        x_signals=[],
+        earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X",
+            as_of_date=date(2026, 5, 12),
+            source="yfinance",
+            metrics={
+                "last_close": 103.5,
+                "prior_20d_low": 100.0,
+                "atr_20": 1.5,
+                "atr_contraction_ratio": 0.65,
+                "bb_width_20_percentile": 15.0,
+                "volume_5d_vs_20d": 0.70,
+                "breakout_days_ago": 2.0,
+                "breakout_pivot": 101.0,
+                "breakout_hold_pct": 2.48,
+                "breakout_volume_vs_20d": 1.6,
+            },
+            retrieved_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ),
+    )
+
+    result = right_side_check(item, portfolio=PortfolioSettings(risk_budget_by_currency={"USD": 100.0}))
+
+    assert result is not None
+    risk = next(check for check in result["checks"] if check["label"] == "Risk box")
+    assert "Max size 33 units (USD 100 risk)" in risk["detail"]
+
+
+def test_right_side_check_withholds_signal_when_technical_data_is_missing() -> None:
+    from stock_daily_research.report import right_side_check
+
+    assert right_side_check(_score_item({"last_close": 100.0})) is None
+
+
+def test_right_side_signal_validation_uses_archived_observations_and_dedupes_streaks() -> None:
+    from stock_daily_research.report import right_side_signal_validation
+
+    start = date(2026, 5, 1)
+    points = [
+        TickerHistoryPoint(
+            report_date=start + timedelta(days=index),
+            generated_at=datetime(2026, 5, 1, tzinfo=timezone.utc) + timedelta(days=index),
+            ticker="X",
+            last_close=100.0 + index,
+            right_side_status="Right-side ready" if index in (0, 1) else "Wait for confirmation",
+        )
+        for index in range(21)
+    ]
+    report = DailyReport(
+        report_date=start + timedelta(days=20),
+        generated_at=datetime(2026, 5, 21, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={"X": points},
+    )
+
+    validation = right_side_signal_validation(report)
+
+    assert validation["signals_recorded"] == 1
+    rows = {row["sessions"]: row for row in validation["horizons"]}
+    assert rows[5]["sample_size"] == 1
+    assert rows[5]["average_return"] == 5.0
+    assert rows[20]["win_rate"] == 100.0

@@ -91,11 +91,24 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         "return_5d",
         "return_20d",
         "return_60d",
+        "return_120d",
+        "prior_20d_high",
+        "prior_20d_low",
+        "sma_20_slope_5d",
         "volume_vs_20d",
         "atr_20",
         "atr_20_percent",
         "move_vs_atr",
         "gap_percent",
+        "atr_10_percent",
+        "atr_contraction_ratio",
+        "bb_width_20_percent",
+        "bb_width_20_percentile",
+        "volume_5d_vs_20d",
+        "breakout_days_ago",
+        "breakout_pivot",
+        "breakout_hold_pct",
+        "breakout_volume_vs_20d",
     )
     empty = {k: None for k in keys}
     try:
@@ -106,6 +119,8 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         return empty
     closes = _series_floats(hist["Close"])
     quality = compute_move_quality_metrics(hist)
+    trend_structure = compute_trend_structure_metrics(hist)
+    right_side_setup = compute_right_side_setup_metrics(hist)
     return {
         "sma_5": _mean_last_n(closes, 5),
         "sma_20": _mean_last_n(closes, 20),
@@ -115,7 +130,10 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         "return_5d": _n_session_return(closes, 5),
         "return_20d": _n_session_return(closes, 20),
         "return_60d": _n_session_return(closes, 60),
+        "return_120d": _n_session_return(closes, 120),
+        **trend_structure,
         **quality,
+        **right_side_setup,
     }
 
 
@@ -164,6 +182,39 @@ def compute_rsi(values: list[float], period: int = 14) -> float | None:
     rs = avg_gain / avg_loss
     return round(100.0 - (100.0 / (1.0 + rs)), 2)
 
+
+def compute_trend_structure_metrics(hist: Any) -> dict[str, float | None]:
+    """Compute breakout levels and a short SMA20 slope from daily candles.
+
+    ``prior_20d_high`` and ``prior_20d_low`` exclude the latest session so a
+    close can genuinely qualify as a new 20-session breakout or breakdown.
+    The slope compares today''s 20D SMA with its value five sessions earlier.
+    """
+    keys = ("prior_20d_high", "prior_20d_low", "sma_20_slope_5d")
+    empty = {key: None for key in keys}
+    if hist is None or hist.empty or "Close" not in hist.columns:
+        return empty
+
+    closes = _series_floats(hist["Close"])
+    if len(closes) < 21:
+        return empty
+
+    result = dict(empty)
+    if "High" in hist.columns:
+        highs = _series_floats(hist["High"])
+        if len(highs) >= 21:
+            result["prior_20d_high"] = round(max(highs[-21:-1]), 4)
+    if "Low" in hist.columns:
+        lows = _series_floats(hist["Low"])
+        if len(lows) >= 21:
+            result["prior_20d_low"] = round(min(lows[-21:-1]), 4)
+
+    if len(closes) >= 25:
+        current_sma20 = _mean_last_n(closes, 20)
+        prior_sma20 = _mean_last_n(closes[-25:-5], 20)
+        if current_sma20 is not None and prior_sma20 not in (None, 0):
+            result["sma_20_slope_5d"] = round((current_sma20 - prior_sma20) / prior_sma20 * 100.0, 2)
+    return result
 
 def compute_move_quality_metrics(hist: Any) -> dict[str, float | None]:
     keys = ("volume_vs_20d", "atr_20", "atr_20_percent", "move_vs_atr", "gap_percent")
@@ -219,6 +270,111 @@ def compute_move_quality_metrics(hist: Any) -> dict[str, float | None]:
         "gap_percent": round(gap_percent, 2),
     }
 
+
+def compute_right_side_setup_metrics(hist: Any) -> dict[str, float | None]:
+    """Measure base contraction and recent breakout retention from daily candles."""
+    keys = (
+        "atr_10_percent",
+        "atr_contraction_ratio",
+        "bb_width_20_percent",
+        "bb_width_20_percentile",
+        "volume_5d_vs_20d",
+        "breakout_days_ago",
+        "breakout_pivot",
+        "breakout_hold_pct",
+        "breakout_volume_vs_20d",
+    )
+    empty = {key: None for key in keys}
+    required = {"High", "Low", "Close"}
+    if hist is None or hist.empty or not required.issubset(set(hist.columns)):
+        return empty
+
+    closes = _series_floats(hist["Close"])
+    highs = _series_floats(hist["High"])
+    lows = _series_floats(hist["Low"])
+    count = min(len(closes), len(highs), len(lows))
+    if count < 21:
+        return empty
+    closes, highs, lows = closes[-count:], highs[-count:], lows[-count:]
+
+    result = dict(empty)
+    atr_10 = _average_true_range(highs, lows, closes, 10)
+    atr_20 = _average_true_range(highs, lows, closes, 20)
+    if atr_10 is not None and closes[-1] > 0:
+        result["atr_10_percent"] = round(atr_10 / closes[-1] * 100.0, 2)
+    if atr_10 is not None and atr_20 not in (None, 0):
+        result["atr_contraction_ratio"] = round(atr_10 / atr_20, 2)
+
+    if len(closes) >= 40:
+        widths = [
+            width
+            for end in range(20, len(closes) + 1)
+            if (width := _bollinger_width_percent(closes[end - 20:end])) is not None
+        ]
+        if widths:
+            current_width = widths[-1]
+            result["bb_width_20_percent"] = round(current_width, 2)
+            result["bb_width_20_percentile"] = round(
+                sum(width <= current_width for width in widths) / len(widths) * 100.0,
+                1,
+            )
+
+    volumes: list[float] = []
+    if "Volume" in hist.columns:
+        candidate = _series_floats(hist["Volume"])
+        if len(candidate) == count:
+            volumes = candidate
+    if len(volumes) >= 25:
+        recent = [value for value in volumes[-5:] if value > 0]
+        baseline = [value for value in volumes[-25:-5] if value > 0]
+        if recent and baseline:
+            result["volume_5d_vs_20d"] = round(
+                (sum(recent) / len(recent)) / (sum(baseline) / len(baseline)),
+                2,
+            )
+
+    for days_ago in range(min(5, count - 20)):
+        idx = count - 1 - days_ago
+        pivot = max(highs[idx - 20:idx])
+        if pivot <= 0 or closes[idx] <= pivot:
+            continue
+        event_volume = None
+        if len(volumes) == count:
+            baseline = [value for value in volumes[idx - 20:idx] if value > 0]
+            if baseline and volumes[idx] > 0:
+                event_volume = volumes[idx] / (sum(baseline) / len(baseline))
+        result["breakout_days_ago"] = float(days_ago)
+        result["breakout_pivot"] = round(pivot, 4)
+        result["breakout_hold_pct"] = round((closes[-1] - pivot) / pivot * 100.0, 2)
+        result["breakout_volume_vs_20d"] = round(event_volume, 2) if event_volume is not None else None
+        break
+
+    return result
+
+
+def _average_true_range(highs: list[float], lows: list[float], closes: list[float], period: int) -> float | None:
+    if period <= 0 or len(closes) < period + 1:
+        return None
+    start = max(1, len(closes) - period)
+    true_ranges = [
+        max(
+            highs[idx] - lows[idx],
+            abs(highs[idx] - closes[idx - 1]),
+            abs(lows[idx] - closes[idx - 1]),
+        )
+        for idx in range(start, len(closes))
+    ]
+    return sum(true_ranges) / len(true_ranges) if true_ranges else None
+
+
+def _bollinger_width_percent(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    average = sum(values) / len(values)
+    if average == 0:
+        return None
+    variance = sum((value - average) ** 2 for value in values) / len(values)
+    return math.sqrt(variance) * 4.0 / average * 100.0
 
 def _safe_info(yf_ticker: Any) -> dict[str, Any]:
     try:

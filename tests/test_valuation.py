@@ -5,6 +5,8 @@ import pandas as pd
 from stock_daily_research.valuation import (
     coerce_date,
     compute_move_quality_metrics,
+    compute_right_side_setup_metrics,
+    compute_trend_structure_metrics,
     compute_rsi,
     fetch_yfinance_eps_metrics,
     format_metric_value,
@@ -107,6 +109,54 @@ def test_compute_move_quality_metrics_volume_gap_and_atr() -> None:
     assert metrics["atr_20_percent"] is not None
     assert metrics["move_vs_atr"] is not None
 
+
+def test_compute_right_side_setup_metrics_detects_base_contraction() -> None:
+    rows = []
+    for idx in range(50):
+        if idx < 30:
+            close = 105.0 if idx % 2 else 95.0
+            spread = 2.0
+            volume = 1_000_000
+        else:
+            close = 100.1 if idx % 2 else 100.0
+            spread = 0.2
+            volume = 500_000 if idx >= 45 else 1_000_000
+        rows.append({
+            "Open": close,
+            "High": close + spread,
+            "Low": close - spread,
+            "Close": close,
+            "Volume": volume,
+        })
+
+    metrics = compute_right_side_setup_metrics(pd.DataFrame(rows))
+
+    assert metrics["atr_contraction_ratio"] is not None
+    assert metrics["atr_contraction_ratio"] < 0.8
+    assert metrics["bb_width_20_percentile"] is not None
+    assert metrics["bb_width_20_percentile"] <= 20.0
+    assert metrics["volume_5d_vs_20d"] == 0.5
+
+
+def test_compute_right_side_setup_metrics_tracks_breakout_retention() -> None:
+    rows = [
+        {"Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 100.0, "Volume": 1_000_000}
+        for _ in range(45)
+    ]
+    rows.extend([
+        {"Open": 100.5, "High": 104.0, "Low": 100.0, "Close": 103.0, "Volume": 2_000_000},
+        {"Open": 103.0, "High": 104.0, "Low": 102.0, "Close": 102.5, "Volume": 1_000_000},
+        {"Open": 102.5, "High": 104.0, "Low": 102.0, "Close": 103.0, "Volume": 1_000_000},
+        {"Open": 103.0, "High": 104.0, "Low": 102.5, "Close": 103.2, "Volume": 1_000_000},
+        {"Open": 103.2, "High": 104.0, "Low": 102.8, "Close": 103.5, "Volume": 1_000_000},
+    ])
+
+    metrics = compute_right_side_setup_metrics(pd.DataFrame(rows))
+
+    assert metrics["breakout_days_ago"] == 4.0
+    assert metrics["breakout_pivot"] == 101.0
+    assert metrics["breakout_hold_pct"] == 2.48
+    assert metrics["breakout_volume_vs_20d"] == 2.0
 
 def test_fetch_yfinance_eps_metrics_extracts_estimates_and_revisions() -> None:
     class FakeAnalysis:
@@ -238,3 +288,19 @@ def test_fetch_yfinance_valuation_skips_fundamentals_for_etf(monkeypatch) -> Non
     assert snapshot.metrics["last_close"] == 52.4
     assert snapshot.metrics["rsi_14"] == 51.0
     assert snapshot.metrics["next_fy_eps"] is None
+
+
+def test_compute_trend_structure_metrics_uses_prior_sessions_for_breakout_levels() -> None:
+    rows = []
+    for idx in range(25):
+        close = 100.0 + idx
+        rows.append({"Open": close - 1, "High": close + 1, "Low": close - 2, "Close": close})
+    rows[-1] = {"Open": 139.0, "High": 142.0, "Low": 138.0, "Close": 140.0}
+    hist = pd.DataFrame(rows)
+
+    metrics = compute_trend_structure_metrics(hist)
+
+    assert metrics["prior_20d_high"] == 124.0
+    assert metrics["prior_20d_low"] == 102.0
+    assert metrics["sma_20_slope_5d"] is not None
+    assert metrics["sma_20_slope_5d"] > 0
