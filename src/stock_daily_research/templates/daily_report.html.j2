@@ -2523,6 +2523,434 @@
       white-space: nowrap;
     }
 
+    .signal-sample {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .signal-sample.validated { color: var(--good); border-color: var(--good); }
+
+    .journal-headline {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .journal-stats {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .journal-stats strong { color: var(--text); font-size: 16px; }
+    .journal-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+      gap: 24px;
+      align-items: start;
+    }
+    .journal-table td { vertical-align: top; }
+    .journal-table .journal-note {
+      max-width: 230px;
+      color: var(--muted);
+      white-space: normal;
+    }
+    .journal-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .journal-status.open { color: var(--info); border-color: var(--info); }
+    .journal-status.closed { color: var(--good); border-color: var(--good); }
+    .journal-status.planned { color: var(--warning); border-color: var(--warning); }
+    .journal-form {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 12px;
+      padding-left: 22px;
+      border-left: 1px solid var(--border);
+    }
+    .journal-form h3, .journal-form .form-actions, .journal-form .wide { grid-column: 1 / -1; }
+    .journal-form h3 { margin: 0; font-size: 15px; }
+    .journal-form label { display: grid; gap: 4px; min-width: 0; color: var(--muted); font-size: 12px; }
+    .journal-form input, .journal-form select, .journal-form textarea {
+      width: 100%;
+      min-width: 0;
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 7px 8px;
+      font: inherit;
+    }
+    .journal-form textarea { min-height: 58px; resize: vertical; }
+    .journal-form .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .journal-empty { padding: 24px 12px; color: var(--muted); text-align: center; }
+
+    .portfolio-risk-band {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .portfolio-risk-band h3 { margin: 0 0 10px; font-size: 15px; }
+    .portfolio-risk-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .portfolio-risk-item {
+      min-width: 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--border);
+      background: var(--surface-alt);
+    }
+    .portfolio-risk-item.alert { border-left-color: var(--danger); }
+    .portfolio-risk-item strong { display: block; margin-bottom: 4px; }
+    .portfolio-risk-item span { display: block; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+
+    .analysis-tool {
+      padding: 0;
+      overflow: hidden;
+    }
+    .analysis-tool-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 52px;
+      padding: 12px 16px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .analysis-tool-summary::-webkit-details-marker { display: none; }
+    .analysis-tool-summary::after {
+      content: "+";
+      flex: 0 0 auto;
+      color: var(--link);
+      font-size: 20px;
+      line-height: 1;
+    }
+    .analysis-tool[open] > .analysis-tool-summary::after { content: "\2212"; }
+    .analysis-tool-title { color: var(--text); font-size: 15px; font-weight: 700; }
+    .analysis-tool-meta { color: var(--muted); font-size: 12px; text-align: right; }
+    .analysis-tool-body {
+      padding: 0 16px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .portfolio-heat-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .portfolio-heat-head h2 { margin: 0; }
+    .portfolio-heat-source { color: var(--muted); font-size: 12px; text-align: right; }
+    .risk-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .risk-kpi {
+      min-width: 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--border);
+      background: var(--surface-alt);
+    }
+    .risk-kpi.alert { border-left-color: var(--danger); }
+    .risk-kpi .label { display: block; color: var(--muted); font-size: 11px; }
+    .risk-kpi .value { display: block; margin-top: 3px; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+    .risk-kpi .detail { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .portfolio-risk-legacy { display: none; }
+
+    .fill-editor {
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .fill-editor-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .fill-editor-head strong { color: var(--text); font-size: 13px; }
+    .fill-editor-help { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+    .trade-fill-rows { display: grid; gap: 6px; }
+    .trade-fill-row {
+      display: grid;
+      grid-template-columns: 72px minmax(120px, 1fr) minmax(90px, .8fr) minmax(80px, .7fr) minmax(70px, .6fr) 34px;
+      gap: 6px;
+      align-items: center;
+    }
+    .trade-fill-row select,
+    .trade-fill-row input {
+      width: 100%;
+      min-width: 0;
+      min-height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 6px;
+      font: inherit;
+    }
+    .decision-evidence { margin-top: 8px; border-top: 1px solid var(--border); }
+    .decision-evidence > summary { padding: 8px 0; color: var(--link); cursor: pointer; font-size: 12px; }
+    .decision-evidence-grid { display: grid; gap: 6px; padding-bottom: 4px; }
+    .decision-evidence-row {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .ticker-card .insights > .score, .ticker-card .insights > .technical, .ticker-card .insights > .right-side-check,
+    .ticker-card .insights > .trend, .ticker-card .insights > .rs { display: none; }
+    .decision-evidence-row strong { color: var(--text); }
+    .save-status.is-local { color: var(--warning); }
+
+    .execution-plan {
+      margin: 12px 0 0;
+      padding: 11px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .execution-plan-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+    .execution-plan-head strong { font-size: 13px; }
+    .execution-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .execution-status.ready { color: var(--good); border-color: var(--good); }
+    .execution-status.watch { color: var(--warning); border-color: var(--warning); }
+    .execution-status.blocked { color: var(--danger); border-color: var(--danger); }
+    .execution-plan-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .execution-metric { min-width: 0; }
+    .execution-plan-secondary {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+    }
+    .execution-metric .label { display: block; color: var(--muted); font-size: 11px; }
+    .execution-metric .value { display: block; margin-top: 2px; font-weight: 700; overflow-wrap: anywhere; }
+    .execution-gates { margin-top: 8px; }
+    .execution-gates summary { color: var(--link); font-size: 12px; cursor: pointer; }
+    .execution-gate-list { display: grid; gap: 5px; margin: 8px 0 0; padding: 0; list-style: none; }
+    .execution-gate-list li {
+      display: grid;
+      grid-template-columns: 14px minmax(90px, auto) minmax(0, 1fr);
+      gap: 7px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .execution-gate-list .gate-mark { color: var(--danger); font-weight: 700; }
+    .execution-gate-list .passed .gate-mark { color: var(--good); }
+    .execution-gate-list .gate-name { color: var(--text); font-weight: 600; }
+
+    .market-reading {
+      margin: 10px 0;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .market-reading-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px 10px;
+      align-items: center;
+    }
+    .market-reading-heading {
+      display: flex;
+      min-width: 0;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .market-reading-label {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .market-reading-summary {
+      min-width: 0;
+      color: var(--text);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .market-reading-strength {
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .market-reading-action {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 6px 8px;
+      align-items: baseline;
+      font-size: 11px;
+    }
+    .market-reading-status { font-weight: 800; }
+    .reading-up .market-reading-status { color: var(--good); }
+    .reading-down .market-reading-status { color: var(--danger); }
+    .reading-mixed .market-reading-status { color: var(--warning); }
+    .market-reading-invalidation {
+      grid-column: 1 / -1;
+      justify-self: end;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .market-reading details { margin-top: 6px; }
+    .market-reading details > summary {
+      color: var(--link);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .framework-evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 6px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .framework-evidence-row {
+      min-width: 0;
+      padding: 6px 8px 6px 0;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .framework-evidence-row:nth-child(odd) {
+      padding-right: 10px;
+      border-right: 1px solid var(--border-soft);
+    }
+    .framework-evidence-row:nth-child(even) { padding-left: 10px; }
+    .framework-evidence-row strong {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .framework-evidence-row span {
+      display: block;
+      color: var(--text);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .framework-evidence-detail { margin-top: 2px; color: var(--muted) !important; }
+    .framework-caveat { color: var(--warning) !important; }
+
+    .price-structure { margin-top: 10px; }
+    .price-structure summary { color: var(--link); cursor: pointer; font-size: 12px; }
+    .price-structure-svg { display: block; width: 100%; height: auto; min-height: 130px; margin-top: 8px; }
+    .price-line-close, .price-line-sma20, .price-line-sma60 {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .price-line-close { stroke: var(--text); stroke-width: 2; }
+    .price-line-sma20 { stroke: var(--info); stroke-width: 1.4; }
+    .price-line-sma60 { stroke: var(--warning); stroke-width: 1.3; }
+    .price-line-adam {
+      fill: none;
+      stroke: var(--warning);
+      stroke-width: 1.5;
+      stroke-dasharray: 5 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .price-chart-scenario-divider {
+      stroke: var(--border);
+      stroke-width: 1;
+      stroke-dasharray: 2 4;
+    }
+    .price-chart-scenario-label { fill: var(--warning); }
+
+    .price-volume-bars { fill: var(--border); opacity: 0.72; }
+    .price-chart-divider { stroke: var(--border); stroke-width: 1; }
+    .price-level-pivot { stroke: var(--good); stroke-width: 1; stroke-dasharray: 5 4; }
+    .price-level-stop { stroke: var(--danger); stroke-width: 1; stroke-dasharray: 4 4; }
+    .price-chart-date { fill: var(--muted); font-size: 10px; }
+    .price-chart-legend { display: flex; gap: 12px; margin-top: 5px; color: var(--muted); font-size: 11px; flex-wrap: wrap; }
+    .price-chart-legend span::before { content: ""; display: inline-block; width: 12px; height: 2px; margin-right: 5px; vertical-align: middle; background: var(--text); }
+    .price-chart-legend .sma20::before { background: var(--info); }
+    .price-chart-legend .sma60::before { background: var(--warning); }
+    .price-chart-legend .pivot::before { background: var(--good); }
+    .price-chart-legend .stop::before { background: var(--danger); }
+    .price-chart-legend .adam::before {
+      height: 0;
+      background: transparent;
+      border-top: 2px dashed var(--warning);
+    }
+
+    @media (max-width: 1100px) {
+      .journal-layout { grid-template-columns: 1fr; }
+      .journal-form { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-left: 0; padding-top: 16px; border-left: 0; border-top: 1px solid var(--border); }
+      .portfolio-risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .risk-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .journal-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .execution-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .portfolio-risk-grid { grid-template-columns: 1fr; }
+      .trade-fill-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .trade-fill-row .icon-button { justify-self: end; }
+      .market-reading-main { grid-template-columns: 1fr; }
+      .market-reading-strength { justify-self: start; }
+      .framework-evidence-grid { grid-template-columns: 1fr; }
+      .framework-evidence-row:nth-child(odd) {
+        padding-right: 0;
+        border-right: 0;
+      }
+      .framework-evidence-row:nth-child(even) { padding-left: 0; }
+
+    }
+    @media (max-width: 480px) {
+      .journal-form { grid-template-columns: 1fr; }
+      .journal-form label, .journal-form h3, .journal-form .form-actions, .journal-form .wide { grid-column: 1; }
+      .journal-headline { align-items: flex-start; }
+      .execution-gate-list li { grid-template-columns: 14px minmax(0, 1fr); }
+      .execution-gate-list .gate-detail { grid-column: 2; }
+      .risk-kpis { grid-template-columns: 1fr; }
+      .analysis-tool-meta { display: none; }
+      .trade-fill-row { grid-template-columns: 1fr; }
+      .trade-fill-row .icon-button { justify-self: stretch; }
+      .market-reading-action { grid-template-columns: 1fr; }
+      .market-reading-invalidation { white-space: normal; }
+
+    }
     @media print {
       :root { color-scheme: light; }
       body { background: white; }
@@ -2536,11 +2964,11 @@
   </style>
 </head>
 <body>
-  <main class="page">
+  <main id="page-top" class="page">
     <header class="header">
       <div>
         <h1>每日股票研究</h1>
-        <div class="muted">{{ report.report_date.isoformat() }} | Generated: {{ report.generated_at|twn_datetime }}</div>
+        <div class="muted">{{ report.report_date.isoformat() }} | 產生時間：{{ report.generated_at|twn_datetime|replace('Taiwan Time', '台灣時間') }}</div>
       </div>
       <div class="header-right">
         <div class="top-tools" aria-label="Dashboard tools">
@@ -2556,7 +2984,7 @@
               <div id="export-status" class="export-status" aria-live="polite">可匯出觀察清單、研究狀態、財報數據</div>
             </div>
           </details>
-          <div id="save-status" class="save-status" aria-live="polite"></div>
+          <div id="save-status" class="save-status is-local" aria-live="polite">&#x672C;&#x6A5F;&#x8349;&#x7A3F;</div>
         </div>
         <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme: Auto, Light, Dark">
           <span class="dot" aria-hidden="true"></span>
@@ -2597,7 +3025,9 @@
     <nav class="toc" aria-label="Sections">
       {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">行動 {{ morning_actions|length }}</a>{% endif %}
       <a href="#daily-summary">摘要</a>
+      <a href="#portfolio-heat">&#x7D44;&#x5408;&#x98A8;&#x96AA;</a>
       <a href="#right-side-validation">&#x53F3;&#x5074;&#x9A57;&#x8B49;</a>
+      <a href="#trade-journal">&#x4EA4;&#x6613;&#x65E5;&#x8A8C;</a>
       <a href="#hero">盤前快照</a>
       <a href="#todays-focus">焦點</a>
       {% if portfolio and portfolio.holdings %}<a href="#my-book" class="toc-pill" style="background:var(--info-bg);color:var(--info)">持股 {{ portfolio.holdings|length }}</a>{% elif book_today %}<a href="#book-today">持股</a>{% endif %}
@@ -2613,7 +3043,7 @@
     </nav>
 
     {% if morning_actions %}
-    <section id="morning-actions" class="section morning-actions" aria-label="Morning actions">
+    <section id="morning-actions" class="section morning-actions" aria-label="早盤行動">
       <div class="section-header">
         <h2>早盤行動 <span class="muted">— 先決定這些</span></h2>
       </div>
@@ -2621,9 +3051,9 @@
         {% for action in morning_actions %}
         <li class="morning-action tone-{{ action.tone }}">
           <a href="{{ action.anchor }}">
-            <span class="ma-label">{{ action.label }}</span>
-            <span class="ma-headline">{{ action.headline }}</span>
-            <span class="ma-detail">{{ action.detail }}</span>
+            <span class="ma-label">{{ action.display_label }}</span>
+            <span class="ma-headline">{{ action.display_headline }}</span>
+            <span class="ma-detail">{{ action.display_detail }}</span>
           </a>
         </li>
         {% endfor %}
@@ -2659,36 +3089,184 @@
       </div>
     </section>
 
-    <section id="right-side-validation" class="section signal-validation" aria-label="Right-side signal validation">
+    {% if portfolio_risk and (portfolio_risk.currencies or portfolio_risk.missing_stops or portfolio_risk.liquidity_alerts) %}
+    {% set heat = portfolio_risk.consolidated %}
+    <section id="portfolio-heat" class="section section-primary" aria-label="Portfolio heat">
+      <div class="portfolio-heat-head">
+        <div>
+          <h2>&#x7D44;&#x5408;&#x98A8;&#x96AA;</h2>
+          <span class="muted">&#x5148;&#x78BA;&#x8A8D;&#x5E33;&#x6236;&#x9084;&#x80FD;&#x627F;&#x53D7;&#x591A;&#x5C11;&#x98A8;&#x96AA;&#xFF0C;&#x518D;&#x770B;&#x500B;&#x80A1;&#x8A0A;&#x865F;</span>
+        </div>
+        <span id="portfolio-heat-source" class="portfolio-heat-source">
+          {% if heat.complete %}&#x5168;&#x5E02;&#x5834;&#x5DF2;&#x63DB;&#x7B97;&#x70BA; {{ heat.base_currency }}{% else %}&#x90E8;&#x5206;&#x532F;&#x7387;&#x672A;&#x53D6;&#x5F97;&#xFF0C;&#x4E0D;&#x52A0;&#x7E3D;&#x6DF7;&#x7B97;{% endif %}
+        </span>
+      </div>
+      <div class="risk-kpis">
+        <div class="risk-kpi">
+          <span class="label">&#x5DF2;&#x6301;&#x6709;&#x505C;&#x640D;&#x98A8;&#x96AA;</span>
+          <span id="portfolio-risk-open" class="value">{{ heat.base_currency }} {{ "{:,.0f}".format(heat.open_risk) if heat.complete else "N/A" }}</span>
+          <span id="portfolio-risk-open-detail" class="detail">{% if heat.risk_pct is not none %}{{ heat.risk_pct|format_pct(sign=False) }} &#x5360;&#x5DF2;&#x63DB;&#x7B97;&#x5E02;&#x503C;{% else %}&#x4F9D;&#x6709;&#x6548;&#x505C;&#x640D;&#x8A08;&#x7B97;{% endif %}</span>
+        </div>
+        <div class="risk-kpi{% if heat.pending_risk %} alert{% endif %}">
+          <span class="label">&#x5F85;&#x57F7;&#x884C;&#x4FDD;&#x7559;&#x98A8;&#x96AA;</span>
+          <span id="portfolio-risk-pending" class="value">{{ heat.base_currency }} {{ "{:,.0f}".format(heat.pending_risk) if heat.complete else "N/A" }}</span>
+          <span id="portfolio-risk-pending-detail" class="detail">{{ portfolio_risk.planned_count }} &#x7B46;&#x898F;&#x5283;&#x4E2D;&#x4EA4;&#x6613;</span>
+        </div>
+        <div class="risk-kpi alert">
+          <span class="label">&#x8DF3;&#x7A7A;&#x58D3;&#x529B;&#x640D;&#x5931;</span>
+          <span id="portfolio-risk-stress" class="value">{{ heat.base_currency }} {{ "{:,.0f}".format(heat.stress_risk) if heat.complete else "N/A" }}</span>
+          <span class="detail">&#x505C;&#x640D;&#x98A8;&#x96AA;&#x52A0;&#x4E00;&#x500B; ATR &#x6216; 3% &#x7F3A;&#x53E3;</span>
+        </div>
+        <div class="risk-kpi{% if portfolio_risk.missing_stops %} alert{% endif %}">
+          <span class="label">&#x7121;&#x6CD5;&#x8A08;&#x7B97;&#x7684;&#x90E8;&#x4F4D;</span>
+          <span id="portfolio-risk-missing" class="value">{{ portfolio_risk.missing_stops|length }}</span>
+          <span class="detail">&#x672A;&#x8A2D;&#x6709;&#x6548;&#x505C;&#x640D;&#x7684;&#x6301;&#x80A1;&#x6216;&#x898F;&#x5283;</span>
+        </div>
+      </div>
+      <div class="portfolio-risk-grid">
+        {% for risk in portfolio_risk.currencies %}
+        <div class="portfolio-risk-item{% if risk.over_budget %} alert{% endif %}" data-market="{{ risk.market }}">
+          <strong>{{ risk.currency }} &#x5DF2;&#x7528; {{ "{:,.0f}".format(risk.open_risk + risk.pending_risk) }}</strong>
+          <span>&#x6301;&#x6709; {{ "{:,.0f}".format(risk.open_risk) }} &middot; &#x4FDD;&#x7559; {{ "{:,.0f}".format(risk.pending_risk) }} &middot; &#x58D3;&#x529B; {{ "{:,.0f}".format(risk.stress_risk) }}</span>
+          {% if risk.risk_budget is not none %}
+          <span>&#x9810;&#x7B97;&#x4F7F;&#x7528; {{ risk.budget_usage_pct|format_pct(sign=False) }} &middot; &#x5269;&#x9918; {{ "{:,.0f}".format(risk.remaining_budget) }}</span>
+          {% else %}
+          <span>&#x5C1A;&#x672A;&#x8A2D;&#x5B9A; {{ risk.currency }} &#x5E33;&#x6236;&#x98A8;&#x96AA;&#x9810;&#x7B97;</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% for alert in portfolio_risk.liquidity_alerts %}
+        <div class="portfolio-risk-item alert" data-market="{{ alert.market }}">
+          <strong>{{ alert.symbol }} &#x6D41;&#x52D5;&#x6027;&#x58D3;&#x529B;</strong>
+          <span>{% if alert.kind == 'planned' %}&#x898F;&#x5283;&#x8A02;&#x55AE;{% else %}&#x73FE;&#x6709;&#x90E8;&#x4F4D;{% endif %}&#x4F54; 20D ADV {{ alert.adv_pct|format_pct(sign=False) }} &middot; 10% &#x53C3;&#x8207;&#x7387;&#x9700; {{ "%.2f"|format(alert.days_to_liquidate) }} &#x65E5;</span>
+        </div>
+        {% endfor %}
+        {% for missing in portfolio_risk.missing_stops %}
+        <div class="portfolio-risk-item alert" data-market="{{ missing.market }}">
+          <strong>{{ missing.symbol }} &#x672A;&#x8A2D;&#x6709;&#x6548;&#x505C;&#x640D;</strong>
+          <span>&#x5148;&#x5B9A;&#x7FA9;&#x5931;&#x6548;&#x50F9;&#xFF0C;&#x518D;&#x589E;&#x52A0;&#x90E8;&#x4F4D;</span>
+        </div>
+        {% endfor %}
+        {% for pair in portfolio_risk.correlated_pairs[:4] %}
+        <div class="portfolio-risk-item alert" data-market="{{ pair.market }}">
+          <strong>{{ pair.left }} / {{ pair.right }} &#x76F8;&#x95DC; {{ "%.2f"|format(pair.correlation) }}</strong>
+          <span>{{ pair.sessions }} &#x500B;&#x4EA4;&#x6613;&#x65E5; &middot; &#x5408;&#x8A08;&#x6BD4;&#x91CD; {{ pair.combined_weight|format_pct(sign=False) }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <details id="right-side-validation" class="section signal-validation analysis-tool">
+      <summary class="analysis-tool-summary">
+        <span class="analysis-tool-title">&#x7B56;&#x7565;&#x9A57;&#x8B49;</span>
+        <span class="analysis-tool-meta">{{ right_side_validation.signals_recorded }} &#x6B21;&#x8A0A;&#x865F; &middot; &#x4EA4;&#x6613;&#x65E5;&#x671F;&#x671B;&#x503C;</span>
+      </summary><div class="analysis-tool-body">
       <div class="signal-validation-head">
-        <h2>&#x53F3;&#x5074;&#x8A0A;&#x865F;&#x9A57;&#x8B49;</h2>
+        <div>
+          <h2>&#x53F3;&#x5074;&#x8A0A;&#x865F;&#x9A57;&#x8B49;</h2>
+          <span class="muted">&#x4F7F;&#x7528;&#x5BE6;&#x969B;&#x5E02;&#x5834;&#x4EA4;&#x6613;&#x65E5;&#xFF0C;&#x4E26;&#x4EE5;&#x521D;&#x59CB;&#x98A8;&#x96AA; R &#x8A08;&#x7B97;&#x671F;&#x671B;&#x503C;&#xFF1B;&#x6A23;&#x672C;&#x672A;&#x6EFF; {{ right_side_validation.minimum_sample }} &#x7B46;&#x50C5;&#x4F9B;&#x89C0;&#x5BDF;</span>
+        </div>
         <span class="signal-validation-stat">&#x5DF2;&#x8A18;&#x9304; {{ right_side_validation.signals_recorded }} &#x6B21;&#x8A0A;&#x865F;</span>
       </div>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr>
-              <th>&#x89C0;&#x5BDF;&#x671F;</th>
-              <th class="num">&#x5B8C;&#x6574;&#x6A23;&#x672C;</th>
-              <th class="num">&#x52DD;&#x7387;</th>
-              <th class="num">&#x5E73;&#x5747;&#x50F9;&#x683C;&#x8B8A;&#x52D5;</th>
-              <th class="num">&#x5F85;&#x8FFD;&#x8E64;</th>
-            </tr>
-          </thead>
+          <thead><tr><th>&#x5E02;&#x5834;</th><th>&#x6301;&#x6709;&#x671F;</th><th class="num">&#x5B8C;&#x6574;&#x6A23;&#x672C;</th><th class="num">&#x52DD;&#x7387;</th><th class="num">&#x671F;&#x671B;&#x503C;</th><th class="num">&#x5E73;&#x5747; / &#x4E2D;&#x4F4D;</th><th class="num">&#x7372;&#x5229; / &#x8667;&#x640D;</th><th class="num">&#x5C3E;&#x7AEF; / &#x5F85;&#x8FFD;&#x8E64;</th></tr></thead>
           <tbody>
-            {% for row in right_side_validation.horizons %}
-            <tr>
-              <td>{{ row.sessions }} &#x6B21;&#x6B78;&#x6A94;&#x89C0;&#x5BDF;</td>
-              <td class="num">{{ row.sample_size }}</td>
-              <td class="num">{% if row.win_rate is not none %}{{ "%.1f"|format(row.win_rate) }}%{% else %}N/A{% endif %}</td>
-              <td class="num {% if row.average_return is not none %}change change-{{ row.average_return|change_class }}{% endif %}">{% if row.average_return is not none %}{{ row.average_return|format_pct }}{% else %}N/A{% endif %}</td>
-              <td class="num">{{ row.pending }}</td>
-            </tr>
+            {% for market in right_side_validation.markets %}
+              {% for row in market.horizons %}
+              <tr data-market="{{ market.key }}">
+                <td>{% if market.key == 'us' %}&#x7F8E;&#x80A1;{% elif market.key == 'taiwan' %}&#x53F0;&#x80A1;{% elif market.key == 'crypto' %}&#x52A0;&#x5BC6;&#x8CA8;&#x5E63;{% else %}{{ market.label }}{% endif %}</td>
+                <td>{{ row.sessions }} &#x500B;&#x4EA4;&#x6613;&#x65E5;</td>
+                <td class="num"><span class="signal-sample{% if row.reliable %} validated{% endif %}">{{ row.sample_size }} / {{ row.minimum_sample }}</span></td>
+                <td class="num">{% if row.win_rate is not none %}{{ "%.1f"|format(row.win_rate) }}%{% else %}N/A{% endif %}</td>
+                <td class="num {% if row.expectancy_r is not none %}change change-{{ row.expectancy_r|change_class }}{% endif %}">{% if row.expectancy_r is not none %}{{ "%+.2f"|format(row.expectancy_r) }}R<div class="muted">n={{ row.r_sample_size }}</div>{% else %}N/A{% endif %}</td>
+                <td class="num">{% if row.average_return is not none %}{{ row.average_return|format_pct }} / {{ row.median_return|format_pct }}{% else %}N/A{% endif %}</td>
+                <td class="num">{% if row.average_win is not none %}{{ row.average_win|format_pct }} / {{ row.average_loss|format_pct }}{% if row.payoff_ratio is not none %}<div class="muted">&#x640D;&#x76CA;&#x6BD4; {{ "%.2f"|format(row.payoff_ratio) }}</div>{% endif %}{% else %}N/A{% endif %}</td>
+                <td class="num">{% if row.worst_return is not none %}{{ row.worst_return|format_pct }}{% else %}N/A{% endif %}<div class="muted">{{ row.pending }} &#x5F85;&#x8FFD;&#x8E64;{% if row.unavailable %} &middot; {{ row.unavailable }} &#x8D85;&#x51FA;&#x6B77;&#x53F2;{% endif %}</div></td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="8" class="journal-empty">&#x5C1A;&#x7121;&#x53EF;&#x5B8C;&#x6210;&#x9A57;&#x8B49;&#x7684;&#x8A0A;&#x865F;&#x6A23;&#x672C;</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-    </section>
+      </div></details>
+
+    <details id="trade-journal" class="section trade-journal analysis-tool">
+      <summary class="analysis-tool-summary">
+        <span class="analysis-tool-title">&#x4EA4;&#x6613;&#x65E5;&#x8A8C;</span>
+        <span class="analysis-tool-meta">{{ trade_journal.planned_count }} &#x898F;&#x5283; &middot; {{ trade_journal.open_count }} &#x9032;&#x884C;&#x4E2D; &middot; {{ trade_journal.closed_count }} &#x5B8C;&#x6210;</span>
+      </summary><div class="analysis-tool-body">
+      <div class="journal-headline">
+        <div>
+          <h2>&#x4EA4;&#x6613;&#x65E5;&#x8A8C;</h2>
+          <span class="muted">&#x4EE5;&#x521D;&#x59CB;&#x505C;&#x640D;&#x56FA;&#x5B9A; 1R&#xFF0C;&#x7528;&#x76F8;&#x540C;&#x5C3A;&#x5EA6;&#x8907;&#x76E4;&#x9032;&#x51FA;&#x5834;</span>
+        </div>
+        <div class="journal-stats" aria-label="Trade journal statistics">
+          <span>&#x9032;&#x884C;&#x4E2D; <strong data-journal-stat="open">{{ trade_journal.open_count }}</strong></span>
+          <span>&#x898F;&#x5283;&#x4E2D; <strong data-journal-stat="planned">{{ trade_journal.planned_count }}</strong></span>
+          <span>&#x5DF2;&#x5B8C;&#x6210; <strong data-journal-stat="closed">{{ trade_journal.closed_count }}</strong></span>
+          <span>&#x671F;&#x671B;&#x503C; <strong>{% if trade_journal.expectancy_r is not none %}{{ "%+.2f"|format(trade_journal.expectancy_r) }}R{% else %}N/A{% endif %}</strong></span>
+          <span>&#x52DD;&#x7387; <strong>{% if trade_journal.win_rate is not none %}{{ "%.1f"|format(trade_journal.win_rate) }}%{% else %}N/A{% endif %}</strong></span>
+          <span>&#x640D;&#x76CA;&#x6BD4; <strong>{% if trade_journal.payoff_ratio is not none %}{{ "%.2f"|format(trade_journal.payoff_ratio) }}{% else %}N/A{% endif %}</strong></span>
+          <span class="signal-sample{% if trade_journal.reliable %} validated{% endif %}">{{ trade_journal.measured_count }} / {{ trade_journal.minimum_sample }} &#x7B46;</span>
+        </div>
+      </div>
+      <div class="journal-layout">
+        <div class="table-wrap">
+          <table class="journal-table">
+            <thead><tr><th>&#x6A19;&#x7684;</th><th>&#x72C0;&#x614B;</th><th>&#x9032;&#x5834;</th><th class="num">&#x90E8;&#x4F4D;</th><th class="num">&#x505C;&#x640D;</th><th class="num">&#x6DE8;&#x640D;&#x76CA;</th><th class="num">R</th><th class="num">MFE / MAE</th><th>&#x8A2D;&#x5B9A;</th></tr></thead>
+            <tbody id="trade-journal-rows">
+              {% for row in trade_journal.rows %}
+              {% set trade = row.trade %}
+              <tr data-trade-id="{{ trade.trade_id }}" data-symbol="{{ trade.ticker }}" data-market="{{ trade.market }}">
+                <td class="symbol-cell"><a href="#{{ trade.ticker|ticker_anchor }}">{{ trade.ticker }}</a><div class="journal-note">{{ trade.setup or trade.note }}</div></td>
+                <td><span class="journal-status {{ 'planned' if row.planned else ('closed' if row.closed else 'open') }}">{% if row.planned %}&#x898F;&#x5283;&#x4E2D;{% elif row.closed %}&#x5DF2;&#x5B8C;&#x6210;{% else %}&#x9032;&#x884C;&#x4E2D;{% endif %}</span></td>
+                <td>{{ row.entry_date.isoformat() if row.entry_date else 'N/A' }}<div class="muted">{{ trade.currency }} {{ row.average_entry|metric_value }}</div></td>
+                <td class="num">{% if row.planned %}{{ row.planned_shares|metric_value }}{% else %}{{ row.remaining_shares|metric_value }}{% endif %}<div class="muted">{{ row.fill_count }} &#x7B46;&#x6210;&#x4EA4;</div></td>
+                <td class="num">{{ row.current_stop|metric_value }}{% if row.planned_risk is not none %}<div class="muted">&#x521D;&#x59CB; 1R {{ trade.currency }} {{ "{:,.0f}".format(row.planned_risk) }}</div>{% endif %}{% if row.current_risk is not none %}<div class="muted">&#x76EE;&#x524D;&#x98A8;&#x96AA; {{ "{:,.0f}".format(row.current_risk) }}</div>{% endif %}</td>
+                <td class="num change change-{{ row.net_pl|change_class }}">{% if row.net_pl is not none %}{{ trade.currency }} {{ "{:+,.0f}".format(row.net_pl) }}{% else %}N/A{% endif %}</td>
+                <td class="num change change-{{ row.r_multiple|change_class }}">{% if row.r_multiple is not none %}{{ "%+.2f"|format(row.r_multiple) }}R{% else %}N/A{% endif %}</td>
+                <td class="num">{% if row.mfe_r is not none %}{{ "%+.1f"|format(row.mfe_r) }}R / {{ "%+.1f"|format(row.mae_r) }}R{% if not row.path_complete %}<div class="muted">&#x50C5;&#x542B;&#x76EE;&#x524D;&#x50F9;&#x683C;&#x6B77;&#x53F2;</div>{% endif %}{% else %}N/A{% endif %}</td>
+                <td><button type="button" class="icon-button" data-trade-edit="{{ trade.trade_id }}" title="&#x7DE8;&#x8F2F;&#x4EA4;&#x6613;" aria-label="&#x7DE8;&#x8F2F;&#x4EA4;&#x6613;">&#x270E;</button></td>
+              </tr>
+              {% else %}
+              <tr class="journal-empty-row"><td colspan="9" class="journal-empty">&#x5C1A;&#x7121;&#x4EA4;&#x6613;&#x8A18;&#x9304;</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <form id="trade-journal-form" class="journal-form" novalidate>
+          <h3 id="trade-form-title">&#x65B0;&#x589E;&#x4EA4;&#x6613;</h3>
+          <input id="trade-id" type="hidden">
+          <input id="trade-initial-risk" type="hidden">
+          <label>&#x6A19;&#x7684;<select id="trade-ticker" required>{% for item in report.ticker_reports %}<option value="{{ item.ticker.symbol }}" data-market="{{ item.ticker.market }}" data-currency="{{ item.ticker.currency }}">{{ item.ticker.display_symbol }} &middot; {{ item.ticker.company_name }}</option>{% endfor %}</select></label>
+          <label>&#x72C0;&#x614B;<select id="trade-status"><option value="planned">&#x898F;&#x5283;&#x4E2D;</option><option value="open">&#x9032;&#x884C;&#x4E2D;</option><option value="closed">&#x5DF2;&#x5B8C;&#x6210;</option></select></label>
+          <label>&#x9032;&#x5834;&#x65E5;<input id="trade-entry-date" type="date"></label>
+          <label>&#x9032;&#x5834;&#x50F9;<input id="trade-entry-price" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>&#x6578;&#x91CF;<input id="trade-shares" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>&#x521D;&#x59CB;&#x505C;&#x640D;<input id="trade-stop" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>&#x76EE;&#x524D;&#x505C;&#x640D;<input id="trade-current-stop" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>&#x51FA;&#x5834;&#x65E5;<input id="trade-exit-date" type="date"></label>
+          <label>&#x51FA;&#x5834;&#x50F9;<input id="trade-exit-price" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>&#x8CBB;&#x7528;<input id="trade-fees" type="number" min="0" step="any" inputmode="decimal" value="0"></label>
+          <label>&#x532F;&#x7387;&#xFF08;&#x8F49;&#x672C;&#x4F4D;&#x5E63;&#xFF09;<input id="trade-fx-rate" type="number" min="0" step="any" inputmode="decimal" value="1"></label>
+          <label>&#x4EA4;&#x6613;&#x578B;&#x614B;<input id="trade-setup" type="text" maxlength="60" placeholder="&#x7A81;&#x7834; / &#x62C9;&#x56DE;"></label>
+          <div class="wide fill-editor">
+            <div class="fill-editor-head">
+              <strong>&#x5206;&#x6279;&#x6210;&#x4EA4;</strong>
+              <button id="trade-add-fill" type="button" class="icon-button" title="&#x65B0;&#x589E;&#x4E00;&#x7B46;&#x6210;&#x4EA4;" aria-label="&#x65B0;&#x589E;&#x4E00;&#x7B46;&#x6210;&#x4EA4;">+</button>
+            </div>
+            <div id="trade-fill-rows" class="trade-fill-rows"></div>
+            <p class="fill-editor-help">&#x898F;&#x5283;&#x4E2D;&#x53EF;&#x5148;&#x4E0D;&#x586B;&#xFF1B;&#x5BE6;&#x969B;&#x9032;&#x51FA;&#x5834;&#x5F8C;&#xFF0C;&#x9010;&#x7B46;&#x8A18;&#x9304;&#x8CB7;&#x9032;&#x3001;&#x8CE3;&#x51FA;&#x3001;&#x6578;&#x91CF;&#x8207;&#x8CBB;&#x7528;&#x3002;</p>
+          </div>
+          <label class="wide">&#x8907;&#x76E4;&#x5099;&#x8A3B;<textarea id="trade-note" maxlength="240"></textarea></label>
+          <div class="form-actions"><button id="trade-form-clear" type="button" class="tool-button tool-button-secondary">&#x6E05;&#x9664;</button><button type="submit" class="tool-button tool-button-primary">&#x5132;&#x5B58;&#x4EA4;&#x6613;</button></div>
+        </form>
+      </div>
+      </div></details>
 
     <section class="command-center" aria-label="Today">
       <div id="hero" class="command-hero">
@@ -2730,14 +3308,14 @@
         <div class="command-alerts">
           <div class="command-alerts-head">
             <span class="cc-label">警示</span>
-            {% if rule_alerts|length > 3 %}<a href="#rule-alerts" class="cc-more">+{{ rule_alerts|length - 3 }} more</a>{% endif %}
+            {% if rule_alerts|length > 3 %}<a href="#rule-alerts" class="cc-more">另 {{ rule_alerts|length - 3 }} 則</a>{% endif %}
           </div>
           <ul class="command-alert-list">
             {% for alert in rule_alerts[:3] %}
             <li class="command-alert {{ alert.tone }}">
               <a href="{{ alert.anchor }}">
                 <span class="ca-label">{{ alert.symbol }}</span>
-                <span class="ca-title">{{ alert.title }}</span>
+                <span class="ca-title">{{ alert.title|zh_text }}</span>
               </a>
             </li>
             {% endfor %}
@@ -2839,7 +3417,7 @@
           {% if history.review_queue %}
           <ul class="focus-list">
             {% for row in history.review_queue %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.reasons|join(' | ') }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.reasons|decision_text_zh }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">目前沒有待檢視項目。</div>{% endif %}
@@ -2849,7 +3427,7 @@
           {% if history.recent_thesis_changes %}
           <ul class="focus-list">
             {% for row in history.recent_thesis_changes %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail|decision_text_zh }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">近期沒有投資論點狀態變化。</div>{% endif %}
@@ -2859,7 +3437,7 @@
           {% if history.post_earnings_due %}
           <ul class="focus-list">
             {% for row in history.post_earnings_due %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail|decision_text_zh }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">目前沒有待完成的財報後檢視。</div>{% endif %}
@@ -2871,7 +3449,7 @@
           {% if history.research_drift %}
           <ul class="focus-list">
             {% for row in history.research_drift %}
-            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail }}</span></span></li>
+            <li><span class="focus-rank">{{ loop.index }}</span><span><a href="{{ row.anchor }}">{{ row.symbol }}</a><span class="focus-reason">{{ row.detail|decision_text_zh }}</span></span></li>
             {% endfor %}
           </ul>
           {% else %}<div class="section-empty">目前沒有過久未更新的有效投資論點。</div>{% endif %}
@@ -2901,9 +3479,9 @@
       <div class="morning-grid">
         {% for row in book_today %}
         <a class="morning-tile" data-market="{{ row.item.ticker.market }}" href="#{{ row.item.ticker.symbol|ticker_anchor }}">
-          <span class="label">{{ row.label }}</span>
+          <span class="label">{{ row.label|book_label_zh }}</span>
           <span class="value change-{{ row.tone }}">{{ row.value }}</span>
-          <span class="sub">{{ row.item.ticker.symbol }} | {{ row.detail }}</span>
+          <span class="sub">{{ row.item.ticker.symbol }} | {{ row.detail|decision_text_zh }}</span>
         </a>
         {% endfor %}
       </div>
@@ -2948,12 +3526,12 @@
         <h2>隔夜 / 盤前 <span class="count">行情時間：{{ report.premarket.retrieved_at|utc_timestamp }}</span></h2>
       </div>
       {% if report.premarket.benchmarks %}
-      <div class="morning-grid" aria-label="Premarket benchmarks">
+      <div class="morning-grid" aria-label="盤前指標">
         {% for move in report.premarket.benchmarks %}
         <div class="morning-tile">
-          <span class="label">{{ move.name }}</span>
+          <span class="label">{{ move.name|zh_text }}</span>
           <span class="value change change-{{ move.change_pct|change_class }}">{{ move.change_pct|format_pct }}</span>
-          <span class="sub">{{ move.symbol }} at {{ move.last|metric_value }} | {{ move.source }}</span>
+          <span class="sub">{{ move.symbol }} {{ move.last|metric_value }} | {{ move.source|zh_text }}</span>
         </div>
         {% endfor %}
       </div>
@@ -2961,7 +3539,7 @@
       {% if report.premarket.watchlist_movers %}
       <div class="catalyst-grid" style="margin-top: 10px;">
         <div class="catalyst-card">
-          <span class="label">Watchlist top movers</span>
+          <span class="label">觀察清單主要異動</span>
           <ul class="mover-list">
             {% for move in report.premarket.watchlist_movers[:6] %}
             <li><a href="#ticker-{{ move.symbol|lower }}">{{ move.symbol }}</a><span class="change change-{{ move.change_pct|change_class }}">{{ move.change_pct|format_pct }}</span></li>
@@ -2969,7 +3547,7 @@
           </ul>
         </div>
         <div class="catalyst-card">
-          <span class="label">Gap &gt; +/-2%</span>
+          <span class="label">盤前缺口 &gt; +/-2%</span>
           {% if report.premarket.gap_movers %}
           <ul class="mover-list">
             {% for move in report.premarket.gap_movers[:8] %}
@@ -2977,7 +3555,7 @@
             {% endfor %}
           </ul>
           {% else %}
-          <span class="sub">No watchlist gaps above threshold.</span>
+          <span class="sub">觀察清單沒有超過門檻的盤前缺口。</span>
           {% endif %}
         </div>
       </div>
@@ -2985,24 +3563,24 @@
       {% if premarket_triage.catalyst_backed or premarket_triage.unclear %}
       <div class="catalyst-grid" style="margin-top: 10px;">
         <div class="catalyst-card">
-          <span class="label">Catalyst-backed</span>
+          <span class="label">有催化支持</span>
           {% if premarket_triage.catalyst_backed %}
           <ul class="mover-list">
             {% for row in premarket_triage.catalyst_backed %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.confidence }} | {{ row.reasons|join(', ') }}</span></li>
+            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.confidence|level_label }} | {{ row.reasons|join(', ')|zh_text }}</span></li>
             {% endfor %}
           </ul>
-          {% else %}<span class="sub">No mover with clear catalyst support.</span>{% endif %}
+          {% else %}<span class="sub">目前沒有具明確催化支持的異動。</span>{% endif %}
         </div>
         <div class="catalyst-card">
-          <span class="label">Unclear / noisy</span>
+          <span class="label">原因不明 / 雜訊偏多</span>
           {% if premarket_triage.unclear %}
           <ul class="mover-list">
             {% for row in premarket_triage.unclear %}
-            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.confidence }} | {{ row.source_tier }}</span></li>
+            <li><a href="#{{ row.item.ticker.symbol|ticker_anchor }}">{{ row.item.ticker.symbol }}</a><span class="change change-{{ row.move.change_pct|change_class }}">{{ row.move.change_pct|format_pct }} | {{ row.confidence|level_label }} | {{ row.source_tier|zh_text }}</span></li>
             {% endfor %}
           </ul>
-          {% else %}<span class="sub">No unexplained high-priority movers.</span>{% endif %}
+          {% else %}<span class="sub">目前沒有原因不明的高優先異動。</span>{% endif %}
         </div>
       </div>
       {% endif %}
@@ -3102,38 +3680,38 @@
     {% if portfolio and portfolio.holdings %}
     <section id="my-book" class="section my-book-section">
       <div class="section-header">
-        <h2>持股總覽 <span class="count">({{ portfolio.holdings|length }} holdings)</span></h2>
-        <span class="regime-pill" style="background:var(--info-bg);color:var(--info);" title="Sum of (daily % × weight) across holdings">
-          Net impact {{ portfolio.total_impact_pct|format_pct }}
+        <h2>持股總覽 <span class="count">({{ portfolio.holdings|length }} 檔持股)</span></h2>
+        <span class="regime-pill" style="background:var(--info-bg);color:var(--info);" title="各持股當日漲跌幅乘以持股比重後加總">
+          今日帳面影響 {{ portfolio.total_impact_pct|format_pct }}
         </span>
       </div>
 
       <div class="my-book-stats">
-        <div class="stat" title="Sum of position weights across holdings">
-          <span class="label">Invested weight</span>
+        <div class="stat" title="所有持股比重加總">
+          <span class="label">已投入比重</span>
           <span class="value">{{ portfolio.total_weight_pct|format_pct(sign=False) }}</span>
         </div>
         {% if portfolio.total_pl_dollar is not none %}
-        <div class="stat" title="Total unrealized P&amp;L across holdings (current price vs avg cost)">
-          <span class="label">Unrealized P&amp;L</span>
+        <div class="stat" title="以現價相對平均成本計算的未實現損益">
+          <span class="label">未實現損益</span>
           <span class="value change change-{{ 'pos' if portfolio.total_pl_dollar >= 0 else 'neg' }}">${{ "{:+,.0f}".format(portfolio.total_pl_dollar) }}{% if portfolio.total_pl_pct is not none %} ({{ portfolio.total_pl_pct|format_pct }}){% endif %}</span>
         </div>
         {% endif %}
         {% if portfolio.addable_cash is not none %}
-        <div class="stat" title="Cash available to deploy (from settings.portfolio.addable_cash)">
-          <span class="label">Addable cash</span>
+        <div class="stat" title="設定中可投入的現金">
+          <span class="label">可投入現金</span>
           <span class="value">${{ "{:,.0f}".format(portfolio.addable_cash) }}</span>
         </div>
         {% endif %}
         {% if portfolio.total_value is not none %}
-        <div class="stat" title="Total portfolio value (from settings.portfolio.total_value)">
-          <span class="label">Book value</span>
+        <div class="stat" title="設定中的投資組合總值">
+          <span class="label">組合總值</span>
           <span class="value">${{ "{:,.0f}".format(portfolio.total_value) }}</span>
         </div>
         {% endif %}
         {% if portfolio.max_single_weight is not none %}
-        <div class="stat" title="Max single-name weight cap">
-          <span class="label">Single cap</span>
+        <div class="stat" title="單一標的持股比重上限">
+          <span class="label">單一持股上限</span>
           <span class="value">{{ portfolio.max_single_weight|format_pct(sign=False) }}</span>
         </div>
         {% endif %}
@@ -3141,9 +3719,9 @@
 
       {% if portfolio.over_concentrated %}
       <div class="concentration-warning" role="alert">
-        <strong>集中風險</strong> — {{ portfolio.over_concentrated|length }} holding{{ 's' if portfolio.over_concentrated|length > 1 else '' }} above {{ portfolio.concentration_threshold|format_pct(sign=False) }}:
+        <strong>集中風險</strong> — {{ portfolio.over_concentrated|length }} 檔持股超過 {{ portfolio.concentration_threshold|format_pct(sign=False) }}：
         {% for r in portfolio.over_concentrated %}<a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }} {{ r.weight|format_pct(sign=False) }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
-        Review before adding.
+        加碼前請先檢查整體曝險。
       </div>
       {% endif %}
 
@@ -3155,11 +3733,11 @@
             {% for r in portfolio.winners %}
             <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
               <span class="mb-pct change-pos">+{{ "%.2f"|format(r.book_impact) }}%</span>
-              <span class="mb-detail">{{ "%.2f"|format(r.change_pct) }}% × {{ r.weight }}%w</span>
+              <span class="mb-detail">{{ "%.2f"|format(r.change_pct) }}% × {{ r.weight }}% 比重</span>
             </li>
             {% endfor %}
           </ul>
-          {% else %}<div class="mb-empty">No positive contributors today.</div>{% endif %}
+          {% else %}<div class="mb-empty">今日沒有正面貢獻持股。</div>{% endif %}
         </div>
 
         <div class="my-book-card losers">
@@ -3169,15 +3747,15 @@
             {% for r in portfolio.losers %}
             <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
               <span class="mb-pct change-neg">{{ "%.2f"|format(r.book_impact) }}%</span>
-              <span class="mb-detail">{{ "%.2f"|format(r.change_pct) }}% × {{ r.weight }}%w</span>
+              <span class="mb-detail">{{ "%.2f"|format(r.change_pct) }}% × {{ r.weight }}% 比重</span>
             </li>
             {% endfor %}
           </ul>
-          {% else %}<div class="mb-empty">No negative contributors today.</div>{% endif %}
+          {% else %}<div class="mb-empty">今日沒有負面貢獻持股。</div>{% endif %}
         </div>
 
         <div class="my-book-card winners">
-          <div class="mb-label">Total return leaders</div>
+          <div class="mb-label">總報酬領先</div>
           {% if portfolio.pl_leaders %}
           <ul class="mb-list">
             {% for r in portfolio.pl_leaders %}
@@ -3187,11 +3765,11 @@
             </li>
             {% endfor %}
           </ul>
-          {% else %}<div class="mb-empty">No gainers yet.</div>{% endif %}
+          {% else %}<div class="mb-empty">目前沒有獲利持股。</div>{% endif %}
         </div>
 
         <div class="my-book-card losers">
-          <div class="mb-label">Total return laggards</div>
+          <div class="mb-label">總報酬落後</div>
           {% if portfolio.pl_laggards %}
           <ul class="mb-list">
             {% for r in portfolio.pl_laggards %}
@@ -3201,75 +3779,102 @@
             </li>
             {% endfor %}
           </ul>
-          {% else %}<div class="mb-empty">No laggards.</div>{% endif %}
+          {% else %}<div class="mb-empty">目前沒有落後持股。</div>{% endif %}
         </div>
 
         <div class="my-book-card events">
-          <div class="mb-label">Event ≤ 3d</div>
+          <div class="mb-label">3 天內事件</div>
           {% if portfolio.event_soon %}
           <ul class="mb-list">
             {% for r in portfolio.event_soon %}
             <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
-              <span class="mb-detail">earnings {% if r.earnings_days == 0 %}today{% elif r.earnings_days == 1 %}tomorrow{% else %}in {{ r.earnings_days }}d{% endif %} · {{ r.weight }}%w</span>
+              <span class="mb-detail">財報{% if r.earnings_days == 0 %}今日公布{% elif r.earnings_days == 1 %}明日公布{% else %} {{ r.earnings_days }} 天後公布{% endif %} · {{ r.weight }}% 比重</span>
             </li>
             {% endfor %}
           </ul>
-          {% else %}<div class="mb-empty">No imminent events.</div>{% endif %}
+          {% else %}<div class="mb-empty">目前沒有近期事件。</div>{% endif %}
         </div>
 
         <div class="my-book-card risks">
-          <div class="mb-label">Thesis risk</div>
+          <div class="mb-label">投資論點風險</div>
           {% if portfolio.thesis_risk %}
           <ul class="mb-list">
             {% for r in portfolio.thesis_risk %}
             <li><a href="#{{ r.symbol|ticker_anchor }}">{{ r.symbol }}</a>
-              <span class="mb-detail">{{ r.weight }}%w {% if r.thesis_risk %}· flagged{% endif %}</span>
+              <span class="mb-detail">{{ r.weight }}% 比重 {% if r.thesis_risk %}· 已標記{% endif %}</span>
             </li>
             {% endfor %}
           </ul>
-          {% else %}<div class="mb-empty">No thesis flags.</div>{% endif %}
+          {% else %}<div class="mb-empty">目前沒有投資論點警示。</div>{% endif %}
         </div>
 
         <div class="my-book-card sectors">
-          <div class="mb-label">Sector concentration</div>
+          <div class="mb-label">產業集中度</div>
           {% if portfolio.sectors %}
           {% for bucket in portfolio.sectors %}
-          <div class="sector-row{% if bucket.get('over_cap') %} over-cap{% endif %}" {% if bucket.get('over_cap') %}title="Above {{ bucket.cap }}% cap"{% endif %}>
-            <span>{{ bucket.sector }} <span class="tickers">({{ bucket.tickers|join(', ') }})</span></span>
+          <div class="sector-row{% if bucket.get('over_cap') %} over-cap{% endif %}" {% if bucket.get('over_cap') %}title="超過 {{ bucket.cap }}% 上限"{% endif %}>
+            <span>{{ bucket.sector|zh_text }} <span class="tickers">({{ bucket.tickers|join(', ') }})</span></span>
             <span>{{ bucket.weight|format_pct(sign=False) }}</span>
           </div>
           {% endfor %}
-          {% else %}<div class="mb-empty">No sector data yet.</div>{% endif %}
+          {% else %}<div class="mb-empty">目前沒有產業資料。</div>{% endif %}
         </div>
 
         <div class="my-book-card stops">
-          <div class="mb-label">Stop distance ≤ 5%</div>
+          <div class="mb-label">距停損 ≤ 5%</div>
           {% if portfolio.stop_warnings %}
           {% for w in portfolio.stop_warnings %}
           <div class="stop-row tone-{{ w.tone }}">
             <a href="#{{ w.symbol|ticker_anchor }}">{{ w.symbol }}</a>
-            <span class="detail">last ${{ "%.2f"|format(w.last) }} vs stop ${{ "%.2f"|format(w.stop_loss) }}</span>
+            <span class="detail">現價 ${{ "%.2f"|format(w.last) }} / 停損 ${{ "%.2f"|format(w.stop_loss) }}</span>
             <span>{{ w.distance_pct|format_pct }}</span>
           </div>
           {% endfor %}
-          {% else %}<div class="mb-empty">All holdings comfortably above stops.</div>{% endif %}
+          {% else %}<div class="mb-empty">所有持股均高於停損安全距離。</div>{% endif %}
         </div>
       </div>
+
+      {% if portfolio_risk and (portfolio_risk.currencies or portfolio_risk.correlated_pairs or portfolio_risk.missing_stops) %}
+      <div class="portfolio-risk-band portfolio-risk-legacy">
+        <h3>&#x5E33;&#x6236;&#x98A8;&#x96AA;&#x6AA2;&#x67E5;</h3>
+        <div class="portfolio-risk-grid">
+          {% for risk in portfolio_risk.currencies %}
+          <div class="portfolio-risk-item{% if risk.over_budget %} alert{% endif %}" data-market="{{ risk.market }}">
+            <strong>{{ risk.currency }} &#x505C;&#x640D;&#x98A8;&#x96AA; {{ "{:,.0f}".format(risk.risk_at_stop) }}</strong>
+            <span>&#x5E02;&#x503C; {{ "{:,.0f}".format(risk.market_value) }} &middot; {{ risk.with_stop }}/{{ risk.positions }} &#x7B46;&#x5DF2;&#x8A2D;&#x505C;&#x640D;{% if risk.risk_pct is not none %} &middot; {{ risk.risk_pct|format_pct(sign=False) }}{% endif %}</span>
+            {% if risk.risk_budget is not none %}<span>&#x4F54;&#x98A8;&#x96AA;&#x9810;&#x7B97; {{ risk.budget_usage_pct|format_pct(sign=False) }}</span>{% endif %}
+          </div>
+          {% endfor %}
+          {% for pair in portfolio_risk.correlated_pairs %}
+          <div class="portfolio-risk-item alert" data-market="{{ pair.market }}">
+            <strong>{{ pair.left }} / {{ pair.right }} &#x76F8;&#x95DC; {{ "%.2f"|format(pair.correlation) }}</strong>
+            <span>{{ pair.sessions }} &#x6B21;&#x89C0;&#x5BDF; &middot; &#x5408;&#x8A08;&#x6BD4;&#x91CD; {{ pair.combined_weight|format_pct(sign=False) }}</span>
+          </div>
+          {% endfor %}
+          {% for missing in portfolio_risk.missing_stops %}
+          <div class="portfolio-risk-item alert" data-market="{{ missing.market }}">
+            <strong>{{ missing.symbol }} &#x672A;&#x8A2D;&#x6709;&#x6548;&#x505C;&#x640D;</strong>
+            <span>&#x7121;&#x6CD5;&#x8A08;&#x5165;&#x5E33;&#x6236;&#x98A8;&#x96AA;&#x4E0A;&#x9650;</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </section>
     {% endif %}
 
     {% if overextended %}
     <section id="overextended" class="section section-secondary overextended-section">
       <div class="section-header">
-        <h2>Overextended <span class="count">({{ overextended|length }})</span></h2>
+        <h2>漲幅過度延伸 <span class="count">({{ overextended|length }})</span></h2>
       </div>
-      <div class="sort-hint">Two or more of: RSI ≥ 70 · near 52w high · P/E ≥ 100 — caution on entry.</div>
+      <div class="sort-hint">同時符合至少兩項：RSI ≥ 70、接近 52 週高點、P/E ≥ 100；進場前應提高警覺。</div>
       <ul class="overextended-list">
         {% for entry in overextended %}
         <li class="overextended-item">
           <a class="symbol" href="#{{ entry.item.ticker.symbol|ticker_anchor }}">{{ entry.item.ticker.symbol }}</a>
-          <span class="ext-reasons">{{ entry.reasons|join(' · ') }}</span>
-          <span class="ext-score" title="Number of danger flags (max 3)">{{ entry.score }}/3</span>
+          <span class="ext-reasons">{{ entry.reasons|join(' · ')|zh_text }}</span>
+          <span class="ext-score" title="風險條件數量，最多 3 項">{{ entry.score }}/3</span>
         </li>
         {% endfor %}
       </ul>
@@ -3279,20 +3884,20 @@
     {% if report.market_sentiment %}
     <section id="market-sentiment" class="section section-secondary">
       <div class="section-header">
-        <h2>市場情緒 <span class="count">({{ report.market_sentiment.source }})</span></h2>
+        <h2>市場情緒 <span class="count">({{ report.market_sentiment.source|zh_text }})</span></h2>
       </div>
       <div class="sentiment-panel">
         <div class="sentiment-score">
           <strong>{{ report.market_sentiment.score }}</strong>
-          <span>{{ report.market_sentiment.label }}</span>
-          <div class="muted">Fear &amp; Greed style proxy from public market data.</div>
+          <span>{{ report.market_sentiment.label|zh_text }}</span>
+          <div class="muted">依公開市場資料估算的恐懼與貪婪代理指標。</div>
         </div>
         <div class="sentiment-components">
           {% for component in report.market_sentiment.components %}
           <div class="sentiment-component">
-            <strong>{{ component.name }}</strong>
-            <div>{{ component.detail }}</div>
-            <div class="component-score">{{ "%.0f"|format(component.score) }} / 100 - {{ component.label }}</div>
+            <strong>{{ component.name|zh_text }}</strong>
+            <div>{{ component.detail|zh_text }}</div>
+            <div class="component-score">{{ "%.0f"|format(component.score) }} / 100 - {{ component.label|zh_text }}</div>
           </div>
           {% endfor %}
         </div>
@@ -3307,7 +3912,7 @@
         <div class="section-header">
           <h2>利率、美元與能源</h2>
           {% set regime = report|market_regime %}
-          {% if regime %}<span class="regime-pill" title="Combined yields + dollar + oil + sentiment framing">{{ regime }}</span>{% endif %}
+          {% if regime %}<span class="regime-pill" title="綜合殖利率、美元、油價與市場情緒">{{ regime|zh_text }}</span>{% endif %}
         </div>
         <ul class="rates-list">
           {% for r in report.market_context.rates %}
@@ -3321,15 +3926,15 @@
           {% endfor %}
         </ul>
         {% set tip = report.market_context.rates|rates_interpretation %}
-        {% if tip %}<div class="rates-interp">{{ tip }}</div>{% endif %}
+        {% if tip %}<div class="rates-interp">{{ tip|zh_text }}</div>{% endif %}
         {% if macro_risk %}
         <h3>總經風險儀表</h3>
-        <div class="macro-risk" aria-label="Macro risk meter">
+        <div class="macro-risk" aria-label="總經風險儀表">
           {% for risk in macro_risk %}
           <div class="risk-meter {{ risk.level }}">
-            <span class="risk-name">{{ risk.name }}</span>
-            <span class="risk-level">{{ risk.level }}</span>
-            <span class="risk-detail">{{ risk.detail }}</span>
+            <span class="risk-name">{{ risk.name|zh_text }}</span>
+            <span class="risk-level">{{ risk.level|level_label }}</span>
+            <span class="risk-detail">{{ risk.detail|zh_text }}</span>
           </div>
           {% endfor %}
         </div>
@@ -3352,7 +3957,7 @@
           </li>
           {% endfor %}
         </ul>
-        <div class="breadth-hint">Positive = first leg outperformed. Negative cap-weight (e.g. QQQ−QQQE &lt; 0) hints at narrow leadership.</div>
+        <div class="breadth-hint">正值代表前者較強；市值加權指數相對等權指數為負（如 QQQ−QQQE &lt; 0）時，可能表示漲勢集中。</div>
       </div>
       {% endif %}
     </section>
@@ -3415,7 +4020,7 @@
           <a class="change-item" data-symbol="{{ row.symbol }}" href="{{ row.anchor }}"><strong>{{ row.symbol }}: {{ row.title|zh_text }}</strong><span>{{ row.detail|zh_text }}</span></a>
           {% endfor %}
         {% else %}
-        <div class="section-empty">No material changes versus the previous saved run.</div>
+        <div class="section-empty">相較上次儲存的報告，沒有重大變化。</div>
         {% endif %}
       </div>
     </section>
@@ -3438,15 +4043,15 @@
     {% if rule_alerts %}
     <section id="rule-alerts" class="section section-primary">
       <div class="section-header">
-        <h2>Rule Alerts <span class="count">({{ rule_alerts|length }} tickers)</span></h2>
+        <h2>規則警示 <span class="count">({{ rule_alerts|length }} 檔)</span></h2>
         {% if rule_alerts|length > 6 %}<button id="toggle-alerts" type="button" class="tool-button">顯示全部</button>{% endif %}
       </div>
       <div class="alert-list">
         {% for alert in rule_alerts %}
         <a class="alert-item {{ alert.tone }}{% if loop.index0 >= 6 %} alert-extra is-hidden{% endif %}" data-symbol="{{ alert.symbol }}" href="{{ alert.anchor }}">
           <span class="alert-label">{{ alert.symbol }}</span>
-          <span class="alert-title">{{ alert.title }}</span>
-          <span class="alert-detail">{{ alert.detail }}</span>
+          <span class="alert-title">{{ alert.title|zh_text }}</span>
+          <span class="alert-detail">{{ alert.detail|zh_text }}</span>
         </a>
         {% endfor %}
       </div>
@@ -3476,12 +4081,12 @@
           <tr data-symbol="{{ row.symbol }}">
             <td><a href="#{{ row.symbol|ticker_anchor }}">{{ row.symbol }}</a></td>
             <td class="num">{{ row.score }}</td>
-            <td><span class="badge dq-{{ row.tag }}">{{ row.tag }}</span></td>
+            <td><span class="badge dq-{{ row.tag }}">{{ row.tag|level_label }}</span></td>
             <td>
               <ul class="dq-flags">
-                {% if row.fallback %}<li>Valuation fallback used</li>{% endif %}
-                {% if row.missing_fields %}<li>Missing: {{ row.missing_fields|join(", ") }}</li>{% endif %}
-                {% for flag in row.flags %}<li>{{ flag }}</li>{% endfor %}
+                {% if row.fallback %}<li>已使用估值備援資料</li>{% endif %}
+                {% if row.missing_fields %}<li>缺少欄位：{{ row.missing_fields|join(", ") }}</li>{% endif %}
+                {% for flag in row.flags %}<li>{{ flag|zh_text }}</li>{% endfor %}
               </ul>
             </td>
           </tr>
@@ -3499,10 +4104,10 @@
       <div class="macro-row">
         {% for event in report.economic_events %}
         <a class="macro-card {{ event.category }}" href="{{ event.source_url }}" target="_blank" rel="noopener">
-          <span class="name">{{ event.name }}</span>
+          <span class="name">{{ event.name|zh_text }}</span>
           <span class="time">{{ event.event_datetime|twn_timestamp }}</span>
           <span class="note">{{ event.source }}{% if event.source_time_label %} / {{ event.source_time_label }}{% endif %}</span>
-          {% if event.notes %}<span class="note long" title="{{ event.notes }}">{{ event.notes }}</span>{% endif %}
+          {% if event.notes %}<span class="note long" title="{{ event.notes|zh_text }}">{{ event.notes|zh_text }}</span>{% endif %}
         </a>
         {% endfor %}
       </div>
@@ -3543,17 +4148,17 @@
         <li class="cluster-item confidence-{{ c.confidence }}">
           <div class="cluster-head">
             <span class="cluster-headline">{{ c.headline }}</span>
-            <span class="badge event-badge event-{{ c.event_type }}">{{ c.event_type|event_label }}</span>
+            <span class="badge event-badge event-{{ c.event_type }}">{{ c.event_type|event_label_zh }}</span>
           </div>
           <div class="cluster-meta">
             <span class="cluster-field"><span class="cf-label">標的</span>
               {% for sym in c.tickers %}<a href="#{{ sym|ticker_anchor }}">{{ sym }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
             </span>
-            <span class="cluster-field"><span class="cf-label">來源</span>{{ c.sources }} ({{ c.article_count }} articles)</span>
-            <span class="cluster-field"><span class="cf-label">影響</span>{{ c.impact }}</span>
-            <span class="cluster-field"><span class="cf-label">可信度</span><span class="conf-tag conf-{{ c.confidence }}">{{ c.confidence }}</span></span>
+            <span class="cluster-field"><span class="cf-label">來源</span>{{ c.sources }}（{{ c.article_count }} 篇報導）</span>
+            <span class="cluster-field"><span class="cf-label">影響</span>{{ c.impact|zh_text }}</span>
+            <span class="cluster-field"><span class="cf-label">可信度</span><span class="conf-tag conf-{{ c.confidence }}">{{ c.confidence|level_label }}</span></span>
           </div>
-          <div class="cluster-action">{{ c.action }}</div>
+          <div class="cluster-action">{{ c.action|zh_text }}</div>
         </li>
         {% endfor %}
       </ul>
@@ -3713,22 +4318,22 @@
         <select id="topic-filter" class="control-select">
           <option value="all">全部主題</option>
           <option value="ai">AI</option>
-          <option value="cloud">Cloud</option>
-          <option value="memory">Memory</option>
-          <option value="ev">EV</option>
+          <option value="cloud">雲端</option>
+          <option value="memory">記憶體</option>
+          <option value="ev">電動車</option>
         </select>
         {% if sectors %}
         <label class="control-label" for="sector-filter">產業</label>
         <select id="sector-filter" class="control-select">
           <option value="all">全部產業</option>
-          {% for sec in sectors %}<option value="{{ sec|lower }}">{{ sec }}</option>{% endfor %}
+          {% for sec in sectors %}<option value="{{ sec|lower }}">{{ sec|zh_text }}</option>{% endfor %}
         </select>
         {% endif %}
         {% if clusters %}
         <label class="control-label" for="cluster-filter">群組</label>
         <select id="cluster-filter" class="control-select">
           <option value="all">全部群組</option>
-          {% for cluster in clusters %}<option value="{{ cluster|lower }}">{{ cluster }}</option>{% endfor %}
+          {% for cluster in clusters %}<option value="{{ cluster|lower }}">{{ cluster|zh_text }}</option>{% endfor %}
         </select>
         {% endif %}
         <label class="control-label checkbox"><input id="risk-filter" type="checkbox"> 只看風險股</label>
@@ -3752,6 +4357,10 @@
         {% set cluster = item|ticker_cluster %}
         {% set technical = insights.technical %}
         {% set right_side = insights.right_side %}
+        {% set framework = insights.framework %}
+        {% set price_regime = insights.price_regime %}
+        {% set execution = item|execution_plan %}
+        {% set structure_chart = item|price_structure_chart %}
         <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-technical-priority="{{ technical.priority if technical else 0 }}" data-technical-label="{{ technical.status|zh_text if technical else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
           <div class="ticker-head">
             <div>
@@ -3766,7 +4375,7 @@
                 {% endfor %}
               </div>
               {% endif %}
-              {% if sector %}<div class="ticker-sector">{{ sector }}</div>{% endif %}
+              {% if sector %}<div class="ticker-sector">{{ sector|zh_text }}</div>{% endif %}
               {% if research.thesis_state or research.last_reviewed_at %}
               <div class="ticker-sector">
                 {% if research.thesis_state %}投資論點：{{ research.thesis_state|zh_text }}{% endif %}
@@ -3790,7 +4399,7 @@
                 {% if insights.score and state != "quiet" %}<span class="badge score-badge score-{{ insights.score.tone }}" title="右側分數 {{ insights.score.score }}/100">{{ insights.score.status|zh_text }}</span>{% endif %}
                 {% if dq.tag != "high" %}<span class="badge dq-{{ dq.tag }}" title="資料可信度 {{ dq.score }}/100{% if dq.flags %} — {{ dq.flags|join('; ')|zh_text }}{% endif %}">資料 {{ dq.tag|level_label }}</span>{% endif %}
                 <span class="badge review-status {{ research.review_status }}" data-review-status="{{ item.ticker.symbol }}">{{ research.review_status|review_status_label }}</span>
-                {% for trig in plan_triggers_for(item.ticker.symbol) %}<span class="plan-trigger-chip tone-{{ trig.tone }}" title="{{ trig.headline|zh_text }} — {{ trig.detail|zh_text }}">{{ trig.label|zh_text }}</span>{% endfor %}
+                {% for trig in plan_triggers_for(item.ticker.symbol) %}<span class="plan-trigger-chip tone-{{ trig.tone }}" title="{{ trig.display_headline }} — {{ trig.display_detail }}">{{ trig.display_label }}</span>{% endfor %}
               </div>
             </div>
           </div>
@@ -3831,6 +4440,73 @@
             {% endif %}
           </div>
 
+          {% if framework %}
+          <section class="market-reading reading-{{ framework.tone }}" aria-label="&#x8DA8;&#x52E2;&#x3001;&#x5A01;&#x79D1;&#x592B;&#x8207;&#x91CF;&#x50F9;&#x7D50;&#x69CB;">
+            <div class="market-reading-main">
+              <div class="market-reading-heading">
+                <span class="market-reading-label">&#x7D50;&#x69CB;&#x5224;&#x8B80;</span>
+                <strong class="market-reading-summary">{{ framework.summary }}</strong>
+              </div>
+              <span class="market-reading-strength">&#x8B49;&#x64DA;&#x5F37;&#x5EA6;&#xFF1A;{{ framework.evidence_level }}{% if framework.conflict %} &#xB7; &#x8A0A;&#x865F;&#x5206;&#x6B67;{% endif %}</span>
+              <div class="market-reading-action">
+                <span class="market-reading-status">{{ framework.operator.status }}</span>
+                <span>{{ framework.operator.action }}</span>
+                {% if framework.operator.invalidation is not none %}
+                <span class="market-reading-invalidation">{{ framework.operator.invalidation_label }} {{ item.ticker.currency }} {{ "{:,.2f}".format(framework.operator.invalidation) }}</span>
+                {% endif %}
+              </div>
+            </div>
+            <details>
+              <summary>&#x67E5;&#x770B;&#x5224;&#x65B7;&#x4F9D;&#x64DA;</summary>
+              <div class="framework-evidence-grid">
+                <div class="framework-evidence-row">
+                  <strong>&#x50F9;&#x683C;&#x8DA8;&#x52E2;</strong>
+                  <span>{{ framework.trend.label }}</span>
+                  <span class="framework-evidence-detail">{{ framework.trend.evidence|join(' / ') }}</span>
+                </div>
+                <div class="framework-evidence-row">
+                  <strong>&#x5A01;&#x79D1;&#x592B;&#x7D50;&#x69CB;</strong>
+                  <span>{{ framework.wyckoff.phase }} &#xB7; {{ framework.wyckoff.event }}</span>
+                  <span class="framework-evidence-detail">{{ framework.wyckoff.evidence|join(' / ') }}</span>
+                </div>
+                <div class="framework-evidence-row">
+                  <strong>&#x91CF;&#x50F9;&#x5206;&#x6790;</strong>
+                  <span>{{ framework.vpa.status }} &#xB7; {{ framework.vpa.event }}</span>
+                  <span class="framework-evidence-detail">{{ framework.vpa.evidence|join(' / ') }}</span>
+                </div>
+                {% if framework.adam %}
+                <div class="framework-evidence-row">
+                  <strong>&#x4E9E;&#x7576;&#x53CD;&#x5C04;&#x60C5;&#x5883;</strong>
+                  <span>{{ framework.adam.direction }} &#xB7; {{ framework.adam.change_pct|format_pct }}</span>
+                  <span class="framework-evidence-detail">{{ framework.adam.evidence }}</span>
+                  <span class="framework-evidence-detail framework-caveat">{{ framework.adam.note }}</span>
+                </div>
+                {% endif %}
+                <div class="framework-evidence-row">
+                  <strong>&#x4F5C;&#x624B;&#x7D00;&#x5F8B;</strong>
+                  <span>{{ framework.operator.status }} &#xB7; {{ framework.operator.action }}</span>
+                  {% if framework.operator.invalidation is not none %}<span class="framework-evidence-detail">{{ framework.operator.invalidation_label }} {{ item.ticker.currency }} {{ "{:,.2f}".format(framework.operator.invalidation) }}</span>{% endif %}
+                </div>
+              </div>
+            </details>
+          </section>
+          {% elif price_regime and not price_regime.ready %}
+          <section class="market-reading reading-mixed price-regime-reading" data-price-regime-reset="1" aria-label="&#x50F9;&#x683C;&#x57FA;&#x6E96;&#x8B8A;&#x66F4;">
+            <div class="market-reading-main">
+              <div class="market-reading-heading">
+                <span class="market-reading-label">&#x7D50;&#x69CB;&#x5224;&#x8B80;</span>
+                <strong class="market-reading-summary">&#x50F9;&#x683C;&#x57FA;&#x6E96;&#x5DF2;&#x8B8A;&#x66F4; &#xB7; &#x6280;&#x8853;&#x6307;&#x6A19;&#x91CD;&#x5EFA;&#x4E2D;</strong>
+              </div>
+              <span class="market-reading-strength">&#x6709;&#x6548;&#x4EA4;&#x6613;&#x65E5;&#xFF1A;{{ price_regime.sessions }}/{{ price_regime.minimum_sessions }}</span>
+              <div class="market-reading-action">
+                <span class="market-reading-status">&#x66AB;&#x505C;&#x6280;&#x8853;&#x5224;&#x8B80;</span>
+                <span>&#x50F9;&#x683C;&#x5206;&#x5272;&#x6216;&#x5236;&#x5EA6;&#x8B8A;&#x66F4;&#x5F8C;&#x9700;&#x518D;&#x7D2F;&#x7A4D; {{ price_regime.remaining_sessions }} &#x500B;&#x6709;&#x6548;&#x4EA4;&#x6613;&#x65E5;&#xFF0C;&#x671F;&#x9593;&#x4E0D;&#x7522;&#x751F;&#x53F3;&#x5074;&#x5206;&#x6578;&#x8207;&#x4EA4;&#x6613;&#x8A08;&#x756B;&#x3002;</span>
+                <span class="market-reading-invalidation">{{ price_regime.date }}{% if price_regime.change_pct is not none %} &#xB7; &#x539F;&#x59CB;&#x8DF3;&#x8B8A; {{ price_regime.change_pct|format_pct }}{% endif %}</span>
+              </div>
+            </div>
+          </section>
+          {% endif %}
+
           {% if item.taiwan_market %}
           {% set tw = item.taiwan_market %}
           <section class="tw-market-snapshot" aria-label="Taiwan market disclosure">
@@ -3868,6 +4544,46 @@
               {% endif %}
             </div>
           </section>
+          {% endif %}
+
+          {% if execution %}
+          <div class="execution-plan plan-{{ execution.tone }}">
+            <div class="execution-plan-head">
+              <strong>&#x53F3;&#x5074;&#x4EA4;&#x6613;&#x8A08;&#x756B;</strong>
+              <span class="execution-status {{ execution.status }}">{% if execution.status == 'ready' %}&#x53EF;&#x57F7;&#x884C;{% elif execution.status == 'watch' %}&#x7B49;&#x5F85;&#x78BA;&#x8A8D;{% else %}&#x66AB;&#x505C;&#x4EA4;&#x6613;{% endif %}</span>
+            </div>
+            <div class="execution-plan-grid">
+              <div class="execution-metric"><span class="label">&#x89F8;&#x767C;&#x50F9;</span><span class="value">{% if execution.entry_trigger is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.entry_trigger) }}{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x5931;&#x6548;&#x50F9;</span><span class="value">{% if execution.invalidation is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.invalidation) }}{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">2R &#x6AA2;&#x67E5;&#x9EDE;</span><span class="value">{% if execution.target_2r is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.target_2r) }}{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x90E8;&#x4F4D;&#x4E0A;&#x9650;</span><span class="value">{% if execution.max_units is not none %}{{ "{:,}".format(execution.max_units) }} &#x55AE;&#x4F4D;{% elif execution.risk_pct is not none %}{{ execution.risk_pct|format_pct(sign=False) }} &#x98A8;&#x96AA;{% else %}N/A{% endif %}</span></div>
+            </div>
+            <div class="execution-plan-grid execution-plan-secondary">
+              <div class="execution-metric"><span class="label">&#x5E33;&#x6236;&#x98A8;&#x96AA;&#x5BB9;&#x91CF;</span><span class="value">{% if execution.risk_available is not none %}{{ execution.currency }} {{ "{:,.0f}".format(execution.risk_available) }} &#x53EF;&#x7528;{% else %}&#x672A;&#x8A2D;&#x9810;&#x7B97;{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x8A02;&#x55AE;&#x6D41;&#x52D5;&#x6027;</span><span class="value">{% if execution.order_adv_pct is not none %}ADV {{ execution.order_adv_pct|format_pct(sign=False) }} &middot; {{ "%.2f"|format(execution.days_to_liquidate) }} &#x65E5;{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x8DF3;&#x7A7A;&#x58D3;&#x529B; / &#x55AE;&#x4F4D;</span><span class="value">{% if execution.stress_risk_per_unit is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.stress_risk_per_unit) }}{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x8CC7;&#x6599;&#x4F86;&#x6E90;</span><span class="value">{{ execution.data_source }} &middot; {{ execution.data_as_of.isoformat() if execution.data_as_of else 'N/A' }}</span></div>
+            </div>
+            <details class="execution-gates">
+              <summary>&#x6AA2;&#x67E5; {{ execution.gates|length }} &#x9805;&#x9032;&#x5834;&#x689D;&#x4EF6;{% if execution.failed_count %} &middot; {{ execution.failed_count }} &#x9805;&#x672A;&#x901A;&#x904E;{% endif %}</summary>
+              <ul class="execution-gate-list">
+                {% for gate in execution.gates %}
+                <li class="{% if gate.passed %}passed{% endif %}">
+                  <span class="gate-mark">{% if gate.passed %}&#x2713;{% else %}&#x2715;{% endif %}</span>
+                  <span class="gate-name">{% if gate.key == 'structure' %}&#x50F9;&#x683C;&#x7D50;&#x69CB;{% elif gate.key == 'market' %}&#x5E02;&#x5834;&#x8207;&#x76F8;&#x5C0D;&#x5F37;&#x5EA6;{% elif gate.key == 'group' %}&#x7522;&#x696D;&#x65CF;&#x7FA4;{% elif gate.key == 'portfolio' %}&#x7D44;&#x5408;&#x98A8;&#x96AA;{% elif gate.key == 'liquidity' %}&#x6D41;&#x52D5;&#x6027;{% elif gate.key == 'risk' %}&#x98A8;&#x96AA;&#x754C;&#x7DDA;{% elif gate.key == 'event' %}&#x4E8B;&#x4EF6;&#x98A8;&#x96AA;{% elif gate.key == 'quality' %}&#x8CC7;&#x6599;&#x54C1;&#x8CEA;{% else %}&#x9032;&#x5834;&#x7D00;&#x5F8B;{% endif %}</span>
+                  <span class="gate-detail">{{ gate.detail|zh_text }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </details>
+            {% if structure_chart %}
+            <details class="price-structure">
+              <summary>&#x67E5;&#x770B; 60 &#x65E5;&#x50F9;&#x91CF;&#x7D50;&#x69CB;</summary>
+              {{ structure_chart|safe }}
+              <div class="price-chart-legend"><span>&#x6536;&#x76E4;&#x50F9;</span><span class="sma20">20 &#x65E5;&#x7DDA;</span><span class="sma60">60 &#x65E5;&#x7DDA;</span><span class="pivot">&#x7A81;&#x7834;&#x4F4D;</span><span class="stop">&#x505C;&#x640D;</span><span class="adam">&#x4E9E;&#x7576;&#x53CD;&#x5C04;&#x60C5;&#x5883;&#xFF08;&#x4E0D;&#x8A08;&#x5206;&#xFF09;</span></div>
+            </details>
+            {% endif %}
+          </div>
           {% endif %}
 
           <details class="card-secondary position-details">
@@ -3964,6 +4680,34 @@
             {% if insights.trend %}<div class="insight-row trend trend-{{ insights.trend_tone }}"{% if insights.trend_title %} title="{{ insights.trend_title|zh_text }}"{% endif %}><span class="insight-label">趨勢</span><span class="insight-text">{{ insights.trend|join(' | ')|zh_text }}</span></div>{% endif %}
             {% if insights.rs %}<div class="insight-row rs trend-{{ insights.rs_tone }}"><span class="insight-label">相對強度</span><span class="insight-text">{{ insights.rs|join(' · ')|zh_text }}</span></div>{% endif %}
             {% if insights.risk %}<div class="insight-row risk"><span class="insight-label">風險</span><span class="insight-text">{{ insights.risk|join(' | ')|zh_text }}</span></div>{% endif %}
+            {% if insights.score or technical or right_side or insights.trend or insights.rs %}
+            <details class="decision-evidence">
+              <summary>&#x5206;&#x6790;&#x4F9D;&#x64DA;</summary>
+              <div class="decision-evidence-grid">
+                {% if insights.score %}
+                <div class="decision-evidence-row"><strong>&#x7B56;&#x7565;&#x8A55;&#x5206;</strong><span>{{ insights.score.score }}/100 &middot; {{ insights.score.status|zh_text }}</span></div>
+                {% if insights.score.reasons %}<div class="decision-evidence-row"><strong>&#x8A55;&#x5206;&#x4F9D;&#x64DA;</strong><span>{{ insights.score.reasons|join(' / ')|zh_text }}</span></div>{% endif %}
+                {% endif %}
+                {% if technical %}
+                <div class="decision-evidence-row"><strong>&#x6280;&#x8853;&#x7D50;&#x69CB;</strong><span>{{ technical.status|zh_text }}</span></div>
+                {% if technical.criteria %}<div class="decision-evidence-row"><strong>&#x7D50;&#x69CB;&#x4F9D;&#x64DA;</strong><span>{{ technical.criteria|join(' / ')|zh_text }}</span></div>{% endif %}
+                {% endif %}
+                {% if right_side %}
+                <div class="decision-evidence-row"><strong>&#x53F3;&#x5074;&#x6AA2;&#x6838;</strong><span>{{ right_side.ready_count }}/{{ right_side.check_count }} &middot; {{ right_side.status|zh_text }}</span></div>
+                <div class="decision-evidence-row">
+                  <strong>&#x6AA2;&#x6838;&#x7D30;&#x9805;</strong>
+                  <span>{% for check in right_side.checks %}{{ check.label|zh_text }}&#xFF1A;{{ check.status|zh_text }}{% if check.detail %} ({{ check.detail|zh_text }}){% endif %}{% if not loop.last %} / {% endif %}{% endfor %}</span>
+                </div>
+                {% endif %}
+                {% if insights.trend %}
+                <div class="decision-evidence-row"><strong>&#x8DA8;&#x52E2;</strong><span>{{ insights.trend|join(' / ')|zh_text }}</span></div>
+                {% endif %}
+                {% if insights.rs %}
+                <div class="decision-evidence-row"><strong>&#x76F8;&#x5C0D;&#x5F37;&#x5EA6;</strong><span>{{ insights.rs|join(' / ')|zh_text }}</span></div>
+                {% endif %}
+              </div>
+            </details>
+            {% endif %}
           </div>
           {% endif %}
 
@@ -4209,11 +4953,11 @@
                 <input id="revisit-{{ item.ticker.symbol }}" class="revisit-input" type="date" data-revisit="{{ item.ticker.symbol }}">
               </div>
               <div class="checklist" data-checklist="{{ item.ticker.symbol }}">
-                <label><input type="checkbox" value="earnings"> earnings reviewed</label>
-                <label><input type="checkbox" value="guidance"> guidance reviewed</label>
-                <label><input type="checkbox" value="valuation"> valuation reviewed</label>
-                <label><input type="checkbox" value="news"> news reviewed</label>
-                <label><input type="checkbox" value="thesis"> thesis updated</label>
+                <label><input type="checkbox" value="earnings"> 已檢視財報</label>
+                <label><input type="checkbox" value="guidance"> 已檢視財測</label>
+                <label><input type="checkbox" value="valuation"> 已檢視估值</label>
+                <label><input type="checkbox" value="news"> 已檢視新聞</label>
+                <label><input type="checkbox" value="thesis"> 已更新投資論點</label>
               </div>
             </div>
           </details>
@@ -4273,7 +5017,7 @@
     </section>
 
     <footer class="footer">
-      stock-daily-research | {{ report.report_date.isoformat() }} | <a href="#summary">回到頂部</a>
+      stock-daily-research | {{ report.report_date.isoformat() }} | <a href="#page-top">回到頂部</a>
       <div class="disclaimer" style="margin-top: 6px;">Personal research | Not investment advice</div>
     </footer>
   </main>
@@ -4317,6 +5061,7 @@
       if (!grid) return;
 
       var initialResearch = {{ research_payload|tojson }};
+      var portfolioRiskByMarket = {{ portfolio_risk.market_summaries|tojson }};
       var cards = Array.prototype.slice.call(grid.querySelectorAll(".ticker-card"));
       var search = document.getElementById("quick-search");
       var focusFilter = document.getElementById("focus-filter");
@@ -4347,6 +5092,7 @@
       // Expose the server-rendered research state so the "Save to DB" block can
       // fall back to it for tickers/fields not edited in this session.
       window.__serverResearch = tickerState;
+      window.__serverTradeJournal = initialResearch.trades || [];
       var pinned = readJson("stock-daily-draft-pins", Object.keys(tickerState).filter(function (sym) { return !!tickerState[sym].pinned; }));
       var tags = readJson("stock-daily-draft-tags", mapState("tag"));
       var thesis = readJson("stock-daily-draft-thesis", mapState("thesis_state"));
@@ -4881,6 +5627,38 @@
             '</a></li>';
         }).join("");
       }
+      function updatePortfolioRisk() {
+        var section = document.getElementById("portfolio-heat");
+        if (!section) return;
+        var summary = portfolioRiskByMarket[activeMarket];
+        section.classList.toggle("is-market-empty", !summary);
+        if (!summary) return;
+
+        var baseCurrency = summary.base_currency || "TWD";
+        var complete = summary.complete !== false;
+        function setText(id, value) {
+          var node = document.getElementById(id);
+          if (node) node.textContent = value;
+        }
+        function riskValue(key) {
+          if (!complete) return "N/A";
+          var value = Number(summary[key] || 0);
+          return baseCurrency + " " + Math.round(value).toLocaleString("en-US");
+        }
+
+        setText("portfolio-heat-source", complete
+          ? labelsForMarket(activeMarket) + "\u98a8\u96aa\u5df2\u63db\u7b97\u70ba " + baseCurrency
+          : labelsForMarket(activeMarket) + "\u90e8\u5206\u532f\u7387\u672a\u53d6\u5f97\uff0c\u4e0d\u52a0\u7e3d\u6df7\u7b97");
+        setText("portfolio-risk-open", riskValue("open_risk"));
+        setText("portfolio-risk-pending", riskValue("pending_risk"));
+        setText("portfolio-risk-stress", riskValue("stress_risk"));
+        setText("portfolio-risk-missing", String(summary.missing_stops || 0));
+        setText("portfolio-risk-pending-detail", String(summary.planned_count || 0) + " \u7b46\u898f\u5283\u4e2d\u4ea4\u6613");
+        var riskPct = summary.risk_pct;
+        setText("portfolio-risk-open-detail", riskPct == null
+          ? "\u4f9d\u6709\u6548\u505c\u640d\u8a08\u7b97"
+          : Number(riskPct).toFixed(2) + "% \u5360\u5df2\u63db\u7b97\u5e02\u503c");
+      }
       function updateMarketWorkspace() {
         var selectedCards = cards.filter(marketMatch);
         var marketNames = {
@@ -4918,7 +5696,8 @@
           "#overextended li", "#rule-alerts li", "#earnings .earnings-pill",
           "#news-clusters .cluster-item", "#news .news-item", "#valuation-rows tr",
           "#changes .change-item", "#changes-30d .change-item", "#rule-alerts .alert-item",
-          "#data-quality tbody tr", "#book-today .morning-tile", "#book-impact tbody tr"
+          "#data-quality tbody tr", "#book-today .morning-tile", "#book-impact tbody tr",
+          "#right-side-validation tbody tr[data-market]", ".portfolio-risk-item[data-market]"
         ].join(",");
         Array.prototype.forEach.call(document.querySelectorAll(selectors), function (element) {
           var markets = marketsForElement(element);
@@ -4963,6 +5742,8 @@
 
         var myBook = document.getElementById("my-book");
         if (myBook) myBook.classList.toggle("is-market-hidden", !hasHoldings || !allHoldingsMatch);
+
+        updatePortfolioRisk();
 
         updateMarketSummary(selectedCards, values);
 
@@ -5947,9 +6728,10 @@
 
       function exportResearchState() {
         var payload = {
-          version: 1,
+          version: 2,
           exported_at: new Date().toISOString(),
-          tickers: {}
+          tickers: {},
+          trades: readJson("stock-daily-trade-journal", initialResearch.trades || [])
         };
         cards.forEach(function (card) {
           var sym = symbol(card);
@@ -6407,6 +7189,445 @@
       window.i18n = { t: t, setLanguage: setLanguage, currentLang: function () { return currentLang; } };
     })();
 
+    // Trade journal: local-first editing, included in JSON export and API save.
+    (function () {
+      var form = document.getElementById("trade-journal-form");
+      var body = document.getElementById("trade-journal-rows");
+      if (!form || !body) return;
+
+      var STORAGE_KEY = "stock-daily-trade-journal";
+      var serverTrades = Array.isArray(window.__serverTradeJournal) ? window.__serverTradeJournal : [];
+      var trades = serverTrades.slice();
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (raw != null) {
+          var parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) trades = parsed;
+        }
+      } catch (e) {}
+      window.__tradeJournal = trades;
+
+      var fields = {
+        initialRisk: document.getElementById("trade-initial-risk"),
+        id: document.getElementById("trade-id"),
+        ticker: document.getElementById("trade-ticker"),
+        status: document.getElementById("trade-status"),
+        entryDate: document.getElementById("trade-entry-date"),
+        currentStop: document.getElementById("trade-current-stop"),
+        entryPrice: document.getElementById("trade-entry-price"),
+        shares: document.getElementById("trade-shares"),
+        stop: document.getElementById("trade-stop"),
+        fxRate: document.getElementById("trade-fx-rate"),
+        exitDate: document.getElementById("trade-exit-date"),
+        exitPrice: document.getElementById("trade-exit-price"),
+        fees: document.getElementById("trade-fees"),
+        setup: document.getElementById("trade-setup"),
+        note: document.getElementById("trade-note")
+      };
+      var fillRows = document.getElementById("trade-fill-rows");
+      var addFillBtn = document.getElementById("trade-add-fill");
+      var clearBtn = document.getElementById("trade-form-clear");
+      var formTitle = document.getElementById("trade-form-title");
+      var reportDate = "{{ report.report_date.isoformat() }}";
+      var activeMarket = "us";
+      try { activeMarket = localStorage.getItem("stock-daily-market-tab") || "us"; } catch (e) {}
+
+      function marketGroup(value) {
+        if (value === "twse" || value === "tpex" || value === "taiwan") return "taiwan";
+        return value || "us";
+      }
+      function number(value) {
+        var parsed = parseFloat(value);
+        return isNaN(parsed) ? null : parsed;
+      }
+      function escapeHtml(value) {
+        return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char];
+        });
+      }
+      function money(value) {
+        return value == null || isNaN(value) ? "N/A" : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+      function signed(value, suffix) {
+        if (value == null || isNaN(value)) return "N/A";
+        return (value >= 0 ? "+" : "") + Number(value).toFixed(2) + (suffix || "");
+      }
+      function cardFor(symbol) {
+        return document.querySelector('.ticker-card[data-symbol="' + CSS.escape(symbol) + '"]');
+      }
+      function normalizeFills(trade) {
+        var raw = Array.isArray(trade.fills) ? trade.fills : [];
+        var valid = raw.filter(function (fill) {
+          return fill && (fill.side === "buy" || fill.side === "sell") &&
+            number(fill.price) > 0 && number(fill.shares) > 0;
+        }).map(function (fill, index) {
+          return {
+            fill_id: fill.fill_id || ((trade.trade_id || "trade") + "-fill-" + index),
+            side: fill.side,
+            fill_date: fill.fill_date || "",
+            price: number(fill.price),
+            shares: number(fill.shares),
+            fees: number(fill.fees) || 0,
+            note: fill.note || ""
+          };
+        });
+        if (valid.length || trade.status === "planned") return valid;
+        var legacy = [];
+        if (number(trade.entry_price) > 0 && number(trade.shares) > 0) {
+          legacy.push({
+            fill_id: (trade.trade_id || "trade") + "-entry",
+            side: "buy",
+            fill_date: trade.entry_date || "",
+            price: number(trade.entry_price),
+            shares: number(trade.shares),
+            fees: 0,
+            note: ""
+          });
+        }
+        if (number(trade.exit_price) > 0 && number(trade.shares) > 0) {
+          legacy.push({
+            fill_id: (trade.trade_id || "trade") + "-exit",
+            side: "sell",
+            fill_date: trade.exit_date || "",
+            price: number(trade.exit_price),
+            shares: number(trade.shares),
+            fees: 0,
+            note: ""
+          });
+        }
+        return legacy;
+      }
+      function fillAverage(fills) {
+        var quantity = fills.reduce(function (sum, fill) { return sum + number(fill.shares); }, 0);
+        if (!quantity) return null;
+        return fills.reduce(function (sum, fill) {
+          return sum + number(fill.price) * number(fill.shares);
+        }, 0) / quantity;
+      }
+      function addFillRow(fill) {
+        if (!fillRows) return;
+        fill = fill || {};
+        var row = document.createElement("div");
+        row.className = "trade-fill-row";
+        row.dataset.fillId = fill.fill_id || ("fill-" + Date.now().toString(36) + "-" + fillRows.children.length);
+        row.innerHTML =
+          '<select data-fill-side aria-label="\u6210\u4ea4\u65b9\u5411"><option value="buy">\u8cb7\u9032</option><option value="sell">\u8ce3\u51fa</option></select>' +
+          '<input data-fill-date type="date" required aria-label="\u6210\u4ea4\u65e5\u671f">' +
+          '<input data-fill-price type="number" min="0" step="any" inputmode="decimal" required placeholder="\u50f9\u683c" aria-label="\u6210\u4ea4\u50f9">' +
+          '<input data-fill-shares type="number" min="0" step="any" inputmode="decimal" required placeholder="\u6578\u91cf" aria-label="\u6210\u4ea4\u6578\u91cf">' +
+          '<input data-fill-fees type="number" min="0" step="any" inputmode="decimal" value="0" placeholder="\u8cbb\u7528" aria-label="\u6210\u4ea4\u8cbb\u7528">' +
+          '<button type="button" class="icon-button" data-fill-remove title="\u79fb\u9664\u9019\u7b46\u6210\u4ea4" aria-label="\u79fb\u9664\u9019\u7b46\u6210\u4ea4">&times;</button>';
+        row.querySelector("[data-fill-side]").value = fill.side === "sell" ? "sell" : "buy";
+        row.querySelector("[data-fill-date]").value = fill.fill_date || reportDate;
+        row.querySelector("[data-fill-price]").value = fill.price == null ? "" : fill.price;
+        row.querySelector("[data-fill-shares]").value = fill.shares == null ? "" : fill.shares;
+        row.querySelector("[data-fill-fees]").value = fill.fees == null ? 0 : fill.fees;
+        fillRows.appendChild(row);
+      }
+      function readFillRows() {
+        if (!fillRows) return [];
+        return Array.prototype.map.call(fillRows.querySelectorAll(".trade-fill-row"), function (row) {
+          return {
+            fill_id: row.dataset.fillId,
+            side: row.querySelector("[data-fill-side]").value,
+            fill_date: row.querySelector("[data-fill-date]").value,
+            price: number(row.querySelector("[data-fill-price]").value),
+            shares: number(row.querySelector("[data-fill-shares]").value),
+            fees: number(row.querySelector("[data-fill-fees]").value) || 0,
+            note: ""
+          };
+        }).filter(function (fill) {
+          return fill.fill_date && fill.price != null && fill.price > 0 &&
+            fill.shares != null && fill.shares > 0;
+        });
+      }
+      function markLocalDraft() {
+        var status = document.getElementById("save-status");
+        if (!status) return;
+        status.textContent = "\u672c\u6a5f\u8349\u7a3f\uff0c\u5c1a\u672a\u540c\u6b65";
+        status.className = "save-status is-local";
+      }
+      function metrics(trade) {
+        var fills = normalizeFills(trade);
+        var buys = fills.filter(function (fill) { return fill.side === "buy"; });
+        var sells = fills.filter(function (fill) { return fill.side === "sell"; });
+        var entry = fillAverage(buys);
+        var bought = buys.reduce(function (sum, fill) { return sum + number(fill.shares); }, 0);
+        var rawSold = sells.reduce(function (sum, fill) { return sum + number(fill.shares); }, 0);
+        var sold = Math.min(bought, rawSold);
+        var remaining = Math.max(0, bought - sold);
+        var exit = fillAverage(sells);
+        var planned = trade.status === "planned";
+        if (planned) {
+          entry = number(trade.entry_price);
+          bought = number(trade.shares) || 0;
+          remaining = 0;
+        }
+        var stop = number(trade.initial_stop);
+        var currentStop = number(trade.current_stop);
+        if (currentStop == null) currentStop = stop;
+        var risk = number(trade.initial_risk);
+        if (risk == null && entry != null && stop != null && bought > 0 && entry > stop) {
+          if (buys.length) {
+            risk = buys.reduce(function (sum, fill) {
+              return sum + Math.max(0, number(fill.price) - stop) * number(fill.shares);
+            }, 0);
+          } else {
+            risk = (entry - stop) * bought;
+          }
+        }
+        var card = cardFor(trade.ticker);
+        var mark = number(card && card.dataset.lastClose);
+        var closed = !planned && (trade.status === "closed" || (bought > 0 && remaining <= bought * 1e-8));
+        if (closed && exit != null) mark = exit;
+        var realized = entry != null && exit != null ? (exit - entry) * sold : 0;
+        var unrealized = entry != null && mark != null ? (mark - entry) * remaining : 0;
+        var hasValue = !planned && entry != null && (sold > 0 || (remaining > 0 && mark != null));
+        var fees = (number(trade.fees) || 0) + fills.reduce(function (sum, fill) {
+          return sum + (number(fill.fees) || 0);
+        }, 0);
+        var net = hasValue ? realized + unrealized - fees : null;
+        var currentRisk = !planned && mark != null && currentStop != null && remaining > 0
+          ? Math.max(0, mark - currentStop) * remaining
+          : planned ? 0 : null;
+        var dates = buys.map(function (fill) { return fill.fill_date; }).filter(Boolean).sort();
+        return {
+          planned: planned,
+          closed: closed,
+          entry: entry,
+          exit: exit,
+          entryDate: dates[0] || trade.entry_date || "",
+          bought: bought,
+          sold: sold,
+          remaining: remaining,
+          fillCount: fills.length,
+          currentStop: currentStop,
+          currentRisk: currentRisk,
+          risk: risk,
+          net: net,
+          netBase: net == null ? null : net * (number(trade.fx_rate_to_base) || 1),
+          r: risk && net != null ? net / risk : null
+        };
+      }
+      function persist() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trades)); } catch (e) {}
+        window.__tradeJournal = trades;
+        markLocalDraft();
+      }
+      function render() {
+        var visibleTrades = trades.filter(function (trade) { return trade && trade.status !== "cancelled"; });
+        if (!visibleTrades.length) {
+          body.innerHTML = '<tr class="journal-empty-row"><td colspan="9" class="journal-empty">\u5c1a\u7121\u4ea4\u6613\u8a18\u9304</td></tr>';
+        } else {
+          body.innerHTML = visibleTrades.map(function (trade) {
+            var result = metrics(trade);
+            var market = marketGroup(trade.market);
+            var hidden = market !== activeMarket ? " is-market-hidden" : "";
+            var statusLabel = result.planned ? "\u898f\u5283\u4e2d" : result.closed ? "\u5df2\u5b8c\u6210" : "\u9032\u884c\u4e2d";
+            var statusClass = result.planned ? "planned" : result.closed ? "closed" : "open";
+            var plClass = result.net == null ? "" : result.net >= 0 ? " change-pos" : " change-neg";
+            var note = trade.setup || trade.note || "";
+            var quantity = result.planned ? number(trade.shares) : result.remaining;
+            var fillMeta = result.fillCount
+              ? '<div class="muted">' + result.fillCount + ' \u7b46\u6210\u4ea4</div>'
+              : result.planned ? '<div class="muted">\u5c1a\u672a\u6210\u4ea4</div>' : "";
+            var riskMeta = result.risk != null
+              ? '<div class="muted">\u521d\u59cb 1R ' + escapeHtml(trade.currency || "") + ' ' + money(result.risk) + '</div>'
+              : "";
+            if (result.currentRisk != null && !result.planned) {
+              riskMeta += '<div class="muted">\u76ee\u524d\u98a8\u96aa ' + money(result.currentRisk) + '</div>';
+            }
+            return '<tr class="' + hidden.trim() + '" data-trade-id="' + escapeHtml(trade.trade_id) + '" data-symbol="' + escapeHtml(trade.ticker) + '" data-market="' + escapeHtml(trade.market) + '">' +
+              '<td class="symbol-cell"><a href="#ticker-' + escapeHtml(String(trade.ticker).toLowerCase()) + '">' + escapeHtml(trade.ticker) + '</a><div class="journal-note">' + escapeHtml(note) + '</div></td>' +
+              '<td><span class="journal-status ' + statusClass + '">' + statusLabel + '</span></td>' +
+              '<td>' + escapeHtml(result.entryDate || "N/A") + '<div class="muted">' + escapeHtml(trade.currency || "") + ' ' + money(result.entry) + '</div></td>' +
+              '<td class="num">' + money(quantity) + fillMeta + '</td>' +
+              '<td class="num">' + money(result.currentStop) + riskMeta + '</td>' +
+              '<td class="num change' + plClass + '">' + (result.net == null ? "N/A" : escapeHtml(trade.currency || "") + ' ' + signed(result.net)) + '</td>' +
+              '<td class="num change' + (result.r == null ? "" : result.r >= 0 ? " change-pos" : " change-neg") + '">' + signed(result.r, "R") + '</td>' +
+              '<td class="num muted">\u7522\u6a94\u5f8c\u66f4\u65b0</td>' +
+              '<td><button type="button" class="icon-button" data-trade-edit="' + escapeHtml(trade.trade_id) + '" title="\u7de8\u8f2f\u4ea4\u6613" aria-label="\u7de8\u8f2f\u4ea4\u6613">&#x270E;</button>' +
+              '<button type="button" class="icon-button" data-trade-cancel="' + escapeHtml(trade.trade_id) + '" title="\u79fb\u9664\u4ea4\u6613" aria-label="\u79fb\u9664\u4ea4\u6613">&#x2715;</button></td></tr>';
+          }).join("");
+        }
+        var results = visibleTrades.map(function (trade) { return metrics(trade); });
+        var planned = results.filter(function (result) { return result.planned; }).length;
+        var open = results.filter(function (result) { return !result.planned && !result.closed; }).length;
+        var closed = results.filter(function (result) { return result.closed; }).length;
+        var plannedNode = document.querySelector('[data-journal-stat="planned"]');
+        var openNode = document.querySelector('[data-journal-stat="open"]');
+        var closedNode = document.querySelector('[data-journal-stat="closed"]');
+        if (plannedNode) plannedNode.textContent = planned;
+        if (openNode) openNode.textContent = open;
+        if (closedNode) closedNode.textContent = closed;
+      }
+      function resetForm() {
+        form.reset();
+        fields.id.value = "";
+        fields.initialRisk.value = "";
+        fields.entryDate.value = reportDate;
+        fields.fees.value = "0";
+        fields.fxRate.value = "1";
+        fields.status.value = "planned";
+        fields.currentStop.value = "";
+        fields.entryPrice.setCustomValidity("");
+        fields.shares.setCustomValidity("");
+        fields.stop.setCustomValidity("");
+        fields.exitPrice.setCustomValidity("");
+        if (fillRows) fillRows.innerHTML = "";
+        if (formTitle) formTitle.textContent = "\u65b0\u589e\u4ea4\u6613";
+        filterTickerOptions(activeMarket);
+      }
+      function filterTickerOptions(market) {
+        var first = null;
+        Array.prototype.forEach.call(fields.ticker.options, function (option) {
+          var matches = marketGroup(option.dataset.market) === market;
+          option.hidden = !matches;
+          option.disabled = !matches;
+          if (matches && !first) first = option;
+        });
+        if (!fields.ticker.selectedOptions.length || fields.ticker.selectedOptions[0].disabled) {
+          if (first) fields.ticker.value = first.value;
+        }
+      }
+      function editTrade(id) {
+        var trade = trades.find(function (row) { return row.trade_id === id; });
+        if (!trade) return;
+        fields.id.value = trade.trade_id || "";
+        fields.initialRisk.value = trade.initial_risk == null ? "" : trade.initial_risk;
+        fields.ticker.value = trade.ticker || "";
+        fields.status.value = ["planned", "open", "closed"].indexOf(trade.status) >= 0 ? trade.status : "open";
+        fields.entryDate.value = trade.entry_date || "";
+        fields.entryPrice.value = trade.entry_price == null ? "" : trade.entry_price;
+        fields.shares.value = trade.shares == null ? "" : trade.shares;
+        fields.stop.value = trade.initial_stop == null ? "" : trade.initial_stop;
+        fields.currentStop.value = trade.current_stop == null ? "" : trade.current_stop;
+        fields.exitDate.value = trade.exit_date || "";
+        fields.exitPrice.value = trade.exit_price == null ? "" : trade.exit_price;
+        fields.fees.value = trade.fees == null ? 0 : trade.fees;
+        fields.fxRate.value = trade.fx_rate_to_base == null ? 1 : trade.fx_rate_to_base;
+        fields.setup.value = trade.setup || "";
+        fields.note.value = trade.note || "";
+        if (fillRows) {
+          fillRows.innerHTML = "";
+          normalizeFills(trade).forEach(addFillRow);
+        }
+        if (formTitle) formTitle.textContent = "\u7de8\u8f2f " + trade.ticker;
+        form.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        fields.entryPrice.setCustomValidity("");
+        fields.shares.setCustomValidity("");
+        fields.stop.setCustomValidity("");
+        fields.exitPrice.setCustomValidity("");
+
+        var fills = readFillRows();
+        var buys = fills.filter(function (fill) { return fill.side === "buy"; });
+        var sells = fills.filter(function (fill) { return fill.side === "sell"; });
+        var entry = buys.length ? fillAverage(buys) : number(fields.entryPrice.value);
+        var shares = buys.length
+          ? buys.reduce(function (sum, fill) { return sum + number(fill.shares); }, 0)
+          : number(fields.shares.value);
+        var exit = sells.length ? fillAverage(sells) : number(fields.exitPrice.value);
+        var soldShares = sells.reduce(function (sum, fill) { return sum + number(fill.shares); }, 0);
+        var stop = number(fields.stop.value);
+        if (entry == null || entry <= 0) {
+          fields.entryPrice.setCustomValidity("\u8acb\u586b\u9032\u5834\u50f9\uff0c\u6216\u65b0\u589e\u4e00\u7b46\u8cb7\u9032\u6210\u4ea4");
+        }
+        if (shares == null || shares <= 0) {
+          fields.shares.setCustomValidity("\u8acb\u586b\u4ea4\u6613\u6578\u91cf\uff0c\u6216\u65b0\u589e\u4e00\u7b46\u8cb7\u9032\u6210\u4ea4");
+        }
+        if (stop == null || (entry != null && stop >= entry)) {
+          fields.stop.setCustomValidity("\u521d\u59cb\u505c\u640d\u5fc5\u9808\u4f4e\u65bc\u9032\u5834\u50f9");
+        }
+        if (fields.status.value === "closed" && (exit == null || exit <= 0)) {
+          fields.exitPrice.setCustomValidity("\u5df2\u5b8c\u6210\u4ea4\u6613\u9700\u8981\u51fa\u5834\u50f9");
+        }
+        if (!form.reportValidity()) return;
+
+        var option = fields.ticker.selectedOptions[0];
+        var id = fields.id.value || ("trade-" + Date.now().toString(36));
+        var index = trades.findIndex(function (row) { return row.trade_id === id; });
+        var existing = index >= 0 ? trades[index] : {};
+        var buyDates = buys.map(function (fill) { return fill.fill_date; }).filter(Boolean).sort();
+        var sellDates = sells.map(function (fill) { return fill.fill_date; }).filter(Boolean).sort();
+        var entryDate = buyDates[0] || fields.entryDate.value;
+        var exitDate = sellDates.length ? sellDates[sellDates.length - 1] : fields.exitDate.value;
+        var initialRisk = number(fields.initialRisk.value);
+        if (initialRisk == null && entry != null && stop != null && shares != null) {
+          initialRisk = buys.length
+            ? buys.reduce(function (sum, fill) {
+                return sum + Math.max(0, number(fill.price) - stop) * number(fill.shares);
+              }, 0)
+            : Math.max(0, entry - stop) * shares;
+        }
+        var status = fields.status.value;
+        if (fills.length && status === "planned") status = "open";
+        if (shares > 0 && soldShares >= shares) status = "closed";
+        var currentStop = number(fields.currentStop.value);
+        if (currentStop == null) currentStop = stop;
+        var fxRate = number(fields.fxRate.value);
+        if (fxRate == null || fxRate <= 0) fxRate = 1;
+        var trade = Object.assign({}, existing, {
+          trade_id: id,
+          ticker: fields.ticker.value,
+          market: option ? option.dataset.market || "us" : "us",
+          currency: option ? option.dataset.currency || "USD" : "USD",
+          status: status,
+          entry_date: entryDate,
+          entry_price: entry,
+          shares: shares,
+          initial_stop: stop,
+          current_stop: currentStop,
+          initial_risk: initialRisk,
+          exit_date: exitDate,
+          exit_price: exit,
+          fees: number(fields.fees.value) || 0,
+          fx_rate_to_base: fxRate,
+          fills: fills,
+          setup: fields.setup.value.trim(),
+          note: fields.note.value.trim(),
+          updated_at: new Date().toISOString()
+        });
+        if (index >= 0) trades[index] = trade; else trades.unshift(trade);
+        persist();
+        render();
+        resetForm();
+      });
+      body.addEventListener("click", function (event) {
+        var edit = event.target.closest("[data-trade-edit]");
+        if (edit) { editTrade(edit.dataset.tradeEdit); return; }
+        var cancel = event.target.closest("[data-trade-cancel]");
+        if (!cancel || !window.confirm("\u79fb\u9664\u9019\u7b46\u4ea4\u6613\u8a18\u9304\uff1f")) return;
+        var trade = trades.find(function (row) { return row.trade_id === cancel.dataset.tradeCancel; });
+        if (trade) {
+          trade.status = "cancelled";
+          trade.updated_at = new Date().toISOString();
+          persist();
+          render();
+        }
+      });
+      if (addFillBtn) {
+        addFillBtn.addEventListener("click", function () { addFillRow(); });
+      }
+      if (fillRows) {
+        fillRows.addEventListener("click", function (event) {
+          var remove = event.target.closest("[data-fill-remove]");
+          if (remove) remove.closest(".trade-fill-row").remove();
+        });
+      }
+      if (clearBtn) clearBtn.addEventListener("click", resetForm);
+      document.addEventListener("stock-daily:market", function (event) {
+        activeMarket = marketGroup((event.detail || {}).market);
+        filterTickerOptions(activeMarket);
+        render();
+      });
+
+      resetForm();
+      render();
+    })();
     // Save to database functionality
     (function () {
       var saveBtn = document.getElementById("save-to-db");
@@ -6444,6 +7665,8 @@
         var earningsQuestions = readDraft("stock-daily-draft-earnings-questions", {});
         var positions = readDraft("stock-daily-draft-positions", {});
         var postEarnings = readDraft("stock-daily-draft-post-earnings", {});
+        var tradesDraft = readDraft("stock-daily-trade-journal", null);
+        var trades = tradesDraft !== null ? tradesDraft : ((window.__serverTradeJournal) || []);
 
         // Per-ticker draft value if present, else the server value. Uses key
         // presence (not truthiness) so an intentional empty edit is preserved.
@@ -6490,7 +7713,7 @@
         });
 
         // Send to API
-        var payload = { research_state: researchState };
+        var payload = { research_state: { version: 2, tickers: researchState, trades: trades } };
 
         fetch("http://127.0.0.1:8765/api/save-research-state", {
           method: "POST",
@@ -6502,18 +7725,14 @@
             throw new Error("API response: " + response.status);
           })
           .then(function (data) {
-            saveStatus.textContent = data.message || "已成功儲存到資料庫";
+            saveStatus.textContent = data.message || "已同步資料庫";
             saveStatus.className = "save-status is-ok";
-            setTimeout(function () {
-              saveStatus.textContent = "";
-              saveStatus.className = "save-status";
-              saveBtn.disabled = false;
-            }, 3000);
+            saveBtn.disabled = false;
           })
           .catch(function (error) {
             console.error("Save error:", error);
-            saveStatus.textContent = "儲存失敗：" + error.message + "（請確認 API 服務正在執行）";
-            saveStatus.className = "save-status is-error";
+            saveStatus.textContent = "僅儲存於本機，資料庫未同步：" + error.message;
+            saveStatus.className = "save-status is-local";
             saveBtn.disabled = false;
           });
       });

@@ -321,6 +321,7 @@ def test_load_config_reads_positive_risk_budget_by_currency(tmp_path: Path) -> N
         """
 settings:
   portfolio:
+    base_currency: usd
     risk_budget_by_currency:
       usd: 125
       TWD: 3000
@@ -333,3 +334,4 @@ tickers:
     portfolio = load_config(config_path).settings.portfolio
 
     assert portfolio.risk_budget_by_currency == {"USD": 125.0, "TWD": 3000.0}
+    assert portfolio.base_currency == "USD"

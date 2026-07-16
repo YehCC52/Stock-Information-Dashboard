@@ -97,6 +97,8 @@ def test_render_html_report_includes_visual_sections() -> None:
     output = render_html_report(_sample_report())
 
     assert "<!doctype html>" in output
+    assert '<main id="page-top" class="page">' in output
+    assert 'href="#page-top"' in output
     assert "盤勢" in output
     assert "盤前" in output
     assert "主要風險" in output
@@ -117,7 +119,7 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "資料品質" in output
     assert "全域警示" in output
     assert "盤前公布財報" in output
-    assert "FOMC Rate Decision" in output
+    assert "FOMC 利率決策" in output
     assert "估值快照" in output
     assert "TTM EPS" in output
     assert "FY1 EPS 修正 30D" in output
@@ -131,7 +133,11 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "5.26T" in output
     assert "持股與損益" in output
     assert "上次報告後的變化" in output
-    assert "Generated: 2026-04-28 15:00 Taiwan Time (UTC+8)" in output
+    assert "產生時間：2026-04-28 15:00 台灣時間 (UTC+8)" in output
+    assert "已檢視財報" in output
+    assert "已投入比重" in output
+    assert "earnings reviewed" not in output
+    assert "Invested weight" not in output
     assert "2026-04-28 15:00 TWN / UTC+8" in output
     assert "行情時間：2026-04-28 11:00 UTC" in output
     assert "資金配置清單" in output
@@ -850,6 +856,38 @@ def _score_item(metrics: dict) -> TickerReport:
     )
 
 
+def test_zh_text_translates_composite_trend_and_relative_dates() -> None:
+    from stock_daily_research.report import zh_text
+
+    translated = zh_text("Earnings in 7d | Above 60D / 120D, below 20D")
+
+    assert translated == "\u8ca1\u5831 7 \u5929\u5f8c | \u7ad9\u4e0a 60D / 120D\uff0c\u4f4e\u65bc 20D"
+
+
+def test_zh_text_translates_decision_workflow_phrases() -> None:
+    from stock_daily_research.report import zh_text
+
+    assert zh_text("event risk | no action before earnings review") == (
+        "\u4e8b\u4ef6\u98a8\u96aa | \u8ca1\u5831\u6aa2\u8996\u524d\u66ab\u505c\u64cd\u4f5c"
+    )
+    assert zh_text("Review only before event") == "\u4e8b\u4ef6\u524d\u50c5\u6aa2\u8996\uff0c\u4e0d\u64cd\u4f5c"
+    assert zh_text("less stretched") == "\u56de\u6a94\u5e45\u5ea6\u8f03\u6eab\u548c"
+    assert zh_text("event window") == "\u4e8b\u4ef6\u7a97\u53e3"
+
+def test_zh_text_keeps_alert_phrases_coherent() -> None:
+    from stock_daily_research.report import zh_text
+
+    assert zh_text("8 trusted headline(s), 2 top-tier.") == "8 則可信新聞，2 則一級新聞。"
+    assert zh_text("FY1 EPS revision +15.8% over 30D.") == "FY1 EPS 預估 30 日修正 +15.8%。"
+    assert zh_text("6 headline(s); revisit thesis before chasing.") == "6 則新聞；追價前先重新檢查投資論點。"
+    translated = zh_text(
+        "RSI 14 70, -0.37% from 52W high; avoid chasing without a fresh catalyst."
+    )
+    assert translated == "RSI 14 70, 距 52 週高點 -0.37%；沒有新催化時避免追價。"
+    assert "修正ision" not in translated
+    assert "新聞(s)" not in translated
+
+
 def test_technical_playbook_classifies_breakout_pullback_extended_and_weakening() -> None:
     from stock_daily_research.report import technical_playbook
 
@@ -910,6 +948,224 @@ def test_render_html_report_includes_technical_playbook() -> None:
     assert 'class="insight-row technical tech-up"' in output
     assert 'data-technical-priority="5"' in output
     assert 'class="technical-breakdown"' in output
+
+
+def _framework_item(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    volumes: list[float],
+    **overrides: object,
+) -> TickerReport:
+    count = len(closes)
+    metrics: dict[str, object] = {
+        "last_close": closes[-1],
+        "previous_close": closes[-2],
+        "sma_20": sum(closes[-20:]) / min(20, count),
+        "sma_60": closes[-1],
+        "sma_120": closes[-1],
+        "sma_20_slope_5d": 0.0,
+        "return_20d": (closes[-1] - closes[0]) / closes[0] * 100.0,
+        "rsi_14": 55.0,
+        "fifty_two_week_high": max(highs) * 1.1,
+        "chart_dates_60": [f"2026-06-{index + 1:02d}" for index in range(count)],
+        "chart_close_60": closes,
+        "chart_high_60": highs,
+        "chart_low_60": lows,
+        "chart_volume_60": volumes,
+        "chart_sma20_60": [sum(closes[max(0, index - 19):index + 1]) / min(20, index + 1) for index in range(count)],
+        "chart_sma60_60": [sum(closes[:index + 1]) / (index + 1) for index in range(count)],
+    }
+    metrics.update(overrides)
+    return _score_item(metrics)
+
+
+def _demand_breakout_item() -> TickerReport:
+    closes = [90.0 + index * 0.5 for index in range(20)] + [103.0]
+    highs = [value + 1.0 for value in closes[:-1]] + [104.0]
+    lows = [value - 1.0 for value in closes[:-1]] + [99.0]
+    volumes = [100.0] * 20 + [200.0]
+    return _framework_item(
+        closes,
+        highs,
+        lows,
+        volumes,
+        sma_20=100.0,
+        sma_60=95.0,
+        sma_120=90.0,
+        sma_20_slope_5d=1.0,
+        prior_20d_high=100.5,
+        prior_20d_low=89.0,
+        breakout_days_ago=0.0,
+        breakout_pivot=100.5,
+        breakout_hold_pct=2.49,
+        breakout_volume_vs_20d=2.0,
+    )
+
+
+def test_volume_price_analysis_confirms_demand_on_quality_breakout() -> None:
+    from stock_daily_research.report import volume_price_analysis
+
+    result = volume_price_analysis(_demand_breakout_item())
+
+    assert result is not None
+    assert result["status"] == "\u9700\u6c42\u78ba\u8a8d"
+    assert result["event"] == "\u653e\u91cf\u7a81\u7834"
+    assert result["score_adjustment"] == 5
+    assert result["breakout"] is True
+    assert result["close_location"] >= 0.65
+
+
+def test_supply_breakdown_penalizes_right_side_score() -> None:
+    from stock_daily_research.report import right_side_score, volume_price_analysis
+
+    closes = [110.0 - index * 0.4 for index in range(20)] + [98.0]
+    highs = [value + 1.0 for value in closes[:-1]] + [103.0]
+    lows = [value - 1.0 for value in closes[:-1]] + [97.0]
+    item = _framework_item(
+        closes,
+        highs,
+        lows,
+        [100.0] * 20 + [220.0],
+        sma_20=102.0,
+        sma_60=106.0,
+        sma_120=110.0,
+        sma_20_slope_5d=-1.0,
+        fy1_eps_revision_30d=0.0,
+    )
+
+    vpa = volume_price_analysis(item)
+    score = right_side_score(item)
+
+    assert vpa is not None
+    assert vpa["status"] == "\u4f9b\u7d66\u78ba\u8a8d"
+    assert vpa["score_adjustment"] == -5
+    assert score is not None
+    assert any(reason.startswith("-5 VPA") for reason in score["reasons"])
+    assert not any(reason.startswith("+5 volume") for reason in score["reasons"])
+
+
+def test_wyckoff_spring_remains_a_candidate_until_tested() -> None:
+    from stock_daily_research.report import trading_framework_analysis
+
+    item = _framework_item(
+        [100.0] * 20 + [100.5],
+        [102.0] * 21,
+        [98.0] * 20 + [96.0],
+        [100.0] * 20 + [120.0],
+        sma_20=100.0,
+        sma_60=100.0,
+        sma_120=100.0,
+        sma_20_slope_5d=0.0,
+    )
+
+    result = trading_framework_analysis(item)
+
+    assert result is not None
+    assert result["wyckoff"]["event"] == "Spring \u5047\u8dcc\u7834"
+    assert result["wyckoff"]["phase"] == "\u5438\u7c4c\u5019\u9078"
+    assert result["wyckoff"]["candidate"] is True
+    assert result["operator"]["status"] == "\u7b49\u5f85\u6e2c\u8a66"
+
+
+def test_adam_reflection_is_visible_but_not_scored() -> None:
+    from stock_daily_research.report import (
+        adam_reflection_scenario,
+        price_structure_chart,
+        right_side_score,
+    )
+
+    item = _demand_breakout_item()
+    scenario = adam_reflection_scenario(item)
+    score = right_side_score(item)
+    chart = price_structure_chart(item)
+
+    assert scenario is not None
+    assert scenario["periods"] == 5
+    assert scenario["projected_end"] > item.valuation.metrics["last_close"]
+    assert "\u4e0d\u7d0d\u5165\u53f3\u5074\u5206\u6578" in scenario["note"]
+    assert score is not None
+    assert all("Adam" not in reason for reason in score["reasons"])
+    assert 'class="price-line-adam"' in chart
+    assert 'class="price-chart-scenario-divider"' in chart
+
+
+def test_render_html_report_includes_integrated_trading_framework() -> None:
+    item = _demand_breakout_item()
+    report = DailyReport(
+        report_date=date(2026, 6, 21),
+        generated_at=datetime(2026, 6, 21, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    output = render_html_report(report)
+
+    assert 'class="market-reading reading-up"' in output
+    assert 'class="framework-evidence-grid"' in output
+    assert "\u9700\u6c42\u78ba\u8a8d" in output
+    assert "SOS \u5f37\u52e2\u8a0a\u865f" in output
+    assert "\u4e9e\u7576\u53cd\u5c04\u60c5\u5883" in output
+
+
+def test_morning_actions_surfaces_confirmed_demand_structure() -> None:
+    from stock_daily_research.report import morning_actions
+
+    report = DailyReport(
+        report_date=date(2026, 6, 21),
+        generated_at=datetime(2026, 6, 21, tzinfo=timezone.utc),
+        ticker_reports=[_demand_breakout_item()],
+    )
+
+    actions = morning_actions(report)
+
+    framework_action = next(
+        action for action in actions if action["label"] == "Demand confirmed"
+    )
+    assert framework_action["display_label"] == "\u91cf\u50f9\u78ba\u8a8d"
+    assert "SOS \u5f37\u52e2\u8a0a\u865f" in framework_action["display_headline"]
+    assert framework_action["tone"] == "good"
+
+
+def test_price_regime_reset_suspends_signals_and_renders_rebuild_state() -> None:
+    from stock_daily_research.report import (
+        price_regime_status,
+        right_side_check,
+        right_side_execution_plan,
+        right_side_score,
+    )
+
+    closes = [11.5 + index * 0.1 for index in range(8)]
+    item = _score_item({
+        "last_close": closes[-1],
+        "previous_close": closes[-2],
+        "technical_history_version": 2,
+        "price_regime_change_date": "2026-06-29",
+        "price_regime_change_pct": -95.7,
+        "price_history_sessions": len(closes),
+        "chart_dates_60": [f"2026-07-{index + 7:02d}" for index in range(8)],
+        "chart_close_60": closes,
+        "chart_high_60": [value + 0.2 for value in closes],
+        "chart_low_60": [value - 0.2 for value in closes],
+        "chart_volume_60": [1_000_000.0] * 8,
+        "chart_sma20_60": [None] * 8,
+        "chart_sma60_60": [None] * 8,
+    })
+    report = DailyReport(
+        report_date=date(2026, 7, 16),
+        generated_at=datetime(2026, 7, 16, tzinfo=timezone.utc),
+        ticker_reports=[item],
+    )
+
+    regime = price_regime_status(item)
+    output = render_html_report(report)
+
+    assert regime is not None
+    assert regime["remaining_sessions"] == 13
+    assert right_side_score(item) is None
+    assert right_side_check(item) is None
+    assert right_side_execution_plan(report, item) is None
+    assert 'data-price-regime-reset="1"' in output
+    assert "8/21" in output
 
 def test_right_side_check_marks_a_tight_base_with_held_breakout_as_ready() -> None:
     from stock_daily_research.report import right_side_check
@@ -1035,9 +1291,9 @@ def test_right_side_score_avoid_when_all_red() -> None:
     })
     result = right_side_score(item, {"spy_20d": 2.0, "qqq_20d": 3.0})
     assert result is not None
-    # Below all MAs (-10), RS lagging (-5), low vol (-5), EPS rev down (-5), Extreme P/E (-10) → score = 15
-    assert result["score"] < 25
-    assert result["status"] == "Avoid"
+    # RSI and valuation are context, not invalidation; confirmed penalties total -25.
+    assert result["score"] == 25
+    assert result["status"] == "Thesis weakening"
 
 
 def test_right_side_score_returns_none_without_valuation() -> None:
@@ -2766,6 +3022,8 @@ def test_plan_triggers_stop_breached() -> None:
     assert len(triggers) == 1
     assert triggers[0]["kind"] == "stop"
     assert triggers[0]["tone"] == "danger"
+    assert triggers[0]["display_label"] == "計畫停損"
+    assert triggers[0]["display_headline"] == "NVDA 跌破計畫停損 $750.00"
 
 
 def test_plan_triggers_none_without_last_close() -> None:
@@ -2784,6 +3042,10 @@ def test_morning_actions_includes_plan_trigger_and_earnings() -> None:
     labels = {a["label"] for a in actions}
     assert "Plan stop" in labels
     assert "Earnings" in labels
+    display_labels = {a["display_label"] for a in actions}
+    assert "計畫停損" in display_labels
+    assert "財報" in display_labels
+    assert any(a["display_headline"] == "NVDA 今日公布財報" for a in actions)
     # stop (rank 6) should sort before earnings (rank 4)
     assert actions[0]["label"] == "Plan stop"
 
@@ -2797,6 +3059,7 @@ def test_morning_actions_thesis_crack() -> None:
     report = _plan_report(last_close=810.0, thesis_state="broken")
     actions = morning_actions(report)
     assert any(a["label"] == "Thesis" for a in actions)
+    assert any(a["display_headline"] == "NVDA 投資論點失效" for a in actions)
 
 
 def test_ticker_sparkline_renders_svg_with_history() -> None:
@@ -3292,6 +3555,19 @@ def test_right_side_signal_validation_uses_archived_observations_and_dedupes_str
     from stock_daily_research.report import right_side_signal_validation
 
     start = date(2026, 5, 1)
+    session_dates = []
+    cursor = start
+    while len(session_dates) < 21:
+        if cursor.weekday() < 5:
+            session_dates.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+    session_closes = [100.0 + index for index in range(21)]
+    item = _score_item({
+        "last_close": session_closes[-1],
+        "chart_dates_60": session_dates,
+        "chart_close_60": session_closes,
+    })
+
     points = [
         TickerHistoryPoint(
             report_date=start + timedelta(days=index),
@@ -3299,13 +3575,16 @@ def test_right_side_signal_validation_uses_archived_observations_and_dedupes_str
             ticker="X",
             last_close=100.0 + index,
             right_side_status="Right-side ready" if index in (0, 1) else "Wait for confirmation",
+            signal_entry=100.0,
+            signal_stop=95.0,
+            signal_risk_pct=5.0,
         )
         for index in range(21)
     ]
     report = DailyReport(
-        report_date=start + timedelta(days=20),
-        generated_at=datetime(2026, 5, 21, tzinfo=timezone.utc),
-        ticker_reports=[],
+        report_date=date.fromisoformat(session_dates[-1]),
+        generated_at=datetime(2026, 5, 29, tzinfo=timezone.utc),
+        ticker_reports=[item],
         ticker_history={"X": points},
     )
 
@@ -3316,3 +3595,5 @@ def test_right_side_signal_validation_uses_archived_observations_and_dedupes_str
     assert rows[5]["sample_size"] == 1
     assert rows[5]["average_return"] == 5.0
     assert rows[20]["win_rate"] == 100.0
+    assert rows[5]["expectancy_r"] == 1.0
+    assert rows[20]["expectancy_r"] == 4.0

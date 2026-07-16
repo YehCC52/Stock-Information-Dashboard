@@ -241,6 +241,7 @@ def _load_portfolio_settings(data: dict[str, Any]) -> PortfolioSettings:
         max_sector_weight=_optional_float(data.get("max_sector_weight")),
         max_single_weight=_optional_float(data.get("max_single_weight")),
         risk_budget_by_currency=_read_risk_budgets(data.get("risk_budget_by_currency")),
+        base_currency=str(data.get("base_currency") or "TWD").strip().upper(),
     )
 
 

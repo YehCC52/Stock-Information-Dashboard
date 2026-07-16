@@ -16,6 +16,8 @@ from .models import (
     PositionConfig,
     TickerHistoryPoint,
     TickerResearchState,
+    TradeFill,
+    TradeJournalEntry,
     ValuationSnapshot,
     XSignal,
 )
@@ -137,6 +139,28 @@ CREATE TABLE IF NOT EXISTS post_earnings_reviews (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS trade_journal (
+  trade_id TEXT PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  market TEXT NOT NULL DEFAULT 'us',
+  currency TEXT NOT NULL DEFAULT 'USD',
+  status TEXT NOT NULL DEFAULT 'open',
+  entry_date TEXT,
+  entry_price REAL,
+  shares REAL,
+  initial_stop REAL,
+  current_stop REAL,
+  initial_risk REAL,
+  exit_date TEXT,
+  exit_price REAL,
+  fees REAL NOT NULL DEFAULT 0,
+  fx_rate_to_base REAL NOT NULL DEFAULT 1,
+  fills_json TEXT NOT NULL DEFAULT '[]',
+  setup TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS news_daily_summary (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   report_run_id INTEGER NOT NULL,
@@ -161,6 +185,9 @@ CREATE TABLE IF NOT EXISTS news_daily_summary (
   right_side_tone TEXT NOT NULL DEFAULT '',
   right_side_ready_count INTEGER NOT NULL DEFAULT 0,
   right_side_check_count INTEGER NOT NULL DEFAULT 0,
+  signal_entry REAL,
+  signal_stop REAL,
+  signal_risk_pct REAL,
   UNIQUE(report_run_id, ticker)
 );
 
@@ -173,6 +200,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_earnings_ticker_date_source_expr
   ON earnings_dates(ticker, IFNULL(earnings_date, ''), source);
 CREATE INDEX IF NOT EXISTS idx_report_runs_report_date ON report_runs(report_date, generated_at);
 CREATE INDEX IF NOT EXISTS idx_notes_history_ticker ON ticker_notes_history(ticker, changed_at);
+CREATE INDEX IF NOT EXISTS idx_trade_journal_ticker_date ON trade_journal(ticker, entry_date);
 CREATE INDEX IF NOT EXISTS idx_summary_ticker_date ON news_daily_summary(ticker, report_date, generated_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_summary_date_ticker_unique ON news_daily_summary(report_date, ticker);
 """
@@ -259,12 +287,19 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "ticker_research_state", "position_json", "TEXT NOT NULL DEFAULT '{}'")
     for pe_column in ("gross_margin_change", "management_keywords", "thesis_changed"):
         _ensure_column(conn, "post_earnings_reviews", pe_column, "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "trade_journal", "current_stop", "REAL")
+    _ensure_column(conn, "trade_journal", "initial_risk", "REAL")
+    _ensure_column(conn, "trade_journal", "fx_rate_to_base", "REAL NOT NULL DEFAULT 1")
+    _ensure_column(conn, "trade_journal", "fills_json", "TEXT NOT NULL DEFAULT '[]'")
     _ensure_column(conn, "news_daily_summary", "generated_at", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "last_close", "REAL")
     _ensure_column(conn, "news_daily_summary", "right_side_status", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "right_side_tone", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "right_side_ready_count", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "news_daily_summary", "right_side_check_count", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "news_daily_summary", "signal_entry", "REAL")
+    _ensure_column(conn, "news_daily_summary", "signal_stop", "REAL")
+    _ensure_column(conn, "news_daily_summary", "signal_risk_pct", "REAL")
     _cleanup_earnings_duplicates(conn)
     _dedupe_news_daily_summary(conn)
     conn.commit()
@@ -353,6 +388,8 @@ def save_report(conn: sqlite3.Connection, report: DailyReport) -> None:
         upsert_ticker_research_state(conn, state)
     for review in report.post_earnings_reviews.values():
         upsert_post_earnings_review(conn, review)
+    for trade in report.trade_journal:
+        upsert_trade_journal_entry(conn, trade)
     # No commit here: this stays in the caller's transaction so it commits
     # atomically with save_report_run, avoiding a half-saved run if the process
     # dies between the two. (`with init_db(...) as conn` blocks still commit on
@@ -426,7 +463,7 @@ def save_valuation(conn: sqlite3.Connection, valuation: ValuationSnapshot) -> No
                 valuation.as_of_date.isoformat(),
                 valuation.source,
                 metric_name,
-                None if metric_value is None else str(metric_value),
+                _serialize_metric_value(metric_value),
                 valuation.retrieved_at.isoformat(),
             ),
         )
@@ -828,13 +865,193 @@ def upsert_post_earnings_review(conn: sqlite3.Connection, review: PostEarningsRe
     )
 
 
+def _trade_fill_payload(fill: TradeFill) -> dict[str, Any]:
+    return {
+        "fill_id": fill.fill_id,
+        "side": fill.side,
+        "fill_date": fill.fill_date.isoformat() if fill.fill_date else None,
+        "price": fill.price,
+        "shares": fill.shares,
+        "fees": fill.fees,
+        "note": fill.note,
+    }
+
+
+def _trade_fills_from_payload(raw: Any) -> list[TradeFill]:
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return []
+    if not isinstance(raw, list):
+        return []
+    fills: list[TradeFill] = []
+    for index, row in enumerate(raw):
+        if not isinstance(row, dict):
+            continue
+        side = str(row.get("side") or "").strip().lower()
+        if side not in {"buy", "sell"}:
+            continue
+        fill_id = str(row.get("fill_id") or f"fill-{index + 1}").strip()
+        fills.append(TradeFill(
+            fill_id=fill_id,
+            side=side,
+            fill_date=_parse_date(row.get("fill_date")),
+            price=_parse_float(row.get("price")),
+            shares=_parse_float(row.get("shares")),
+            fees=_parse_float(row.get("fees")) or 0.0,
+            note=str(row.get("note") or ""),
+        ))
+    return fills
+
+
+def load_trade_journal_entries(
+    conn: sqlite3.Connection,
+    tickers: list[str] | None = None,
+    *,
+    include_cancelled: bool = True,
+) -> list[TradeJournalEntry]:
+    sql = """
+        SELECT trade_id, ticker, market, currency, status, entry_date,
+               entry_price, shares, initial_stop, current_stop, initial_risk, exit_date,
+               exit_price, fees, fx_rate_to_base, fills_json, setup, note,
+               updated_at
+        FROM trade_journal
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if tickers:
+        placeholders = ", ".join("?" for _ in tickers)
+        conditions.append(f"ticker IN ({placeholders})")
+        params.extend(tickers)
+    if not include_cancelled:
+        conditions.append("status != 'cancelled'")
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY COALESCE(entry_date, '') DESC, updated_at DESC, trade_id"
+    rows = conn.execute(sql, params).fetchall()
+    return [
+        TradeJournalEntry(
+            trade_id=row[0],
+            ticker=row[1],
+            market=row[2] or "us",
+            currency=row[3] or "USD",
+            status=row[4] or "open",
+            entry_date=_parse_date(row[5]),
+            entry_price=row[6],
+            shares=row[7],
+            initial_stop=row[8],
+            current_stop=row[9],
+            initial_risk=row[10],
+            exit_date=_parse_date(row[11]),
+            exit_price=row[12],
+            fees=float(row[13] or 0.0),
+            fx_rate_to_base=float(row[14] or 1.0),
+            fills=_trade_fills_from_payload(row[15]),
+            setup=row[16] or "",
+            note=row[17] or "",
+            updated_at=_parse_datetime(row[18]),
+        )
+        for row in rows
+    ]
+
+
+def upsert_trade_journal_entry(conn: sqlite3.Connection, trade: TradeJournalEntry) -> None:
+    trade_id = trade.trade_id.strip()
+    if not trade_id:
+        raise ValueError("Trade journal entry requires a trade_id.")
+    status = trade.status.strip().lower()
+    if status not in {"planned", "open", "closed", "cancelled"}:
+        status = "open"
+    updated_at = trade.updated_at or datetime.now(timezone.utc)
+    fills_json = json.dumps(
+        [_trade_fill_payload(fill) for fill in trade.fills],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    conn.execute(
+        """
+        INSERT INTO trade_journal
+        (trade_id, ticker, market, currency, status, entry_date, entry_price,
+         shares, initial_stop, current_stop, initial_risk, exit_date, exit_price, fees,
+         fx_rate_to_base, fills_json, setup, note, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(trade_id) DO UPDATE SET
+          ticker = excluded.ticker,
+          market = excluded.market,
+          currency = excluded.currency,
+          status = excluded.status,
+          entry_date = excluded.entry_date,
+          entry_price = excluded.entry_price,
+          shares = excluded.shares,
+          initial_stop = excluded.initial_stop,
+          current_stop = excluded.current_stop,
+          initial_risk = excluded.initial_risk,
+          exit_date = excluded.exit_date,
+          exit_price = excluded.exit_price,
+          fees = excluded.fees,
+          fx_rate_to_base = excluded.fx_rate_to_base,
+          fills_json = excluded.fills_json,
+          setup = excluded.setup,
+          note = excluded.note,
+          updated_at = excluded.updated_at
+        """,
+        (
+            trade_id,
+            trade.ticker.strip().upper(),
+            trade.market.strip().lower() or "us",
+            trade.currency.strip().upper() or "USD",
+            status,
+            trade.entry_date.isoformat() if trade.entry_date else None,
+            trade.entry_price,
+            trade.shares,
+            trade.initial_stop,
+            trade.current_stop,
+            trade.initial_risk,
+            trade.exit_date.isoformat() if trade.exit_date else None,
+            trade.exit_price,
+            trade.fees,
+            trade.fx_rate_to_base if trade.fx_rate_to_base > 0 else 1.0,
+            fills_json,
+            trade.setup,
+            trade.note,
+            updated_at.isoformat(),
+        ),
+    )
+
+
+def _trade_payload(trade: TradeJournalEntry) -> dict[str, Any]:
+    return {
+        "trade_id": trade.trade_id,
+        "ticker": trade.ticker,
+        "market": trade.market,
+        "currency": trade.currency,
+        "status": trade.status,
+        "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
+        "entry_price": trade.entry_price,
+        "shares": trade.shares,
+        "initial_stop": trade.initial_stop,
+        "current_stop": trade.current_stop,
+        "initial_risk": trade.initial_risk,
+        "exit_date": trade.exit_date.isoformat() if trade.exit_date else None,
+        "exit_price": trade.exit_price,
+        "fees": trade.fees,
+        "fx_rate_to_base": trade.fx_rate_to_base,
+        "fills": [_trade_fill_payload(fill) for fill in trade.fills],
+        "setup": trade.setup,
+        "note": trade.note,
+        "updated_at": trade.updated_at.isoformat() if trade.updated_at else None,
+    }
+
 def export_research_state_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     states = load_ticker_research_states(conn)
     reviews = load_post_earnings_reviews(conn)
+    trades = load_trade_journal_entries(conn)
     payload: dict[str, Any] = {
-        "version": 1,
+        "version": 2,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "tickers": {},
+        "trades": [_trade_payload(trade) for trade in trades],
     }
     symbols = sorted(set(states) | set(reviews))
     for symbol in symbols:
@@ -952,6 +1169,47 @@ def import_research_state_payload(conn: sqlite3.Connection, payload: dict[str, A
                     updated_at=datetime.now(timezone.utc),
                 ),
             )
+
+    trades = payload.get("trades", [])
+    if trades is not None and not isinstance(trades, list):
+        raise ValueError("Research state payload 'trades' must be an array.")
+    for index, row in enumerate(trades or []):
+        if not isinstance(row, dict):
+            continue
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if not ticker:
+            continue
+        entry_date = _parse_date(row.get("entry_date"))
+        trade_id = str(row.get("trade_id") or "").strip()
+        if not trade_id:
+            trade_id = f"{ticker}-{entry_date.isoformat() if entry_date else 'undated'}-{index + 1}"
+        exit_date = _parse_date(row.get("exit_date"))
+        exit_price = _parse_float(row.get("exit_price"))
+        status = str(row.get("status") or ("closed" if exit_date or exit_price is not None else "open"))
+        upsert_trade_journal_entry(
+            conn,
+            TradeJournalEntry(
+                trade_id=trade_id,
+                ticker=ticker,
+                market=str(row.get("market") or "us"),
+                currency=str(row.get("currency") or "USD"),
+                status=status,
+                entry_date=entry_date,
+                entry_price=_parse_float(row.get("entry_price")),
+                shares=_parse_float(row.get("shares")),
+                initial_stop=_parse_float(row.get("initial_stop")),
+                current_stop=_parse_float(row.get("current_stop")),
+                initial_risk=_parse_float(row.get("initial_risk")),
+                exit_date=exit_date,
+                exit_price=exit_price,
+                fees=_parse_float(row.get("fees")) or 0.0,
+                fx_rate_to_base=_parse_float(row.get("fx_rate_to_base")) or 1.0,
+                fills=_trade_fills_from_payload(row.get("fills")),
+                setup=str(row.get("setup") or ""),
+                note=str(row.get("note") or ""),
+                updated_at=_parse_datetime(row.get("updated_at")) or datetime.now(timezone.utc),
+            ),
+        )
     conn.commit()
 
 
@@ -1013,8 +1271,9 @@ def save_report_run(
             (report_run_id, report_date, generated_at, ticker, thesis_state, review_status,
              last_reviewed_at, news_count, top_news_count, valuation_risk, rsi, daily_change_pct,
              premarket_change_pct, earnings_days, warning_count, attention_score, news_burst_score,
-             last_close, right_side_status, right_side_tone, right_side_ready_count, right_side_check_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             last_close, right_side_status, right_side_tone, right_side_ready_count,
+             right_side_check_count, signal_entry, signal_stop, signal_risk_pct)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(report_date, ticker) DO UPDATE SET
               report_run_id = excluded.report_run_id,
               generated_at = excluded.generated_at,
@@ -1035,7 +1294,10 @@ def save_report_run(
               right_side_status = excluded.right_side_status,
               right_side_tone = excluded.right_side_tone,
               right_side_ready_count = excluded.right_side_ready_count,
-              right_side_check_count = excluded.right_side_check_count
+              right_side_check_count = excluded.right_side_check_count,
+              signal_entry = excluded.signal_entry,
+              signal_stop = excluded.signal_stop,
+              signal_risk_pct = excluded.signal_risk_pct
             """,
             (
                 run_id,
@@ -1060,6 +1322,9 @@ def save_report_run(
                 str(signal.get("tone", "")),
                 int(signal.get("ready_count", 0) or 0),
                 int(signal.get("check_count", 0) or 0),
+                signal.get("entry_reference"),
+                signal.get("invalidation"),
+                signal.get("risk_pct"),
             ),
         )
     conn.commit()
@@ -1082,7 +1347,8 @@ def load_ticker_history(
         SELECT report_date, generated_at, ticker, thesis_state, review_status, last_reviewed_at,
                news_count, top_news_count, valuation_risk, rsi, daily_change_pct, premarket_change_pct,
                earnings_days, warning_count, attention_score, news_burst_score, last_close,
-               right_side_status, right_side_tone, right_side_ready_count, right_side_check_count
+               right_side_status, right_side_tone, right_side_ready_count, right_side_check_count,
+               signal_entry, signal_stop, signal_risk_pct
         FROM news_daily_summary
         WHERE ticker IN ({placeholders})
           AND report_date >= ?
@@ -1114,6 +1380,9 @@ def load_ticker_history(
             right_side_tone=row[18] or "",
             right_side_ready_count=int(row[19] or 0),
             right_side_check_count=int(row[20] or 0),
+            signal_entry=row[21],
+            signal_stop=row[22],
+            signal_risk_pct=row[23],
         )
         result.setdefault(point.ticker, []).append(point)
     return result
@@ -1347,9 +1616,26 @@ def _position_from_payload(value: Any) -> PositionConfig | None:
     )
 
 
+def _serialize_metric_value(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (list, dict, tuple)):
+        return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+    return str(value)
+
+
 def _coerce_metric_value(value: str | None) -> object:
     if value is None:
         return None
+    stripped = value.strip()
+    if stripped.startswith(("[", "{")):
+        try:
+            decoded = json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+        else:
+            if isinstance(decoded, (list, dict)):
+                return decoded
     try:
         number = float(value)
     except ValueError:

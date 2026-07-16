@@ -9,6 +9,7 @@ from stock_daily_research.data_quality import (
     detect_google_redirect_source,
     detect_premarket_label_inconsistency,
     detect_price_anomaly,
+    detect_price_regime_change,
     detect_stale_data,
 )
 from stock_daily_research.models import (
@@ -52,6 +53,26 @@ def test_detect_price_anomaly_flags_large_move() -> None:
     calm = _item({"last_close": 105.0, "previous_close": 100.0})
     assert detect_price_anomaly(calm) is None
 
+
+def test_detect_price_regime_change_flags_rebuilding_technicals() -> None:
+    item = _item({
+        "last_close": 12.17,
+        "previous_close": 12.15,
+        "market_cap": 1e9,
+        "forward_pe": 20.0,
+        "price_regime_change_date": "2026-06-29",
+        "price_regime_change_pct": -95.7,
+        "price_history_sessions": 8,
+    })
+
+    flag = detect_price_regime_change(item)
+    result = confidence(item, date(2026, 4, 28))
+
+    assert flag is not None
+    assert "2026-06-29" in flag
+    assert "8" in flag
+    assert flag in result["flags"]
+    assert result["score"] == 75
 
 def test_detect_market_cap_drift() -> None:
     assert detect_market_cap_drift({"market_cap": 130.0}, {"market_cap": 100.0}) is not None

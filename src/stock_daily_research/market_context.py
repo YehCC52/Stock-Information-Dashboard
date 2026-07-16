@@ -43,6 +43,10 @@ BENCHMARK_SYMBOLS: tuple[tuple[str, str], ...] = (
 )
 BENCHMARK_HORIZONS: tuple[int, ...] = (20, 60, 120)
 
+# Direct conversion quotes used by the portfolio heat view.
+FX_SYMBOLS: tuple[tuple[str, str], ...] = (("USD/TWD", "TWD=X"),)
+
+
 
 def fetch_market_context() -> MarketContext:
     """Pull rates, breadth, and benchmark returns. Failures degrade silently."""
@@ -95,11 +99,21 @@ def fetch_market_context() -> MarketContext:
             if ret is not None:
                 benchmark_returns[f"{key}_{horizon}d"] = round(ret, 2)
 
+    fx_rates: dict[str, float] = {}
+    for pair, symbol in FX_SYMBOLS:
+        closes = _close_history(symbol, period="5d")
+        if not closes:
+            warnings.append(f"{pair} ({symbol}) FX rate unavailable.")
+            continue
+        fx_rates[pair] = round(closes[-1], 4)
+
+
     return MarketContext(
         rates=rates,
         breadth=breadth,
         benchmark_returns=benchmark_returns,
         retrieved_at=retrieved_at,
+        fx_rates=fx_rates,
         warnings=warnings,
     )
 

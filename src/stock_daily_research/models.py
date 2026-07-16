@@ -64,6 +64,7 @@ class PortfolioSettings:
     max_sector_weight: float | None = None
     max_single_weight: float | None = None
     risk_budget_by_currency: dict[str, float] = field(default_factory=dict)
+    base_currency: str = "TWD"
 
 
 @dataclass(frozen=True)
@@ -365,6 +366,7 @@ class MarketContext:
     rates: list[RateLevel] = field(default_factory=list)
     breadth: list[BreadthRow] = field(default_factory=list)
     benchmark_returns: dict[str, float] = field(default_factory=dict)
+    fx_rates: dict[str, float] = field(default_factory=dict)
     retrieved_at: datetime | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -433,6 +435,44 @@ class PostEarningsReview:
 
 
 @dataclass(frozen=True)
+class TradeFill:
+    """One executed leg inside a trade lifecycle."""
+
+    fill_id: str
+    side: str
+    fill_date: date | None = None
+    price: float | None = None
+    shares: float | None = None
+    fees: float = 0.0
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class TradeJournalEntry:
+    """One planned or completed trade with optional scale-in/out legs."""
+
+    trade_id: str
+    ticker: str
+    market: str = "us"
+    currency: str = "USD"
+    status: str = "open"
+    entry_date: date | None = None
+    entry_price: float | None = None
+    shares: float | None = None
+    initial_stop: float | None = None
+    current_stop: float | None = None
+    initial_risk: float | None = None
+    exit_date: date | None = None
+    exit_price: float | None = None
+    fees: float = 0.0
+    fx_rate_to_base: float = 1.0
+    fills: list[TradeFill] = field(default_factory=list)
+    setup: str = ""
+    note: str = ""
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class TickerHistoryPoint:
     report_date: date
     generated_at: datetime
@@ -456,6 +496,9 @@ class TickerHistoryPoint:
     right_side_ready_count: int = 0
     right_side_check_count: int = 0
 
+    signal_entry: float | None = None
+    signal_stop: float | None = None
+    signal_risk_pct: float | None = None
 
 @dataclass(frozen=True)
 class TaiwanMarketSnapshot:
@@ -501,6 +544,7 @@ class DailyReport:
     premarket: PremarketSnapshot | None = None
     research_states: dict[str, TickerResearchState] = field(default_factory=dict)
     post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
+    trade_journal: list[TradeJournalEntry] = field(default_factory=list)
     ticker_history: dict[str, list[TickerHistoryPoint]] = field(default_factory=dict)
     history_overview: dict[str, Any] = field(default_factory=dict)
     settings: "AppSettings | None" = None

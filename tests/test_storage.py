@@ -560,6 +560,9 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
                     "tone": "up",
                     "ready_count": 4,
                     "check_count": 4,
+                    "entry_reference": 105.0,
+                    "invalidation": 99.0,
+                    "risk_pct": 5.71,
                 }
             },
         )
@@ -576,6 +579,9 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
     assert history[0].right_side_status == "Right-side ready"
     assert history[0].right_side_ready_count == 4
     assert history[0].right_side_check_count == 4
+    assert history[0].signal_entry == 105.0
+    assert history[0].signal_stop == 99.0
+    assert history[0].signal_risk_pct == 5.71
     assert history[1].thesis_state == "building"
 
 
