@@ -5,11 +5,13 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from math import isfinite
 from pathlib import Path
+from statistics import median
 from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .data_quality import confidence as data_quality_confidence
+from .models import TradeFill, TradeJournalEntry
 from .models import DailyReport, MARKET_LABELS, MarketContext, NewsArticle, PositionConfig, PortfolioSettings, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
@@ -191,6 +193,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["level_label"] = level_label
     env.filters["market_label"] = market_label
     env.filters["news_rationale"] = news_rationale
+    env.filters["book_label_zh"] = _daily_summary_book_label
+    env.filters["decision_text_zh"] = _daily_summary_reasons
     env.globals["news_triage_label"] = lambda item, article: news_triage_label(item, article, report.report_date)
     from .market_context import market_regime, rates_interpretation
     env.filters["rates_interpretation"] = rates_interpretation
@@ -205,6 +209,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     portfolio_settings = report.settings.portfolio if report.settings else None
     env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks, portfolio=portfolio_settings)
     env.filters["right_side_score"] = lambda item: right_side_score(item, benchmarks)
+    env.filters["execution_plan"] = lambda item: right_side_execution_plan(report, item)
+    env.filters["price_structure_chart"] = price_structure_chart
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
     env.filters["metric_raw"] = metric_raw
@@ -256,6 +262,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         hero=morning_briefing_cards(report),
         daily_summary=daily_summary(report),
         right_side_validation=right_side_signal_validation(report),
+        trade_journal=trade_journal_summary(report),
         morning_actions=morning_actions(report),
         todays_catalysts=todays_catalysts(report),
         post_earnings_items=post_earnings_items(report),
@@ -274,6 +281,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         overextended=overextended_tickers(report),
         data_quality=data_quality_overview(report),
         portfolio=portfolio_impact_summary(report),
+        portfolio_risk=portfolio_risk_overview(report),
         related_tickers=related_ticker_links(report),
         clusters=clusters_in_use(report),
         valuation_keys=[
@@ -459,8 +467,44 @@ def research_payload(report: DailyReport) -> dict[str, object]:
                 "thesis_changed": review.thesis_changed if review else "",
             },
         }
+    trades = [
+        {
+            "trade_id": trade.trade_id,
+            "ticker": trade.ticker,
+            "market": trade.market,
+            "currency": trade.currency,
+            "status": trade.status,
+            "entry_date": trade.entry_date.isoformat() if trade.entry_date else "",
+            "entry_price": trade.entry_price,
+            "shares": trade.shares,
+            "current_stop": trade.current_stop,
+            "initial_risk": trade.initial_risk,
+            "initial_stop": trade.initial_stop,
+            "exit_date": trade.exit_date.isoformat() if trade.exit_date else "",
+            "exit_price": trade.exit_price,
+            "fees": trade.fees,
+            "fx_rate_to_base": trade.fx_rate_to_base,
+            "fills": [
+                {
+                    "fill_id": fill.fill_id,
+                    "side": fill.side,
+                    "fill_date": fill.fill_date.isoformat() if fill.fill_date else "",
+                    "price": fill.price,
+                    "shares": fill.shares,
+                    "fees": fill.fees,
+                    "note": fill.note,
+                }
+                for fill in trade.fills
+            ],
+            "setup": trade.setup,
+            "note": trade.note,
+            "updated_at": trade.updated_at.isoformat() if trade.updated_at else "",
+        }
+        for trade in report.trade_journal
+    ]
     return {
         "tickers": states,
+        "trades": trades,
         "history_days": int(report.history_overview.get("history_days", 30)) if report.history_overview else 30,
         "archive_dates": list(report.history_overview.get("archive_dates", [])) if report.history_overview else [],
     }
@@ -940,6 +984,108 @@ def level_label(value: object) -> str:
 # waste. Insertion order matters where entries overlap ("tickers" before
 # "ticker", "not-reviewed" before "reviewed").
 _ZH_REPLACEMENTS: dict[str, str] = {
+        "FOMC Rate Decision": "FOMC 利率決策",
+        "Rate decision / statement expected at 2:00 PM ET; press conference normally 2:30 PM ET.": "預計美東時間下午 2:00 公布利率決策與聲明，記者會通常於 2:30 舉行。",
+        "Review guidance, valuation, and recent news before the print.": "公布前先檢查財測、估值與近期新聞。",
+        "Earnings date is inside the 7-day review window.": "財報日期已進入 7 天檢視窗口。",
+        "revisit thesis before chasing": "追價前先重新檢查投資論點",
+        "avoid chasing without a fresh catalyst": "沒有新催化時避免追價",
+        "high multiple but EPS revisions up": "高本益比但 EPS 預估上修",
+        "EPS revisions down": "EPS 預估下修",
+        "heavy news flow": "重大新聞密集",
+        "top-tier news": "一級新聞",
+        "crowded setup": "交易條件擁擠",
+        "stretched valuation": "估值偏高",
+        "extreme valuation": "估值風險極高",
+        "hot but overbought": "強勢但過熱",
+        "overbought technicals": "技術面過熱",
+        "from 52W high": "距 52 週高點",
+        "SPY 20D momentum": "SPY 20 日動能",
+        "QQQ 20D momentum": "QQQ 20 日動能",
+        "VIX level": "VIX 水位",
+        "Credit appetite": "信用風險偏好",
+        "yfinance proxy": "yfinance 估算",
+        "risk-on": "偏多",
+        "risk-off": "避險",
+        "neutral": "中性",
+        "Rates mixed": "利率訊號分歧",
+        "Rates pressure": "利率壓力",
+        "Dollar pressure": "美元壓力",
+        "Oil inflation pressure": "油價通膨壓力",
+        "avg yield move": "平均殖利率變動",
+        "Valuation fallback used": "已使用估值備援資料",
+        "Earnings date from yfinance only — verify with company IR or Nasdaq": "財報日期僅來自 yfinance，請再向公司投資人關係網站或 Nasdaq 確認",
+        "Google News RSS redirect unresolved — verify original source": "Google News RSS 重新導向未解析，請確認原始來源",
+        "Missing:": "缺少欄位：",
+        "strategic optionality": "策略選擇權",
+        "macro / beta": "總經 / Beta",
+        "No material changes versus the previous saved run.": "相較上次儲存的報告，沒有重大變化。",
+        "Overextended": "漲幅過度延伸",
+        "Rule Alerts": "規則警示",
+        "review — corroborated, may be thesis-relevant": "多來源佐證，應檢視是否影響投資論點",
+        "S&P 500 futures": "S&P 500 期貨",
+        "Nasdaq 100 futures": "Nasdaq 100 期貨",
+        "SPY premarket": "SPY 盤前",
+        "QQQ premarket": "QQQ 盤前",
+        "Mega-cap software": "大型軟體",
+        "Internet / ads": "網路 / 廣告",
+        "Consumer hardware": "消費電子",
+        "ETF / Index": "ETF / 指數",
+        "AI infra": "AI 基礎設施",
+        "Memory": "記憶體",
+        "Semis": "半導體",
+        "Crypto": "加密貨幣",
+        "Space": "太空",
+        "regular": "一般盤",
+        "cloud": "雲端",
+        "monitor only, not thesis-changing yet": "持續監看，暫未改變投資論點",
+        "Biggest positive impact": "最大正面貢獻",
+        "Biggest negative impact": "最大負面貢獻",
+        "Highest risk holding": "風險最高持股",
+        "Holding with event soon": "近期有事件的持股",
+        "Watchlist top movers": "觀察清單主要異動",
+        "Catalyst-backed": "有催化支持",
+        "Unclear / noisy": "原因不明 / 雜訊偏多",
+        "No watchlist gaps above threshold.": "觀察清單沒有超過門檻的盤前缺口。",
+        "No mover with clear catalyst support.": "目前沒有具明確催化支持的異動。",
+        "No unexplained high-priority movers.": "目前沒有原因不明的高優先異動。",
+        "Review now": "立即檢視",
+        "event risk": "\u4e8b\u4ef6\u98a8\u96aa",
+        "no action before earnings review": "\u8ca1\u5831\u6aa2\u8996\u524d\u66ab\u505c\u64cd\u4f5c",
+        "no action before event review": "\u4e8b\u4ef6\u6aa2\u8996\u524d\u66ab\u505c\u64cd\u4f5c",
+        "Review only before event": "\u4e8b\u4ef6\u524d\u50c5\u6aa2\u8996\uff0c\u4e0d\u64cd\u4f5c",
+        "Do not add / consider trim": "\u505c\u6b62\u52a0\u78bc\uff0c\u8a55\u4f30\u6e1b\u78bc",
+        "Priority add candidate": "\u512a\u5148\u52a0\u78bc\u5019\u9078",
+        "event window": "\u4e8b\u4ef6\u7a97\u53e3",
+        "less stretched": "\u56de\u6a94\u5e45\u5ea6\u8f03\u6eab\u548c",
+        "no trusted news": "\u7f3a\u5c11\u53ef\u4fe1\u65b0\u805e\u4f86\u6e90",
+        "verify company and source updates": "\u8acb\u78ba\u8a8d\u516c\u53f8\u516c\u544a\u8207\u4f86\u6e90\u66f4\u65b0",
+        "unavailable": "\u7121\u8cc7\u6599",
+        "No chase": "不追價",
+        "Monitor": "持續監看",
+        "Extreme valuation": "估值風險極高",
+        "event soon": "事件將近",
+        "latest daily": "最新日漲跌",
+        "premarket": "盤前",
+        "tier 1 media": "一級媒體",
+        "trusted media": "可信媒體",
+        "no linked headline": "無關聯新聞",
+        "regulatory overhang": "監管壓力",
+        "secular / AI": "長期趨勢 / AI",
+        "Market sentiment": "市場情緒",
+        "sentiment": "市場情緒",
+        "fundamental": "基本面",
+        "Other watchlist": "其他觀察",
+        "Communication Services": "通訊服務",
+        "Consumer Cyclical": "非必需消費",
+        "Consumer Defensive": "必需消費",
+        "Financial Services": "金融服務",
+        "Basic Materials": "原物料",
+        "Real Estate": "不動產",
+        "Technology": "科技",
+        "Industrials": "工業",
+        "Regulation": "監管",
+        "Other": "其他",
         "Breakout confirmed": "突破確認",
         "Pullback buy zone": "回檔買點區",
         "Extended, do not chase": "已延伸，避免追高",
@@ -1012,10 +1158,20 @@ _ZH_REPLACEMENTS: dict[str, str] = {
         "data warning": "資料警示",
         "pre-market": "盤前",
         "Earnings": "財報",
+        "Above 20D / 120D, below 60D": "\u7ad9\u4e0a 20D / 120D\uff0c\u4f4e\u65bc 60D",
+        "Above 60D / 120D, below 20D": "\u7ad9\u4e0a 60D / 120D\uff0c\u4f4e\u65bc 20D",
+        "Above 20D, below 60D / 120D": "\u7ad9\u4e0a 20D\uff0c\u4f4e\u65bc 60D / 120D",
+        "Above 60D, below 20D / 120D": "\u7ad9\u4e0a 60D\uff0c\u4f4e\u65bc 20D / 120D",
+        "Above 120D, below 20D / 60D": "\u7ad9\u4e0a 120D\uff0c\u4f4e\u65bc 20D / 60D",
+        "above 20D/60D/120D": "\u7ad9\u4e0a 20D / 60D / 120D",
+        "below 20D/60D/120D": "\u4f4e\u65bc 20D / 60D / 120D",
+        "RS leadership": "\u76f8\u5c0d\u5f37\u5ea6\u9818\u5148",
+        "RS positive": "\u76f8\u5c0d\u5f37\u5ea6\u6b63\u5411",
+        "RS lagging": "\u76f8\u5c0d\u5f37\u5ea6\u843d\u5f8c",
+        "chase risk": "\u8ffd\u9ad8\u98a8\u96aa",
+        "valuation context": "\u4f30\u503c\u80cc\u666f",
         "top stories": "重點新聞",
         "top story": "重點新聞",
-        "headlines": "則新聞",
-        "headline": "則新聞",
         "Earnings today": "今日財報",
         "Earnings tomorrow": "明日財報",
         "Trailing P/E": "過去12月 P/E",
@@ -1090,8 +1246,39 @@ _ZH_REPLACEMENTS: dict[str, str] = {
 def zh_text(value: object) -> str:
     """Display-only Traditional Chinese wording for common dashboard phrases."""
     text = str(value or "")
+    text = re.sub(r"([+-]?\d+(?:\.\d+)?)% from 52W high", lambda match: f"距 52 週高點 {match.group(1)}%", text)
+    text = re.sub(
+        r"(\d+) trusted headline\(s\), (\d+) top-tier\.",
+        lambda match: f"{match.group(1)} 則可信新聞，{match.group(2)} 則一級新聞。",
+        text,
+    )
+    text = re.sub(
+        r"(\d+) headline\(s\); revisit thesis before chasing\.",
+        lambda match: f"{match.group(1)} 則新聞；追價前先重新檢查投資論點。",
+        text,
+    )
+    text = re.sub(r"FY1 EPS revision ([+-]?\d+(?:\.\d+)?)% over 30D\.", lambda match: f"FY1 EPS 預估 30 日修正 {match.group(1)}%。", text)
     for src, dest in _ZH_REPLACEMENTS.items():
         text = text.replace(src, dest)
+    text = re.sub(r"\bin (\d+)d\b", lambda match: f"{match.group(1)} \u5929\u5f8c", text)
+    text = re.sub(r"\b(\d+)d ago\b", lambda match: f"{match.group(1)} \u5929\u524d", text)
+    text = re.sub(r"above (\d+) of 3 MAs", lambda match: f"\u7ad9\u4e0a 3 \u689d\u5747\u7dda\u4e2d\u7684 {match.group(1)} \u689d", text)
+    text = re.sub(r"\bscore (\d+)\b", lambda match: f"右側分數 {match.group(1)}", text)
+    text = re.sub(r"\b(\d+) articles?\b", lambda match: f"{match.group(1)} 篇報導", text)
+    text = re.sub(r"\b(\d+(?:\.\d+)?)x volume\b", lambda match: f"成交量 {match.group(1)} 倍", text)
+    text = re.sub(r"\b(\d+)\s+headlines?\b", lambda match: f"{match.group(1)} 則新聞", text)
+    text = re.sub(r"\b(\d+)\s+top-tier\b", lambda match: f"{match.group(1)} 則一級新聞", text)
+    text = re.sub(r"\bearnings\b", "財報", text)
+    text = re.sub(r"([+-]?\d+(?:\.\d+)?)% over (\d+) sessions", lambda match: f"過去 {match.group(2)} 個交易日 {match.group(1)}%", text)
+    text = re.sub(r"\bEPS rev\b", "EPS 預估修正", text)
+    text = re.sub(r"\brevenue rev\b", "營收預估修正", text)
+    text = re.sub(r"\b(\d+)/(\d+) horizons\b", lambda match: f"{match.group(1)}/{match.group(2)} 個期間領先", text)
+    text = re.sub(r"([+-]?\d+(?:\.\d+)?)pp average", lambda match: f"平均 {match.group(1)} 個百分點", text)
+    text = text.replace("pp avg", " \u500b\u767e\u5206\u9ede\u5e73\u5747")
+    if re.search(r"[\u3400-\u9fff]", text):
+        text = text.replace("; ", "；").replace(". ", "。")
+        if text.endswith("."):
+            text = text[:-1] + "。"
     return text
 
 
@@ -1162,7 +1349,7 @@ def earnings_action(item: TickerReport, anchor: date) -> str | None:
 def _market_benchmark_pairs(item: TickerReport) -> tuple[tuple[str, str, str], ...]:
     """Return the comparable benchmarks for the ticker's declared market."""
     market = item.ticker.market
-    if market in {"twse", "tpex"}:
+    if market in {"twse", "tpex", "taiwan"}:
         return (("vs_twii", "twii", "TWII"),)
     if market == "crypto":
         if item.ticker.symbol.upper() == "BTC-USD":
@@ -1250,6 +1437,34 @@ RIGHT_SIDE_STATUSES = (
 )
 
 
+MIN_PRICE_REGIME_SESSIONS = 21
+
+
+def price_regime_status(item: TickerReport) -> dict[str, object] | None:
+    """Describe a technical-history reset without inventing adjusted prices."""
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    change_date = metrics.get("price_regime_change_date")
+    if not change_date:
+        return None
+    sessions = int(_as_float(metrics.get("price_history_sessions")) or 0)
+    change_pct = _as_float(metrics.get("price_regime_change_pct"))
+    return {
+        "date": str(change_date),
+        "change_pct": change_pct,
+        "sessions": sessions,
+        "minimum_sessions": MIN_PRICE_REGIME_SESSIONS,
+        "remaining_sessions": max(0, MIN_PRICE_REGIME_SESSIONS - sessions),
+        "ready": sessions >= MIN_PRICE_REGIME_SESSIONS,
+    }
+
+
+def _technical_regime_ready(item: TickerReport) -> bool:
+    status = price_regime_status(item)
+    return status is None or bool(status["ready"])
+
+
 def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = None) -> dict[str, object] | None:
     """Composite 0–100 right-side trading score with a status label.
 
@@ -1264,6 +1479,8 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
     if not item.valuation:
         return None
     metrics = item.valuation.metrics
+    if not _technical_regime_ready(item):
+        return None
     last = _as_float(metrics.get("last_close"))
     if last is None:
         return None
@@ -1310,6 +1527,14 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
 
     # Volume confirmation
     vol = _as_float(metrics.get("volume_vs_20d"))
+    vpa = volume_price_analysis(item)
+    if vpa:
+        adjustment = int(vpa["score_adjustment"])
+        if adjustment:
+            score += adjustment
+            reasons.append((adjustment, f"VPA {vpa['event']}"))
+        # VPA already interpreted direction, spread and close location.
+        vol = None
     if vol is not None:
         if vol > 1.5:
             score += 5
@@ -1333,24 +1558,14 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
             earnings_negative = True
             reasons.append((-5, f"EPS rev {eps_rev:+.1f}% 30D"))
 
-    # RSI cool-down penalty
+    # RSI and valuation remain context; they do not invalidate a confirmed trend.
     rsi = _as_float(metrics.get("rsi_14"))
-    if rsi is not None:
-        if rsi >= 75:
-            score -= 10
-            reasons.append((-10, f"RSI {rsi:.0f}"))
-        elif rsi >= 70:
-            score -= 5
-            reasons.append((-5, f"RSI {rsi:.0f}"))
+    if rsi is not None and rsi >= 70:
+        reasons.append((0, f"RSI {rsi:.0f}: chase risk"))
 
-    # Valuation overhang
     risk_tier = valuation_risk_label(item)
-    if risk_tier == "Extreme":
-        score -= 10
-        reasons.append((-10, "Extreme P/E"))
-    elif risk_tier == "High":
-        score -= 5
-        reasons.append((-5, "High P/E"))
+    if risk_tier in {"High", "Extreme"}:
+        reasons.append((0, f"{risk_tier} valuation context"))
 
     # Stretched into 52-week high
     from_high = from_52w_high_pct(item)
@@ -1496,6 +1711,507 @@ def technical_playbook(item: TickerReport) -> dict[str, object] | None:
         "criteria": criteria[:6],
     }
 
+def _aligned_ohlcv(item: TickerReport) -> dict[str, list[object]] | None:
+    """Return aligned daily OHLCV rows from the cached chart payload."""
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    raw = {
+        "dates": metrics.get("chart_dates_60"),
+        "closes": metrics.get("chart_close_60"),
+        "highs": metrics.get("chart_high_60"),
+        "lows": metrics.get("chart_low_60"),
+        "volumes": metrics.get("chart_volume_60"),
+    }
+    if not all(isinstance(values, list) for values in raw.values()):
+        return None
+    count = min(len(values) for values in raw.values())
+    if count < 2:
+        return None
+
+    result: dict[str, list[object]] = {key: [] for key in raw}
+    for index in range(count):
+        close = _as_float(raw["closes"][index])
+        high = _as_float(raw["highs"][index])
+        low = _as_float(raw["lows"][index])
+        volume = _as_float(raw["volumes"][index])
+        if close is None or high is None or low is None or high < low:
+            continue
+        result["dates"].append(str(raw["dates"][index]))
+        result["closes"].append(close)
+        result["highs"].append(high)
+        result["lows"].append(low)
+        result["volumes"].append(volume if volume is not None and volume > 0 else None)
+    return result if len(result["closes"]) >= 2 else None
+
+
+def _true_range_at(highs: list[float], lows: list[float], closes: list[float], index: int) -> float:
+    if index <= 0:
+        return max(0.0, highs[index] - lows[index])
+    return max(
+        highs[index] - lows[index],
+        abs(highs[index] - closes[index - 1]),
+        abs(lows[index] - closes[index - 1]),
+    )
+
+
+def _close_location(high: float, low: float, close: float) -> float:
+    spread = high - low
+    return (close - low) / spread if spread > 0 else 0.5
+
+
+def _trend_structure(item: TickerReport, series: dict[str, list[object]]) -> dict[str, object]:
+    metrics = item.valuation.metrics if item.valuation else {}
+    closes = [float(value) for value in series["closes"]]
+    highs = [float(value) for value in series["highs"]]
+    lows = [float(value) for value in series["lows"]]
+    last = closes[-1]
+    sma20 = _as_float(metrics.get("sma_20"))
+    sma60 = _as_float(metrics.get("sma_60"))
+    sma120 = _as_float(metrics.get("sma_120"))
+    slope20 = _as_float(metrics.get("sma_20_slope_5d"))
+
+    evidence: list[str] = []
+    bullish_stack = bool(
+        sma20 is not None
+        and sma60 is not None
+        and last > sma20 > sma60
+        and (sma120 is None or sma60 > sma120)
+    )
+    bearish_stack = bool(
+        sma20 is not None
+        and sma60 is not None
+        and last < sma20 < sma60
+        and (sma120 is None or sma60 < sma120)
+    )
+
+    swing = "mixed"
+    if len(closes) >= 20:
+        prior_high = max(highs[-20:-10])
+        prior_low = min(lows[-20:-10])
+        recent_high = max(highs[-10:])
+        recent_low = min(lows[-10:])
+        if recent_high > prior_high and recent_low > prior_low:
+            swing = "up"
+            evidence.append("\u8fd1 10 \u65e5\u9ad8\u4f4e\u9ede\u540c\u6b65\u588a\u9ad8")
+        elif recent_high < prior_high and recent_low < prior_low:
+            swing = "down"
+            evidence.append("\u8fd1 10 \u65e5\u9ad8\u4f4e\u9ede\u540c\u6b65\u4e0b\u79fb")
+        else:
+            evidence.append("\u9ad8\u4f4e\u9ede\u7d50\u69cb\u5c1a\u672a\u540c\u5411")
+
+    if bullish_stack and (slope20 is None or slope20 > 0) and swing != "down":
+        label, tone, slug = "\u4e0a\u5347\u8da8\u52e2", "up", "uptrend"
+        evidence.insert(0, "\u6536\u76e4\u7ad9\u4e0a 20\uff0f60\uff0f120 \u65e5\u5747\u7dda\u591a\u982d\u6392\u5217")
+    elif bearish_stack and (slope20 is None or slope20 < 0) and swing != "up":
+        label, tone, slug = "\u4e0b\u964d\u8da8\u52e2", "down", "downtrend"
+        evidence.insert(0, "\u6536\u76e4\u8dcc\u7834 20\uff0f60\uff0f120 \u65e5\u5747\u7dda\u7a7a\u982d\u6392\u5217")
+    elif slope20 is not None and abs(slope20) <= 0.5 and swing == "mixed":
+        label, tone, slug = "\u5340\u9593\u6574\u7406", "mixed", "range"
+        evidence.insert(0, "20 \u65e5\u5747\u7dda\u8da8\u5e73\u4e14\u9ad8\u4f4e\u9ede\u672a\u5f62\u6210\u8da8\u52e2")
+    else:
+        label, tone, slug = "\u8da8\u52e2\u8f49\u63db", "mixed", "transition"
+        evidence.insert(0, "\u5747\u7dda\u8207\u9ad8\u4f4e\u9ede\u8a0a\u865f\u5c1a\u672a\u4e00\u81f4")
+
+    if slope20 is not None:
+        evidence.append(f"20 \u65e5\u7dda 5 \u65e5\u659c\u7387 {slope20:+.1f}%")
+    return {
+        "label": label,
+        "tone": tone,
+        "slug": slug,
+        "swing": swing,
+        "evidence": evidence[:4],
+    }
+
+def volume_price_analysis(item: TickerReport) -> dict[str, object] | None:
+    """Classify the latest bar by Wyckoff's effort-versus-result principle."""
+    series = _aligned_ohlcv(item)
+    if not series or len(series["closes"]) < 21:
+        return None
+    closes = [float(value) for value in series["closes"]]
+    highs = [float(value) for value in series["highs"]]
+    lows = [float(value) for value in series["lows"]]
+    volumes = [_as_float(value) for value in series["volumes"]]
+    current_volume = volumes[-1]
+    baseline_volumes = [value for value in volumes[-21:-1] if value is not None and value > 0]
+    if current_volume is None or len(baseline_volumes) < 10:
+        return None
+
+    prior_ranges = [
+        _true_range_at(highs, lows, closes, index)
+        for index in range(max(1, len(closes) - 21), len(closes) - 1)
+    ]
+    prior_ranges = [value for value in prior_ranges if value > 0]
+    if not prior_ranges:
+        return None
+
+    volume_ratio = current_volume / (sum(baseline_volumes) / len(baseline_volumes))
+    true_range = _true_range_at(highs, lows, closes, len(closes) - 1)
+    range_ratio = true_range / median(prior_ranges)
+    close_location = _close_location(highs[-1], lows[-1], closes[-1])
+    prior_high = max(highs[-21:-1])
+    prior_low = min(lows[-21:-1])
+    range_span = prior_high - prior_low
+    range_position = (closes[-1] - prior_low) / range_span if range_span > 0 else 0.5
+    change_pct = (closes[-1] - closes[-2]) / closes[-2] * 100.0 if closes[-2] else 0.0
+    breakout = closes[-1] > prior_high
+    breakdown = closes[-1] < prior_low
+    high_volume = volume_ratio >= 1.5
+    low_volume = volume_ratio <= 0.7
+    wide_spread = range_ratio >= 1.2
+    narrow_spread = range_ratio <= 0.7
+    trend = _trend_structure(item, series)
+
+    status = "\u91cf\u50f9\u4e2d\u6027"
+    event = "\u7b49\u5f85\u5f8c\u7e8c\u50f9\u683c\u78ba\u8a8d"
+    tone = "mixed"
+    adjustment = 0
+    priority = 1
+
+    if breakout:
+        if volume_ratio >= 1.2 and range_ratio >= 1.0 and close_location >= 0.65:
+            status, event, tone, adjustment, priority = "\u9700\u6c42\u78ba\u8a8d", "\u653e\u91cf\u7a81\u7834", "up", 5, 5
+        elif volume_ratio < 1.0 or close_location < 0.55:
+            status, event, adjustment, priority = "\u7a81\u7834\u91cf\u80fd\u4e0d\u8db3", "\u4f4e\u54c1\u8cea\u7a81\u7834", -3, 4
+        else:
+            status, event, priority = "\u7a81\u7834\u5f85\u78ba\u8a8d", "\u7a81\u7834\u4f46\u8b49\u64da\u4e0d\u8db3", 3
+    elif breakdown:
+        if volume_ratio >= 1.2 and range_ratio >= 1.0 and close_location <= 0.35:
+            status, event, tone, adjustment, priority = "\u4f9b\u7d66\u78ba\u8a8d", "\u653e\u91cf\u8dcc\u7834", "down", -5, 5
+        elif volume_ratio < 1.0 or close_location > 0.45:
+            status, event, adjustment, priority = "\u8dcc\u7834\u672a\u7372\u78ba\u8a8d", "\u4f4e\u91cf\u8dcc\u7834", 0, 4
+        else:
+            status, event, tone, adjustment, priority = "\u8dcc\u7834\u5f85\u78ba\u8a8d", "\u7d50\u69cb\u8f49\u5f31", "down", -3, 4
+    elif high_volume and narrow_spread:
+        if range_position <= 0.35 and close_location >= 0.55:
+            status, event, priority = "\u4f4e\u6a94\u627f\u63a5\u5019\u9078", "\u9ad8\u91cf\u7a84\u5e45\u5438\u6536", 4
+        elif range_position >= 0.65 and close_location <= 0.45:
+            status, event, tone, adjustment, priority = "\u9ad8\u6a94\u4f9b\u7d66\u589e\u52a0", "\u9ad8\u91cf\u7a84\u5e45\u6d3e\u767c\u98a8\u96aa", "down", -3, 4
+        else:
+            status, event, priority = "\u5927\u91cf\u63db\u624b", "\u9ad8\u91cf\u7a84\u5e45\uff0c\u65b9\u5411\u672a\u5b9a", 3
+    elif trend["slug"] == "uptrend" and change_pct < 0 and low_volume and range_ratio <= 1.0:
+        status, event, tone, adjustment, priority = "\u4f9b\u7d66\u6536\u6582", "\u4e0a\u5347\u8da8\u52e2\u91cf\u7e2e\u56de\u6a94", "up", 3, 3
+    elif trend["slug"] == "downtrend" and change_pct > 0 and low_volume:
+        status, event, tone, adjustment, priority = "\u9700\u6c42\u4e0d\u8db3", "\u4e0b\u964d\u8da8\u52e2\u4f4e\u91cf\u53cd\u5f48", "down", -3, 3
+    elif high_volume and change_pct > 0 and close_location >= 0.65:
+        status, event, tone, adjustment, priority = "\u9700\u6c42\u64f4\u5f35", "\u50f9\u6f32\u91cf\u589e", "up", 3, 3
+    elif high_volume and change_pct < 0 and close_location <= 0.35:
+        status, event, tone, adjustment, priority = "\u4f9b\u7d66\u64f4\u5f35", "\u50f9\u8dcc\u91cf\u589e", "down", -3, 4
+    elif wide_spread and low_volume:
+        status, event, adjustment, priority = "\u91cf\u50f9\u80cc\u96e2", "\u50f9\u683c\u64f4\u5f35\u4f46\u91cf\u80fd\u672a\u8ddf\u4e0a", -2, 3
+
+    evidence_score = 40
+    evidence_score += 15 if high_volume or low_volume else 5
+    evidence_score += 15 if wide_spread or narrow_spread else 5
+    evidence_score += 10 if close_location >= 0.7 or close_location <= 0.3 else 5
+    evidence_score += 10 if breakout or breakdown else 0
+    evidence = [
+        f"\u6210\u4ea4\u91cf\u70ba\u524d 20 \u65e5\u5747\u91cf {volume_ratio:.2f} \u500d",
+        f"\u771f\u5be6\u6ce2\u5e45\u70ba\u8fd1\u671f\u5178\u578b\u6ce2\u5e45 {range_ratio:.2f} \u500d",
+        f"\u6536\u76e4\u4f4d\u65bc\u7576\u65e5\u5340\u9593 {close_location * 100:.0f}%",
+        f"\u6536\u76e4\u4f4d\u65bc\u524d 20 \u65e5\u5340\u9593 {range_position * 100:.0f}%",
+    ]
+    return {
+        "status": status,
+        "event": event,
+        "tone": tone,
+        "priority": priority,
+        "score_adjustment": adjustment,
+        "evidence_score": min(90, evidence_score),
+        "volume_ratio": round(volume_ratio, 2),
+        "range_ratio": round(range_ratio, 2),
+        "close_location": round(close_location, 3),
+        "range_position": round(range_position, 3),
+        "change_pct": round(change_pct, 2),
+        "breakout": breakout,
+        "breakdown": breakdown,
+        "evidence": evidence,
+    }
+
+def _wyckoff_event_at(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    volumes: list[float | None],
+    index: int,
+) -> dict[str, object] | None:
+    if index < 20:
+        return None
+    prior_high = max(highs[index - 20:index])
+    prior_low = min(lows[index - 20:index])
+    baseline = [value for value in volumes[index - 20:index] if value is not None and value > 0]
+    volume_ratio = None
+    if volumes[index] is not None and baseline:
+        volume_ratio = float(volumes[index]) / (sum(baseline) / len(baseline))
+    location = _close_location(highs[index], lows[index], closes[index])
+
+    if lows[index] < prior_low and closes[index] > prior_low and location >= 0.55:
+        return {
+            "event": "Spring \u5047\u8dcc\u7834",
+            "phase": "\u5438\u7c4c\u5019\u9078",
+            "tone": "mixed",
+            "priority": 5,
+            "level": lows[index],
+            "evidence": "\u8dcc\u7834\u652f\u6490\u5f8c\u6536\u56de\u5340\u9593\uff0c\u4ecd\u9700\u4f4e\u91cf\u6e2c\u8a66\u78ba\u8a8d",
+        }
+    if highs[index] > prior_high and closes[index] < prior_high and location <= 0.45:
+        return {
+            "event": "Upthrust \u5047\u7a81\u7834",
+            "phase": "\u6d3e\u767c\u98a8\u96aa",
+            "tone": "down",
+            "priority": 5,
+            "level": highs[index],
+            "evidence": "\u7a81\u7834\u58d3\u529b\u5f8c\u6536\u56de\u5340\u9593\uff0c\u986f\u793a\u4e0a\u65b9\u4f9b\u7d66",
+        }
+    if closes[index] > prior_high and volume_ratio is not None and volume_ratio >= 1.2 and location >= 0.65:
+        return {
+            "event": "SOS \u5f37\u52e2\u8a0a\u865f",
+            "phase": "\u4e0a\u6f32\u6e96\u5099",
+            "tone": "up",
+            "priority": 5,
+            "level": prior_high,
+            "evidence": f"\u653e\u91cf {volume_ratio:.2f} \u500d\u7a81\u7834\u5340\u9593\u4e14\u6536\u8fd1\u9ad8\u9ede",
+        }
+    if closes[index] < prior_low and volume_ratio is not None and volume_ratio >= 1.2 and location <= 0.35:
+        return {
+            "event": "SOW \u5f31\u52e2\u8a0a\u865f",
+            "phase": "\u4e0b\u8dcc\u6e96\u5099",
+            "tone": "down",
+            "priority": 5,
+            "level": prior_low,
+            "evidence": f"\u653e\u91cf {volume_ratio:.2f} \u500d\u8dcc\u7834\u5340\u9593\u4e14\u6536\u8fd1\u4f4e\u9ede",
+        }
+    return None
+
+def wyckoff_structure_analysis(
+    item: TickerReport,
+    *,
+    vpa: dict[str, object] | None = None,
+    trend: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    """Return conservative Wyckoff phase and event candidates with evidence."""
+    series = _aligned_ohlcv(item)
+    if not series or len(series["closes"]) < 21:
+        return None
+    closes = [float(value) for value in series["closes"]]
+    highs = [float(value) for value in series["highs"]]
+    lows = [float(value) for value in series["lows"]]
+    volumes = [_as_float(value) for value in series["volumes"]]
+    trend = trend or _trend_structure(item, series)
+    vpa = vpa or volume_price_analysis(item)
+
+    detected: dict[str, object] | None = None
+    detected_index: int | None = None
+    for index in range(len(closes) - 1, max(19, len(closes) - 6), -1):
+        event = _wyckoff_event_at(closes, highs, lows, volumes, index)
+        if event:
+            detected, detected_index = event, index
+            break
+
+    evidence: list[str] = []
+    if detected:
+        event_label = str(detected["event"])
+        phase = str(detected["phase"])
+        tone = str(detected["tone"])
+        priority = int(detected["priority"])
+        evidence.append(str(detected["evidence"]))
+        if detected_index is not None and detected_index < len(closes) - 1:
+            days_ago = len(closes) - 1 - detected_index
+            evidence.append(f"\u4e8b\u4ef6\u51fa\u73fe\u5728 {days_ago} \u500b\u4ea4\u6613\u65e5\u524d\uff0c\u7b49\u5f85\u5f8c\u7e8c\u6e2c\u8a66")
+    else:
+        metrics = item.valuation.metrics if item.valuation else {}
+        pivot = _as_float(metrics.get("breakout_pivot"))
+        breakout_days = _as_float(metrics.get("breakout_days_ago"))
+        current_volume_ratio = _as_float(vpa.get("volume_ratio")) if vpa else None
+        if (
+            pivot is not None
+            and pivot > 0
+            and breakout_days is not None
+            and 0 <= breakout_days <= 5
+            and closes[-1] >= pivot
+            and closes[-1] <= pivot * 1.03
+            and current_volume_ratio is not None
+            and current_volume_ratio <= 1.0
+        ):
+            event_label, phase, tone, priority = "LPS \u56de\u6e2c\u5019\u9078", "\u4e0a\u6f32\u6e96\u5099", "up", 4
+            evidence.append("\u7a81\u7834\u5f8c\u56de\u6e2c\u539f\u58d3\u529b\u5340\uff0c\u6210\u4ea4\u91cf\u4f4e\u65bc 20 \u65e5\u5747\u91cf")
+        elif trend["slug"] == "uptrend":
+            event_label, phase, tone, priority = "\u5c1a\u7121\u65b0\u7684\u5a01\u79d1\u592b\u4e8b\u4ef6", "\u4e0a\u6f32\u968e\u6bb5", "up", 3
+            evidence.append("\u5747\u7dda\u8207\u9ad8\u4f4e\u9ede\u7dad\u6301\u4e0a\u5347\u7d50\u69cb")
+        elif trend["slug"] == "downtrend":
+            event_label, phase, tone, priority = "\u5c1a\u7121\u6b62\u8dcc\u4e8b\u4ef6", "\u4e0b\u8dcc\u968e\u6bb5", "down", 4
+            evidence.append("\u4e0b\u964d\u7d50\u69cb\u5c1a\u672a\u51fa\u73fe Spring \u6216\u9700\u6c42\u78ba\u8a8d")
+        elif vpa and vpa["event"] == "\u9ad8\u91cf\u7a84\u5e45\u5438\u6536":
+            event_label, phase, tone, priority = "\u5438\u6536\u5019\u9078", "\u5438\u7c4c\u5019\u9078", "mixed", 4
+            evidence.append("\u5340\u9593\u4f4e\u6a94\u51fa\u73fe\u9ad8\u91cf\u7a84\u5e45\uff0c\u4ecd\u9700\u7a81\u7834\u78ba\u8a8d")
+        elif vpa and vpa["event"] == "\u9ad8\u91cf\u7a84\u5e45\u6d3e\u767c\u98a8\u96aa":
+            event_label, phase, tone, priority = "\u4f9b\u7d66\u6e2c\u8a66", "\u6d3e\u767c\u98a8\u96aa", "down", 4
+            evidence.append("\u5340\u9593\u9ad8\u6a94\u51fa\u73fe\u9ad8\u91cf\u7a84\u5e45\u8207\u5f31\u6536\u76e4")
+        else:
+            event_label, phase, tone, priority = "\u5c1a\u7121\u660e\u78ba\u4e8b\u4ef6", "\u5340\u9593\u6574\u7406", "mixed", 1
+            evidence.append("\u5c1a\u672a\u51fa\u73fe\u53ef\u9a57\u8b49\u7684 Spring\u3001Upthrust\u3001SOS \u6216 SOW")
+
+    evidence.extend(str(value) for value in trend["evidence"][:2])
+    confidence = 45
+    confidence += 20 if detected else 0
+    confidence += 10 if tone == trend["tone"] and tone != "mixed" else 0
+    confidence += 10 if vpa and tone == vpa["tone"] and tone != "mixed" else 0
+    return {
+        "phase": phase,
+        "event": event_label,
+        "tone": tone,
+        "priority": priority,
+        "evidence_score": min(85, confidence),
+        "evidence": evidence[:4],
+        "candidate": "\u5019\u9078" in phase or "\u5019\u9078" in event_label or "\u98a8\u96aa" in phase,
+        "level": detected.get("level") if detected else None,
+    }
+
+def adam_reflection_scenario(item: TickerReport, periods: int = 5) -> dict[str, object] | None:
+    """Project a short double-reflection path as a scenario, never a score."""
+    series = _aligned_ohlcv(item)
+    if not series or periods <= 0:
+        return None
+    closes = [float(value) for value in series["closes"]]
+    usable = min(periods, len(closes) - 1)
+    if usable < 2 or closes[-1] <= 0:
+        return None
+    last = closes[-1]
+    projection = [round(2 * last - closes[-2 - index], 4) for index in range(usable)]
+    if any(value <= 0 for value in projection):
+        return None
+    change_pct = (projection[-1] - last) / last * 100.0
+    if change_pct >= 1.0:
+        direction, tone = "\u504f\u591a\u5ef6\u7e8c\u60c5\u5883", "up"
+    elif change_pct <= -1.0:
+        direction, tone = "\u504f\u7a7a\u5ef6\u7e8c\u60c5\u5883", "down"
+    else:
+        direction, tone = "\u6a6b\u5411\u5ef6\u7e8c\u60c5\u5883", "mixed"
+    return {
+        "direction": direction,
+        "tone": tone,
+        "periods": usable,
+        "projection": projection,
+        "projected_end": projection[-1],
+        "change_pct": round(change_pct, 2),
+        "evidence": f"\u6700\u8fd1 {usable} \u500b\u4ea4\u6613\u65e5\u50f9\u683c\u8def\u5f91\u7684\u96d9\u91cd\u53cd\u5c04",
+        "note": "\u50c5\u4f5c\u60c5\u5883\u53c3\u8003\uff0c\u6703\u96a8\u6bcf\u65e5\u50f9\u683c\u66f4\u65b0\uff0c\u4e0d\u7d0d\u5165\u53f3\u5074\u5206\u6578",
+    }
+
+def trading_framework_analysis(item: TickerReport) -> dict[str, object] | None:
+    """Combine trend, Wyckoff, VPA, Adam and operator discipline in one view."""
+    series = _aligned_ohlcv(item)
+    if not series or len(series["closes"]) < 21:
+        return None
+    trend = _trend_structure(item, series)
+    vpa = volume_price_analysis(item)
+    wyckoff = wyckoff_structure_analysis(item, vpa=vpa, trend=trend)
+    adam = adam_reflection_scenario(item)
+    if not vpa or not wyckoff:
+        return None
+
+    metrics = item.valuation.metrics if item.valuation else {}
+    technical = technical_playbook(item)
+    position_status = item.ticker.position.status
+    adverse_event = wyckoff["event"] in {"Upthrust \u5047\u7a81\u7834", "SOW \u5f31\u52e2\u8a0a\u865f"}
+    constructive_event = wyckoff["event"] in {"SOS \u5f37\u52e2\u8a0a\u865f", "LPS \u56de\u6e2c\u5019\u9078"}
+    spring_candidate = wyckoff["event"] == "Spring \u5047\u8dcc\u7834"
+    extended = bool(technical and technical["status"] == "Extended, do not chase")
+
+    if adverse_event or vpa["status"] in {"\u4f9b\u7d66\u78ba\u8a8d", "\u4f9b\u7d66\u64f4\u5f35", "\u9ad8\u6a94\u4f9b\u7d66\u589e\u52a0"}:
+        status = "\u4fdd\u8b77\u8cc7\u91d1"
+        action = "\u505c\u6b62\u52a0\u78bc\uff1b\u6301\u6709\u90e8\u4f4d\u6aa2\u67e5\u5931\u6548\u50f9\u8207\u6e1b\u78bc\u8a08\u756b"
+        tone, priority = "down", 5
+    elif trend["slug"] == "downtrend":
+        status = "\u66ab\u505c\u9032\u5834"
+        action = "\u4e0d\u9810\u6e2c\u5e95\u90e8\uff1b\u7b49\u5f85\u4e0b\u964d\u7d50\u69cb\u626d\u8f49\u8207\u9700\u6c42\u78ba\u8a8d"
+        tone, priority = "down", 4
+    elif extended:
+        status = "\u4e0d\u53ef\u8ffd\u50f9"
+        action = "\u4fdd\u7559\u65e2\u6709\u5f37\u52e2\u90e8\u4f4d\uff0c\u7b49\u5f85\u91cf\u7e2e\u56de\u6e2c\u5f8c\u518d\u8a55\u4f30"
+        tone, priority = "mixed", 4
+    elif spring_candidate:
+        status = "\u7b49\u5f85\u6e2c\u8a66"
+        action = "Spring \u53ea\u662f\u5019\u9078\uff1b\u7b49\u5f85\u8f03\u4f4e\u91cf\u56de\u6e2c\u4e14\u5b88\u4f4f\u4f4e\u9ede"
+        tone, priority = "mixed", 4
+    elif constructive_event and vpa["tone"] == "up":
+        status = "\u7e8c\u62b1" if position_status == "holding" else "\u7b49\u5f85\u56de\u6e2c"
+        action = "\u8da8\u52e2\u8207\u9700\u6c42\u4e00\u81f4\uff1b\u53ea\u5728\u7a81\u7834\u5b88\u7a69\u6216\u4f4e\u91cf\u56de\u6e2c\u5f8c\u9806\u52e2\u52a0\u78bc"
+        tone, priority = "up", 5
+    elif trend["slug"] == "uptrend":
+        status = "\u7e8c\u62b1" if position_status == "holding" else "\u7b49\u5f85\u89f8\u767c"
+        action = "\u4e3b\u8da8\u52e2\u4ecd\u5411\u4e0a\uff1b\u672a\u51fa\u73fe\u91cf\u50f9\u89f8\u767c\u524d\u4e0d\u8ffd\u9010\u77ed\u7dda\u6ce2\u52d5"
+        tone, priority = "up", 3
+    else:
+        status = "\u7b49\u5f85\u78ba\u8a8d"
+        action = "\u907f\u514d\u5728\u5340\u9593\u4e2d\u6bb5\u4ea4\u6613\uff0c\u7b49\u5f85\u50f9\u683c\u96e2\u958b\u5340\u9593\u4e26\u7531\u6210\u4ea4\u91cf\u78ba\u8a8d"
+        tone, priority = "mixed", 2
+
+    pivot = _as_float(metrics.get("breakout_pivot"))
+    prior_low = _as_float(metrics.get("prior_20d_low"))
+    prior_high = _as_float(metrics.get("prior_20d_high"))
+    sma20 = _as_float(metrics.get("sma_20"))
+    sma60 = _as_float(metrics.get("sma_60"))
+    event_level = _as_float(wyckoff.get("level"))
+    if spring_candidate and event_level is not None:
+        invalidation, invalidation_label = event_level, "Spring \u4f4e\u9ede"
+    elif constructive_event and pivot is not None:
+        invalidation, invalidation_label = pivot, "\u7a81\u7834\u652f\u6490"
+    elif tone == "up":
+        supports = [
+            value
+            for value in (sma60, prior_low)
+            if value is not None and value < float(series["closes"][-1])
+        ]
+        invalidation = max(supports) if supports else sma20
+        invalidation_label = "\u8da8\u52e2\u652f\u6490"
+    elif tone == "down":
+        invalidation, invalidation_label = sma20 or prior_high, "\u8f49\u5f37\u9580\u6abb"
+    else:
+        invalidation, invalidation_label = prior_low, "\u5340\u9593\u652f\u6490"
+
+    aligned_tones = [
+        value
+        for value in (trend["tone"], wyckoff["tone"], vpa["tone"])
+        if value != "mixed"
+    ]
+    agreement = max(
+        (aligned_tones.count(value) for value in set(aligned_tones)),
+        default=0,
+    )
+    evidence_count = int(trend["slug"] in {"uptrend", "downtrend"})
+    evidence_count += int(
+        wyckoff["event"] not in {
+            "\u5c1a\u7121\u660e\u78ba\u4e8b\u4ef6",
+            "\u5c1a\u7121\u65b0\u7684\u5a01\u79d1\u592b\u4e8b\u4ef6",
+            "\u5c1a\u7121\u6b62\u8dcc\u4e8b\u4ef6",
+        }
+    )
+    evidence_count += int(vpa["status"] != "\u91cf\u50f9\u4e2d\u6027")
+    evidence_count += int(agreement >= 2)
+    evidence_level = "\u9ad8" if evidence_count >= 3 else "\u4e2d" if evidence_count == 2 else "\u4f4e"
+    conflict = "up" in aligned_tones and "down" in aligned_tones
+
+    return {
+        "trend": trend,
+        "wyckoff": wyckoff,
+        "vpa": vpa,
+        "adam": adam,
+        "operator": {
+            "status": status,
+            "action": action,
+            "tone": tone,
+            "invalidation": round(invalidation, 4) if invalidation is not None else None,
+            "invalidation_label": invalidation_label,
+        },
+        "tone": tone,
+        "priority": priority,
+        "evidence_count": evidence_count,
+        "evidence_level": evidence_level,
+        "conflict": conflict,
+        "summary": f"{trend['label']} \u00b7 {wyckoff['phase']} \u00b7 {vpa['status']}",
+    }
+
 def _market_alignment_check(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, object] | None:
     profile = relative_strength_profile(item, benchmarks)
     available = int(profile.get("available_horizons", 0))
@@ -1523,6 +2239,8 @@ def right_side_check(
     if not item.valuation:
         return None
     metrics = item.valuation.metrics
+    if not _technical_regime_ready(item):
+        return None
     last = _as_float(metrics.get("last_close"))
     technical_keys = (
         "atr_contraction_ratio", "bb_width_20_percentile", "volume_5d_vs_20d",
@@ -1630,19 +2348,43 @@ def right_side_check(
     }
 
 
-def right_side_signal_validation(
+def _right_side_signal_validation_report_observations(
     report: DailyReport,
     horizons: tuple[int, ...] = (5, 10, 20),
+    minimum_sample: int = 20,
 ) -> dict[str, object]:
-    """Measure completed right-side signals using archived report observations."""
-    outcomes: dict[int, list[float]] = {horizon: [] for horizon in horizons}
-    pending: dict[int, int] = {horizon: 0 for horizon in horizons}
+    """Measure completed right-side signals globally and by market."""
+    market_by_symbol = {
+        item.ticker.symbol: _market_bucket(item.ticker.market)
+        for item in report.ticker_reports
+    }
+    global_outcomes: dict[int, list[float]] = {horizon: [] for horizon in horizons}
+    global_pending: dict[int, int] = {horizon: 0 for horizon in horizons}
+    known_markets = set(market_by_symbol.values())
+    market_outcomes: dict[str, dict[int, list[float]]] = {
+        market: {horizon: [] for horizon in horizons}
+        for market in known_markets
+    }
+    market_pending: dict[str, dict[int, int]] = {
+        market: {horizon: 0 for horizon in horizons}
+        for market in known_markets
+    }
+    market_recorded: dict[str, int] = {market: 0 for market in known_markets}
     recorded = 0
-    for points in report.ticker_history.values():
+
+    for symbol, points in report.ticker_history.items():
+        market = market_by_symbol.get(symbol, "other")
+        market_outcomes.setdefault(market, {horizon: [] for horizon in horizons})
+        market_pending.setdefault(market, {horizon: 0 for horizon in horizons})
+        market_recorded.setdefault(market, 0)
         ordered = sorted(points, key=lambda point: (point.report_date, point.generated_at))
         active_signal = False
         for index, point in enumerate(ordered):
-            ready = point.right_side_status == "Right-side ready" and point.last_close is not None and point.last_close > 0
+            ready = (
+                point.right_side_status == "Right-side ready"
+                and point.last_close is not None
+                and point.last_close > 0
+            )
             if not ready:
                 active_signal = False
                 continue
@@ -1650,26 +2392,1536 @@ def right_side_signal_validation(
                 continue
             active_signal = True
             recorded += 1
+            market_recorded[market] += 1
             for horizon in horizons:
                 if index + horizon >= len(ordered):
-                    pending[horizon] += 1
+                    global_pending[horizon] += 1
+                    market_pending[market][horizon] += 1
                     continue
                 exit_price = ordered[index + horizon].last_close
                 if exit_price is None or exit_price <= 0:
-                    pending[horizon] += 1
+                    global_pending[horizon] += 1
+                    market_pending[market][horizon] += 1
                     continue
-                outcomes[horizon].append((exit_price - point.last_close) / point.last_close * 100.0)
-    rows = []
-    for horizon in horizons:
-        values = outcomes[horizon]
+                outcome = (exit_price - point.last_close) / point.last_close * 100.0
+                global_outcomes[horizon].append(outcome)
+                market_outcomes[market][horizon].append(outcome)
+
+    def rows_for(
+        outcomes: dict[int, list[float]],
+        pending: dict[int, int],
+    ) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for horizon in horizons:
+            values = outcomes[horizon]
+            sample_size = len(values)
+            rows.append({
+                "sessions": horizon,
+                "sample_size": sample_size,
+                "minimum_sample": minimum_sample,
+                "reliable": sample_size >= minimum_sample,
+                "win_rate": round(sum(value > 0 for value in values) / sample_size * 100.0, 1) if values else None,
+                "average_return": round(sum(values) / sample_size, 2) if values else None,
+                "pending": pending[horizon],
+            })
+        return rows
+
+    labels = {
+        "us": "US",
+        "taiwan": "Taiwan",
+        "crypto": "Crypto",
+        "other": "Other",
+    }
+    markets = [
+        {
+            "key": market,
+            "label": labels.get(market, market.upper()),
+            "signals_recorded": market_recorded.get(market, 0),
+            "horizons": rows_for(outcomes, market_pending[market]),
+        }
+        for market, outcomes in market_outcomes.items()
+    ]
+    order = {"us": 0, "taiwan": 1, "crypto": 2, "other": 3}
+    markets.sort(key=lambda row: order.get(str(row["key"]), 9))
+    return {
+        "signals_recorded": recorded,
+        "minimum_sample": minimum_sample,
+        "horizons": rows_for(global_outcomes, global_pending),
+        "markets": markets,
+    }
+
+
+def _ticker_price_sessions(item: TickerReport | None) -> list[tuple[date, float]]:
+    if item is None or not item.valuation:
+        return []
+    dates = item.valuation.metrics.get("chart_dates_60")
+    closes = item.valuation.metrics.get("chart_close_60")
+    if not isinstance(dates, list) or not isinstance(closes, list):
+        return []
+    by_date: dict[date, float] = {}
+    for raw_date, raw_close in zip(dates, closes):
+        try:
+            session_date = date.fromisoformat(str(raw_date)[:10])
+        except ValueError:
+            continue
+        close = _as_float(raw_close)
+        if close is not None and close > 0:
+            by_date[session_date] = close
+    return sorted(by_date.items())
+
+
+def right_side_signal_validation(
+    report: DailyReport,
+    horizons: tuple[int, ...] = (5, 10, 20),
+    minimum_sample: int = 30,
+) -> dict[str, object]:
+    """Validate entry signals against exchange sessions and risk-normalized outcomes."""
+    items = {item.ticker.symbol: item for item in report.ticker_reports}
+    market_by_symbol = {
+        symbol: _market_bucket(item.ticker.market)
+        for symbol, item in items.items()
+    }
+    known_markets = set(market_by_symbol.values())
+
+    def empty_outcomes() -> dict[int, list[dict[str, float | None]]]:
+        return {horizon: [] for horizon in horizons}
+
+    global_outcomes = empty_outcomes()
+    global_pending = {horizon: 0 for horizon in horizons}
+    global_unavailable = {horizon: 0 for horizon in horizons}
+    market_outcomes = {market: empty_outcomes() for market in known_markets}
+    market_pending = {
+        market: {horizon: 0 for horizon in horizons}
+        for market in known_markets
+    }
+    market_unavailable = {
+        market: {horizon: 0 for horizon in horizons}
+        for market in known_markets
+    }
+    market_recorded = {market: 0 for market in known_markets}
+    recorded = 0
+
+    for symbol, points in report.ticker_history.items():
+        item = items.get(symbol)
+        market = market_by_symbol.get(symbol, "other")
+        market_outcomes.setdefault(market, empty_outcomes())
+        market_pending.setdefault(market, {horizon: 0 for horizon in horizons})
+        market_unavailable.setdefault(market, {horizon: 0 for horizon in horizons})
+        market_recorded.setdefault(market, 0)
+        sessions = _ticker_price_sessions(item)
+        ordered = sorted(points, key=lambda point: (point.report_date, point.generated_at))
+        active_signal = False
+        for point in ordered:
+            ready = (
+                point.right_side_status == "Right-side ready"
+                and point.last_close is not None
+                and point.last_close > 0
+            )
+            if not ready:
+                active_signal = False
+                continue
+            if active_signal:
+                continue
+            active_signal = True
+            recorded += 1
+            market_recorded[market] += 1
+
+            entry_price = point.signal_entry or point.last_close
+            prior_indices = [
+                index
+                for index, (session_date, _close) in enumerate(sessions)
+                if session_date <= point.report_date
+            ]
+            if not prior_indices:
+                for horizon in horizons:
+                    global_unavailable[horizon] += 1
+                    market_unavailable[market][horizon] += 1
+                continue
+            entry_index = prior_indices[-1]
+            for horizon in horizons:
+                exit_index = entry_index + horizon
+                if exit_index >= len(sessions):
+                    global_pending[horizon] += 1
+                    market_pending[market][horizon] += 1
+                    continue
+                exit_price = sessions[exit_index][1]
+                return_pct = (exit_price - entry_price) / entry_price * 100.0
+                risk_pct = point.signal_risk_pct
+                r_multiple = (
+                    return_pct / risk_pct
+                    if risk_pct is not None and risk_pct > 0
+                    else None
+                )
+                outcome = {"return": return_pct, "r": r_multiple}
+                global_outcomes[horizon].append(outcome)
+                market_outcomes[market][horizon].append(outcome)
+
+    def rows_for(
+        outcomes: dict[int, list[dict[str, float | None]]],
+        pending: dict[int, int],
+        unavailable: dict[int, int],
+    ) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for horizon in horizons:
+            values = [float(row["return"]) for row in outcomes[horizon]]
+            r_values = [
+                float(row["r"])
+                for row in outcomes[horizon]
+                if row["r"] is not None
+            ]
+            wins = [value for value in values if value > 0]
+            losses = [value for value in values if value <= 0]
+            sample_size = len(values)
+            average_win = sum(wins) / len(wins) if wins else None
+            average_loss = sum(losses) / len(losses) if losses else None
+            payoff_ratio = (
+                average_win / abs(average_loss)
+                if average_win is not None and average_loss not in (None, 0)
+                else None
+            )
+            rows.append({
+                "sessions": horizon,
+                "sample_size": sample_size,
+                "minimum_sample": minimum_sample,
+                "reliable": sample_size >= minimum_sample,
+                "win_rate": round(len(wins) / sample_size * 100.0, 1) if values else None,
+                "average_return": round(sum(values) / sample_size, 2) if values else None,
+                "median_return": round(median(values), 2) if values else None,
+                "average_win": round(average_win, 2) if average_win is not None else None,
+                "average_loss": round(average_loss, 2) if average_loss is not None else None,
+                "payoff_ratio": round(payoff_ratio, 2) if payoff_ratio is not None else None,
+                "expectancy_r": round(sum(r_values) / len(r_values), 2) if r_values else None,
+                "median_r": round(median(r_values), 2) if r_values else None,
+                "r_sample_size": len(r_values),
+                "worst_return": round(min(values), 2) if values else None,
+                "pending": pending[horizon],
+                "unavailable": unavailable[horizon],
+                "basis": "exchange_sessions",
+            })
+        return rows
+
+    labels = {"us": "US", "taiwan": "Taiwan", "crypto": "Crypto", "other": "Other"}
+    order = {"us": 0, "taiwan": 1, "crypto": 2, "other": 3}
+    markets = [
+        {
+            "key": market,
+            "label": labels.get(market, market.upper()),
+            "signals_recorded": market_recorded.get(market, 0),
+            "horizons": rows_for(
+                outcomes,
+                market_pending[market],
+                market_unavailable[market],
+            ),
+        }
+        for market, outcomes in market_outcomes.items()
+    ]
+    markets.sort(key=lambda row: order.get(str(row["key"]), 9))
+    return {
+        "signals_recorded": recorded,
+        "minimum_sample": minimum_sample,
+        "basis": "exchange_sessions",
+        "horizons": rows_for(global_outcomes, global_pending, global_unavailable),
+        "markets": markets,
+    }
+
+
+def _market_bucket(market: str) -> str:
+    if market in {"twse", "tpex", "taiwan"}:
+        return "taiwan"
+    if market == "crypto":
+        return "crypto"
+    return "us" if market == "us" else "other"
+
+
+def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[str, object] | None:
+    """Turn the right-side checklist into a price, risk, and gate plan."""
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    if not _technical_regime_ready(item):
+        return None
+    last = _metric_float(item, "last_close")
+    if last is None or last <= 0:
+        return None
+
+    state = research_state_for(report, item.ticker.symbol)
+    pivot = _metric_float(item, "breakout_pivot")
+    prior_high = _metric_float(item, "prior_20d_high")
+    trigger = pivot or prior_high
+    entry_reference = max(last, trigger) if trigger is not None else last
+
+    planned_levels = _plausible_levels(
+        _parse_price_levels(state.stop_loss),
+        last,
+    )
+    planned_stop = item.ticker.position.stop_loss
+    if planned_levels:
+        planned_stop = max(planned_levels)
+    atr = _metric_float(item, "atr_20")
+    prior_low = _metric_float(item, "prior_20d_low")
+    stop_candidates = [
+        value
+        for value in (
+            planned_stop,
+            prior_low,
+            last - 2.0 * atr if atr is not None else None,
+        )
+        if value is not None and 0 < value < entry_reference
+    ]
+    stop = max(stop_candidates) if stop_candidates else None
+    per_unit_risk = entry_reference - stop if stop is not None else None
+    risk_pct = per_unit_risk / entry_reference * 100.0 if per_unit_risk and entry_reference else None
+    target_2r = entry_reference + 2.0 * per_unit_risk if per_unit_risk else None
+
+    portfolio = report.settings.portfolio if report.settings else None
+    currency = item.ticker.currency.upper()
+    risk_budget = portfolio.risk_budget_by_currency.get(currency) if portfolio else None
+    account_risk = portfolio_risk_overview(report)
+    risk_used = sum(
+        float(row["combined_risk"])
+        for row in account_risk["currencies"]
+        if row["currency"] == currency
+    )
+    risk_available = max(0.0, risk_budget - risk_used) if risk_budget is not None else None
+    max_units = (
+        int(risk_available // per_unit_risk)
+        if risk_available is not None and per_unit_risk
+        else None
+    )
+    portfolio_passed = risk_available is None or (
+        per_unit_risk is not None and risk_available >= per_unit_risk
+    )
+    portfolio_gate = {
+        "key": "portfolio",
+        "label": "Portfolio heat",
+        "passed": portfolio_passed,
+        "required": risk_budget is not None,
+        "tone": "up" if portfolio_passed else "down",
+        "detail": (
+            f"{currency} \u5df2\u4f7f\u7528 {risk_used:,.0f} / \u9810\u7b97 {risk_budget:,.0f}\uff1b\u53ef\u7528 {risk_available:,.0f}"
+            if risk_budget is not None and risk_available is not None
+            else "\u5c1a\u672a\u8a2d\u5b9a\u5e33\u6236\u98a8\u96aa\u9810\u7b97"
+        ),
+    }
+
+    dq = data_quality_confidence(
+        item,
+        report.report_date,
+        premarket_move=premarket_move_for(report, item.ticker.symbol),
+    )
+    quality_passed = int(dq["score"]) >= 80
+    quality_gate = {
+        "key": "quality",
+        "label": "Data quality",
+        "passed": quality_passed,
+        "required": True,
+        "tone": "up" if quality_passed else "down",
+        "detail": f"{dq['score']}/100",
+    }
+
+    earnings_days = earnings_delta(item, report.report_date)
+    event_passed = earnings_days is None or earnings_days > 3 or earnings_days < 0
+    event_detail = "\u4e09\u65e5\u5167\u7121\u8ca1\u5831" if event_passed else f"{earnings_days} \u65e5\u5f8c\u8ca1\u5831"
+    event_gate = {
+        "key": "event",
+        "label": "Event risk",
+        "passed": event_passed,
+        "required": True,
+        "tone": "up" if event_passed else "down",
+        "detail": event_detail,
+    }
+
+    avg_dollar_volume = _metric_float(item, "avg_dollar_volume_20d")
+    order_notional = entry_reference * max_units if max_units is not None and max_units > 0 else None
+    order_adv_pct = (
+        order_notional / avg_dollar_volume * 100.0
+        if order_notional is not None and avg_dollar_volume
+        else None
+    )
+    days_to_liquidate = (
+        order_notional / (avg_dollar_volume * 0.10)
+        if order_notional is not None and avg_dollar_volume
+        else None
+    )
+    estimated_slippage_bps = (
+        min(50.0, max(2.0, 2.0 + order_adv_pct * 10.0))
+        if order_adv_pct is not None
+        else None
+    )
+    liquidity_required = max_units is not None and max_units > 0
+    liquidity_passed = bool(order_adv_pct is not None and order_adv_pct <= 1.0)
+    liquidity_gate = {
+        "key": "liquidity",
+        "label": "Liquidity",
+        "passed": liquidity_passed,
+        "required": liquidity_required,
+        "tone": "up" if liquidity_passed else ("down" if liquidity_required else "mixed"),
+        "detail": (
+            f"\u9810\u4f30\u8a02\u55ae\u4f54 20D \u5e73\u5747\u6210\u4ea4\u984d {order_adv_pct:.2f}%\uff1b\u4ee5 10% \u53c3\u8207\u7387\u9700 {days_to_liquidate:.2f} \u500b\u4ea4\u6613\u65e5"
+            if order_adv_pct is not None and days_to_liquidate is not None
+            else "\u8a2d\u5b9a\u5e33\u6236\u98a8\u96aa\u9810\u7b97\u5f8c\uff0c\u624d\u80fd\u4f30\u7b97\u8a02\u55ae\u6d41\u52d5\u6027"
+        ),
+    }
+
+    risk_passed = per_unit_risk is not None and risk_pct is not None and risk_pct <= 8.0
+    risk_gate = {
+        "key": "risk",
+        "label": "Defined risk",
+        "passed": risk_passed,
+        "required": True,
+        "tone": "up" if risk_passed else "down",
+        "detail": f"\u8ddd\u5931\u6548\u50f9 {risk_pct:.1f}%" if risk_pct is not None else "\u7121\u6709\u6548\u5931\u6548\u50f9",
+    }
+
+    chase_pct = (last - trigger) / trigger * 100.0 if trigger else None
+    chase_passed = chase_pct is None or chase_pct <= 5.0
+    chase_gate = {
+        "key": "chase",
+        "label": "Entry discipline",
+        "passed": chase_passed,
+        "required": True,
+        "tone": "up" if chase_passed else "down",
+        "detail": f"\u8ddd\u89f8\u767c\u50f9 {chase_pct:+.1f}%" if chase_pct is not None else "\u89f8\u767c\u50f9\u7121\u8cc7\u6599",
+    }
+
+    benchmarks = report.market_context.benchmark_returns if report.market_context else {}
+    profile = relative_strength_profile(item, benchmarks)
+    market_available = bool(profile)
+    market_passed = bool(
+        market_available
+        and float(profile.get("average_spread", 0.0)) > 0
+        and int(profile.get("positive_horizons", 0)) >= min(2, int(profile.get("available_horizons", 0)))
+    )
+    market_gate = {
+        "key": "market",
+        "label": "Market and RS",
+        "passed": market_passed,
+        "required": market_available,
+        "tone": "up" if market_passed else "mixed",
+        "detail": (
+            f"{profile.get('positive_horizons', 0)}/{profile.get('available_horizons', 0)} \u500b\u9031\u671f\u5f37\u65bc\u57fa\u6e96\uff0c"
+            f"{float(profile.get('average_spread', 0.0)):+.1f}pp"
+            if market_available
+            else "\u57fa\u6e96\u6b77\u53f2\u7121\u8cc7\u6599"
+        ),
+    }
+
+    group_gate = _sector_alignment_gate(report, item)
+    checklist = right_side_check(item, benchmarks=benchmarks, portfolio=portfolio)
+    structure_passed = bool(checklist and checklist.get("status") == "Right-side ready")
+    structure_gate = {
+        "key": "structure",
+        "label": "Price structure",
+        "passed": structure_passed,
+        "required": True,
+        "tone": str(checklist.get("tone", "mixed")) if checklist else "mixed",
+        "detail": str(checklist.get("status", "\u50f9\u683c\u7d50\u69cb\u8cc7\u6599\u4e0d\u8db3")) if checklist else "\u50f9\u683c\u7d50\u69cb\u8cc7\u6599\u4e0d\u8db3",
+    }
+
+    gates = [structure_gate, market_gate, group_gate, portfolio_gate, liquidity_gate, risk_gate, event_gate, quality_gate, chase_gate]
+    failed_required = [gate for gate in gates if gate["required"] and not gate["passed"]]
+    hard_blockers = {"quality", "event", "portfolio", "liquidity", "risk", "chase"}
+    if any(gate["key"] in hard_blockers for gate in failed_required):
+        status, tone = "blocked", "down"
+    elif not failed_required:
+        status, tone = "ready", "up"
+    else:
+        status, tone = "watch", "mixed"
+
+    return {
+        "status": status,
+        "tone": tone,
+        "entry_trigger": trigger,
+        "entry_reference": entry_reference,
+        "invalidation": stop,
+        "risk_per_unit": per_unit_risk,
+        "risk_pct": risk_pct,
+        "target_2r": target_2r,
+        "risk_budget": risk_budget,
+        "risk_used": round(risk_used, 2),
+        "risk_available": round(risk_available, 2) if risk_available is not None else None,
+        "stress_risk_per_unit": (
+            per_unit_risk + max(atr or 0.0, entry_reference * 0.03)
+            if per_unit_risk is not None
+            else None
+        ),
+        "order_notional": order_notional,
+        "order_adv_pct": order_adv_pct,
+        "days_to_liquidate": days_to_liquidate,
+        "estimated_slippage_bps": estimated_slippage_bps,
+        "max_units": max_units,
+        "currency": item.ticker.currency,
+        "gates": gates,
+        "failed_count": len(failed_required),
+        "data_source": item.valuation.source,
+        "data_as_of": item.valuation.as_of_date,
+        "data_retrieved_at": item.valuation.retrieved_at,
+    }
+
+
+def _sector_alignment_gate(report: DailyReport, item: TickerReport) -> dict[str, object]:
+    display_symbol = item.ticker.display_symbol
+    ticker_return = _metric_float(item, "return_20d")
+    benchmarks = report.market_context.benchmark_returns if report.market_context else {}
+    profile_text = " ".join(
+        str(item.valuation.metrics.get(key, ""))
+        for key in ("sector", "industry")
+    ).lower() if item.valuation else ""
+    market = _market_bucket(item.ticker.market)
+    if market == "taiwan":
+        benchmark_key, benchmark_label = "twii", "TWII"
+    elif market == "crypto":
+        benchmark_key, benchmark_label = "btc", "BTC"
+    elif "semiconductor" in profile_text:
+        benchmark_key, benchmark_label = "soxx", "SOXX"
+    elif any(value in profile_text for value in ("technology", "software", "internet")):
+        benchmark_key, benchmark_label = "qqq", "QQQ"
+    else:
+        benchmark_key, benchmark_label = "spy", "SPY"
+    benchmark_return = _as_float(benchmarks.get(f"{benchmark_key}_20d"))
+
+    for row in sector_leadership(report):
+        tiles = row.get("tiles", [])
+        symbols = {str(tile.get("symbol")) for tile in tiles}
+        if display_symbol not in symbols:
+            continue
+        peer_returns = [
+            value
+            for tile in tiles
+            if str(tile.get("symbol")) != display_symbol
+            if (value := _as_float(tile.get("ret_20d"))) is not None
+        ]
+        peer_return = sum(peer_returns) / len(peer_returns) if peer_returns else None
+        comparison_returns = [
+            value for value in (peer_return, benchmark_return) if value is not None
+        ]
+        available = ticker_return is not None and bool(comparison_returns)
+        passed = bool(available and all(ticker_return >= value for value in comparison_returns))
+        comparison_parts = []
+        if peer_return is not None:
+            comparison_parts.append(f"\u89c0\u5bdf\u6e05\u55ae\u540c\u65cf\u7fa4 {peer_return:+.1f}%")
+        if benchmark_return is not None:
+            comparison_parts.append(f"{benchmark_label} {benchmark_return:+.1f}%")
+        group_detail = (
+            f"{row.get('label_zh', row.get('label', 'Group'))}: \u500b\u80a1 {ticker_return:+.1f}% / "
+            + " / ".join(comparison_parts)
+        ) if available else f"{row.get('label_zh', row.get('label', 'Group'))}: \u6bd4\u8f03\u8cc7\u6599\u4e0d\u8db3"
+        return {
+            "key": "group",
+            "label": "Industry group",
+            "passed": passed,
+            "required": available,
+            "tone": "up" if passed else "mixed",
+            "detail": group_detail,
+        }
+    if ticker_return is not None and benchmark_return is not None:
+        passed = ticker_return >= benchmark_return
+        return {
+            "key": "group",
+            "label": "Industry group",
+            "passed": passed,
+            "required": True,
+            "tone": "up" if passed else "mixed",
+            "detail": f"ticker {ticker_return:+.1f}% / {benchmark_label} {benchmark_return:+.1f}%",
+        }
+    return {
+        "key": "group",
+        "label": "Industry group",
+        "passed": False,
+        "required": False,
+        "tone": "mixed",
+        "detail": "\u89c0\u5bdf\u6e05\u55ae\u5167\u7121\u53ef\u6bd4\u8f03\u65cf\u7fa4",
+    }
+
+
+def _trade_journal_summary_legacy(report: DailyReport, minimum_sample: int = 20) -> dict[str, object]:
+    """Compute P/L, R, MFE, and MAE for persisted trade-journal entries."""
+    items = {item.ticker.symbol: item for item in report.ticker_reports}
+    rows: list[dict[str, object]] = []
+    for trade in report.trade_journal:
+        if trade.status == "cancelled":
+            continue
+        item = items.get(trade.ticker)
+        last = _metric_float(item, "last_close") if item else None
+        closed = trade.status == "closed" and trade.exit_price is not None
+        mark_price = trade.exit_price if closed else last
+        shares = trade.shares if trade.shares is not None and trade.shares > 0 else None
+        per_unit_risk = None
+        planned_risk = None
+        if (
+            trade.entry_price is not None
+            and trade.initial_stop is not None
+            and trade.entry_price > trade.initial_stop
+        ):
+            per_unit_risk = trade.entry_price - trade.initial_stop
+            if shares is not None:
+                planned_risk = per_unit_risk * shares
+
+        gross_pl = None
+        net_pl = None
+        r_multiple = None
+        if trade.entry_price is not None and mark_price is not None and shares is not None:
+            gross_pl = (mark_price - trade.entry_price) * shares
+            net_pl = gross_pl - trade.fees
+            if planned_risk:
+                r_multiple = net_pl / planned_risk
+
+        end_date = trade.exit_date if closed and trade.exit_date else report.report_date
+        holding_days = (
+            max(0, (end_date - trade.entry_date).days)
+            if trade.entry_date is not None
+            else None
+        )
+        extremes = _trade_path_extremes(item, trade.entry_date, end_date) if item else {}
+        mfe_r = mae_r = None
+        if trade.entry_price is not None and per_unit_risk:
+            high = _as_float(extremes.get("high"))
+            low = _as_float(extremes.get("low"))
+            if high is not None:
+                mfe_r = (high - trade.entry_price) / per_unit_risk
+            if low is not None:
+                mae_r = (low - trade.entry_price) / per_unit_risk
+
         rows.append({
-            "sessions": horizon,
-            "sample_size": len(values),
-            "win_rate": round(sum(value > 0 for value in values) / len(values) * 100.0, 1) if values else None,
-            "average_return": round(sum(values) / len(values), 2) if values else None,
-            "pending": pending[horizon],
+            "trade": trade,
+            "item": item,
+            "closed": closed,
+            "mark_price": round(mark_price, 4) if mark_price is not None else None,
+            "planned_risk": round(planned_risk, 2) if planned_risk is not None else None,
+            "gross_pl": round(gross_pl, 2) if gross_pl is not None else None,
+            "net_pl": round(net_pl, 2) if net_pl is not None else None,
+            "r_multiple": round(r_multiple, 2) if r_multiple is not None else None,
+            "mfe_r": round(mfe_r, 2) if mfe_r is not None else None,
+            "mae_r": round(mae_r, 2) if mae_r is not None else None,
+            "holding_days": holding_days,
+            "path_complete": bool(extremes.get("complete", False)),
         })
-    return {"signals_recorded": recorded, "horizons": rows}
+
+    closed_rows = [row for row in rows if row["closed"] and row["r_multiple"] is not None]
+    wins = [row for row in closed_rows if float(row["r_multiple"]) > 0]
+    average_r = (
+        sum(float(row["r_multiple"]) for row in closed_rows) / len(closed_rows)
+        if closed_rows
+        else None
+    )
+    total_r = sum(float(row["r_multiple"]) for row in closed_rows) if closed_rows else None
+
+    losing_streak = max_losing_streak = 0
+    ordered_closed = sorted(
+        closed_rows,
+        key=lambda row: (
+            row["trade"].exit_date or date.min,
+            row["trade"].trade_id,
+        ),
+    )
+    for row in ordered_closed:
+        if float(row["r_multiple"]) <= 0:
+            losing_streak += 1
+            max_losing_streak = max(max_losing_streak, losing_streak)
+        else:
+            losing_streak = 0
+
+    market_stats: list[dict[str, object]] = []
+    for market in ("us", "taiwan", "crypto", "other"):
+        market_rows = [
+            row
+            for row in closed_rows
+            if _market_bucket(str(row["trade"].market)) == market
+        ]
+        if not market_rows:
+            continue
+        market_stats.append({
+            "market": market,
+            "sample_size": len(market_rows),
+            "win_rate": round(sum(float(row["r_multiple"]) > 0 for row in market_rows) / len(market_rows) * 100.0, 1),
+            "average_r": round(sum(float(row["r_multiple"]) for row in market_rows) / len(market_rows), 2),
+            "reliable": len(market_rows) >= minimum_sample,
+        })
+
+    rows.sort(
+        key=lambda row: (
+            row["closed"],
+            row["trade"].entry_date or date.min,
+            row["trade"].trade_id,
+        ),
+        reverse=True,
+    )
+    return {
+        "rows": rows,
+        "open_count": sum(not row["closed"] for row in rows),
+        "closed_count": sum(row["closed"] for row in rows),
+        "measured_count": len(closed_rows),
+        "win_rate": round(len(wins) / len(closed_rows) * 100.0, 1) if closed_rows else None,
+        "average_r": round(average_r, 2) if average_r is not None else None,
+        "total_r": round(total_r, 2) if total_r is not None else None,
+        "max_losing_streak": max_losing_streak,
+        "minimum_sample": minimum_sample,
+        "reliable": len(closed_rows) >= minimum_sample,
+        "market_stats": market_stats,
+    }
+
+
+def _normalized_trade_fills(trade: TradeJournalEntry) -> list[TradeFill]:
+    valid = [
+        fill
+        for fill in trade.fills
+        if fill.side in {"buy", "sell"}
+        and fill.price is not None
+        and fill.price > 0
+        and fill.shares is not None
+        and fill.shares > 0
+    ]
+    if valid:
+        return sorted(valid, key=lambda fill: (fill.fill_date or date.min, fill.fill_id))
+    fills: list[TradeFill] = []
+    if trade.entry_price and trade.shares and trade.shares > 0:
+        fills.append(TradeFill(
+            fill_id=f"{trade.trade_id}-entry",
+            side="buy",
+            fill_date=trade.entry_date,
+            price=trade.entry_price,
+            shares=trade.shares,
+        ))
+    if trade.exit_price and trade.shares and trade.shares > 0:
+        fills.append(TradeFill(
+            fill_id=f"{trade.trade_id}-exit",
+            side="sell",
+            fill_date=trade.exit_date,
+            price=trade.exit_price,
+            shares=trade.shares,
+        ))
+    return fills
+
+
+def _trade_lifecycle_metrics(
+    trade: TradeJournalEntry,
+    mark_price: float | None,
+) -> dict[str, object]:
+    if trade.status == "planned":
+        shares = trade.shares if trade.shares is not None and trade.shares > 0 else None
+        planned_risk = trade.initial_risk
+        if (
+            planned_risk is None
+            and shares is not None
+            and trade.entry_price is not None
+            and trade.initial_stop is not None
+            and trade.entry_price > trade.initial_stop
+        ):
+            planned_risk = (trade.entry_price - trade.initial_stop) * shares
+        return {
+            "planned": True,
+            "closed": False,
+            "average_entry": trade.entry_price,
+            "average_exit": None,
+            "bought_shares": shares or 0.0,
+            "sold_shares": 0.0,
+            "remaining_shares": 0.0,
+            "planned_shares": shares,
+            "initial_risk": planned_risk,
+            "current_risk": 0.0,
+            "gross_pl": None,
+            "net_pl": None,
+            "net_pl_base": None,
+            "fees_total": trade.fees,
+            "fill_count": 0,
+            "entry_date": trade.entry_date,
+            "exit_date": None,
+            "current_stop": trade.current_stop or trade.initial_stop,
+        }
+
+    fills = _normalized_trade_fills(trade)
+    buys = [fill for fill in fills if fill.side == "buy"]
+    sells = [fill for fill in fills if fill.side == "sell"]
+    bought_shares = sum(float(fill.shares or 0.0) for fill in buys)
+    raw_sold_shares = sum(float(fill.shares or 0.0) for fill in sells)
+    sold_shares = min(bought_shares, raw_sold_shares)
+    remaining_shares = max(0.0, bought_shares - sold_shares)
+    buy_cost = sum(float(fill.price or 0.0) * float(fill.shares or 0.0) for fill in buys)
+    sell_proceeds = sum(float(fill.price or 0.0) * float(fill.shares or 0.0) for fill in sells)
+    average_entry = buy_cost / bought_shares if bought_shares else None
+    average_exit = sell_proceeds / raw_sold_shares if raw_sold_shares else None
+    if raw_sold_shares > bought_shares and average_exit is not None:
+        sell_proceeds = average_exit * sold_shares
+
+    gross_pl = None
+    if average_entry is not None:
+        realized = (
+            (average_exit - average_entry) * sold_shares
+            if average_exit is not None
+            else 0.0
+        )
+        unrealized = (
+            (mark_price - average_entry) * remaining_shares
+            if mark_price is not None and remaining_shares > 0
+            else 0.0
+        )
+        gross_pl = realized + unrealized
+    fees_total = trade.fees + sum(float(fill.fees or 0.0) for fill in fills)
+    net_pl = gross_pl - fees_total if gross_pl is not None else None
+
+    initial_risk = trade.initial_risk
+    if initial_risk is None and trade.initial_stop is not None:
+        initial_risk = sum(
+            max(0.0, float(fill.price or 0.0) - trade.initial_stop)
+            * float(fill.shares or 0.0)
+            for fill in buys
+        ) or None
+    current_stop = trade.current_stop or trade.initial_stop
+    current_risk = None
+    if mark_price is not None and current_stop is not None and remaining_shares > 0:
+        current_risk = max(0.0, mark_price - current_stop) * remaining_shares
+    closed = (
+        trade.status == "closed"
+        or (bought_shares > 0 and remaining_shares <= max(1e-8, bought_shares * 1e-8))
+    )
+    entry_dates = [fill.fill_date for fill in buys if fill.fill_date is not None]
+    exit_dates = [fill.fill_date for fill in sells if fill.fill_date is not None]
+    fx_rate = trade.fx_rate_to_base if trade.fx_rate_to_base > 0 else 1.0
+    return {
+        "planned": False,
+        "closed": closed,
+        "average_entry": average_entry,
+        "average_exit": average_exit,
+        "bought_shares": bought_shares,
+        "sold_shares": sold_shares,
+        "remaining_shares": remaining_shares,
+        "planned_shares": None,
+        "initial_risk": initial_risk,
+        "current_risk": current_risk,
+        "gross_pl": gross_pl,
+        "net_pl": net_pl,
+        "net_pl_base": net_pl * fx_rate if net_pl is not None else None,
+        "fees_total": fees_total,
+        "fill_count": len(fills),
+        "entry_date": min(entry_dates) if entry_dates else trade.entry_date,
+        "exit_date": max(exit_dates) if exit_dates else trade.exit_date,
+        "current_stop": current_stop,
+    }
+
+
+def trade_journal_summary(report: DailyReport, minimum_sample: int = 20) -> dict[str, object]:
+    """Review complete trade lifecycles while keeping the inception risk immutable."""
+    items = {item.ticker.symbol: item for item in report.ticker_reports}
+    rows: list[dict[str, object]] = []
+    for trade in report.trade_journal:
+        if trade.status == "cancelled":
+            continue
+        item = items.get(trade.ticker)
+        last = _metric_float(item, "last_close") if item else None
+        lifecycle = _trade_lifecycle_metrics(trade, last)
+        initial_risk = _as_float(lifecycle.get("initial_risk"))
+        net_pl = _as_float(lifecycle.get("net_pl"))
+        r_multiple = net_pl / initial_risk if net_pl is not None and initial_risk else None
+        entry_date = lifecycle.get("entry_date")
+        exit_date = lifecycle.get("exit_date")
+        end_date = (
+            exit_date
+            if lifecycle["closed"] and isinstance(exit_date, date)
+            else report.report_date
+        )
+        holding_days = (
+            max(0, (end_date - entry_date).days)
+            if isinstance(entry_date, date)
+            else None
+        )
+        extremes = (
+            _trade_path_extremes(item, entry_date, end_date)
+            if item and isinstance(entry_date, date) and not lifecycle["planned"]
+            else {}
+        )
+        average_entry = _as_float(lifecycle.get("average_entry"))
+        per_unit_risk = (
+            average_entry - trade.initial_stop
+            if average_entry is not None
+            and trade.initial_stop is not None
+            and average_entry > trade.initial_stop
+            else None
+        )
+        mfe_r = mae_r = None
+        if average_entry is not None and per_unit_risk:
+            high = _as_float(extremes.get("high"))
+            low = _as_float(extremes.get("low"))
+            if high is not None:
+                mfe_r = (high - average_entry) / per_unit_risk
+            if low is not None:
+                mae_r = (low - average_entry) / per_unit_risk
+        rows.append({
+            "trade": trade,
+            "item": item,
+            **lifecycle,
+            "mark_price": round(last, 4) if last is not None else None,
+            "planned_risk": round(initial_risk, 2) if initial_risk is not None else None,
+            "gross_pl": round(float(lifecycle["gross_pl"]), 2) if lifecycle["gross_pl"] is not None else None,
+            "net_pl": round(net_pl, 2) if net_pl is not None else None,
+            "r_multiple": round(r_multiple, 2) if r_multiple is not None else None,
+            "mfe_r": round(mfe_r, 2) if mfe_r is not None else None,
+            "mae_r": round(mae_r, 2) if mae_r is not None else None,
+            "holding_days": holding_days,
+            "path_complete": bool(extremes.get("complete", False)),
+        })
+
+    closed_rows = [
+        row
+        for row in rows
+        if row["closed"] and row["r_multiple"] is not None
+    ]
+    r_values = [float(row["r_multiple"]) for row in closed_rows]
+    wins = [value for value in r_values if value > 0]
+    losses = [value for value in r_values if value <= 0]
+    average_win = sum(wins) / len(wins) if wins else None
+    average_loss = sum(losses) / len(losses) if losses else None
+    payoff_ratio = (
+        average_win / abs(average_loss)
+        if average_win is not None and average_loss not in (None, 0)
+        else None
+    )
+    profit_factor = (
+        sum(wins) / abs(sum(losses))
+        if wins and losses and sum(losses) != 0
+        else None
+    )
+    losing_streak = max_losing_streak = 0
+    for row in sorted(
+        closed_rows,
+        key=lambda value: (value["exit_date"] or date.min, value["trade"].trade_id),
+    ):
+        if float(row["r_multiple"]) <= 0:
+            losing_streak += 1
+            max_losing_streak = max(max_losing_streak, losing_streak)
+        else:
+            losing_streak = 0
+
+    market_stats: list[dict[str, object]] = []
+    for market in ("us", "taiwan", "crypto", "other"):
+        market_rows = [
+            row for row in closed_rows
+            if _market_bucket(str(row["trade"].market)) == market
+        ]
+        if not market_rows:
+            continue
+        market_r = [float(row["r_multiple"]) for row in market_rows]
+        market_stats.append({
+            "market": market,
+            "sample_size": len(market_r),
+            "win_rate": round(sum(value > 0 for value in market_r) / len(market_r) * 100.0, 1),
+            "average_r": round(sum(market_r) / len(market_r), 2),
+            "reliable": len(market_r) >= minimum_sample,
+        })
+    rows.sort(
+        key=lambda row: (
+            bool(row["planned"]),
+            not bool(row["closed"]),
+            row["entry_date"] or date.min,
+            row["trade"].trade_id,
+        ),
+        reverse=True,
+    )
+    return {
+        "rows": rows,
+        "planned_count": sum(bool(row["planned"]) for row in rows),
+        "open_count": sum(not row["closed"] and not row["planned"] for row in rows),
+        "closed_count": sum(bool(row["closed"]) for row in rows),
+        "measured_count": len(closed_rows),
+        "win_rate": round(len(wins) / len(r_values) * 100.0, 1) if r_values else None,
+        "average_r": round(sum(r_values) / len(r_values), 2) if r_values else None,
+        "expectancy_r": round(sum(r_values) / len(r_values), 2) if r_values else None,
+        "median_r": round(median(r_values), 2) if r_values else None,
+        "average_win_r": round(average_win, 2) if average_win is not None else None,
+        "average_loss_r": round(average_loss, 2) if average_loss is not None else None,
+        "payoff_ratio": round(payoff_ratio, 2) if payoff_ratio is not None else None,
+        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
+        "total_r": round(sum(r_values), 2) if r_values else None,
+        "max_losing_streak": max_losing_streak,
+        "minimum_sample": minimum_sample,
+        "reliable": len(closed_rows) >= minimum_sample,
+        "market_stats": market_stats,
+    }
+
+
+def _trade_path_extremes(
+    item: TickerReport,
+    start: date | None,
+    end: date,
+) -> dict[str, object]:
+    if start is None or not item.valuation:
+        return {}
+    dates = item.valuation.metrics.get("chart_dates_60")
+    highs = item.valuation.metrics.get("chart_high_60")
+    lows = item.valuation.metrics.get("chart_low_60")
+    if not isinstance(dates, list) or not isinstance(highs, list) or not isinstance(lows, list):
+        return {}
+    selected_highs: list[float] = []
+    selected_lows: list[float] = []
+    parsed_dates: list[date] = []
+    for label, high_raw, low_raw in zip(dates, highs, lows):
+        try:
+            session_date = date.fromisoformat(str(label)[:10])
+        except ValueError:
+            continue
+        if session_date < start or session_date > end:
+            continue
+        high = _as_float(high_raw)
+        low = _as_float(low_raw)
+        if high is not None:
+            selected_highs.append(high)
+        if low is not None:
+            selected_lows.append(low)
+        parsed_dates.append(session_date)
+    if not selected_highs or not selected_lows:
+        return {}
+    first_chart_date = None
+    if dates:
+        try:
+            first_chart_date = date.fromisoformat(str(dates[0])[:10])
+        except ValueError:
+            first_chart_date = None
+    return {
+        "high": max(selected_highs),
+        "low": min(selected_lows),
+        "complete": first_chart_date is not None and first_chart_date <= start,
+        "sessions": len(set(parsed_dates)),
+    }
+
+
+def _portfolio_risk_overview_legacy(report: DailyReport) -> dict[str, object]:
+    """Account risk by currency plus high-correlation holding pairs."""
+    holdings = [
+        item
+        for item in report.ticker_reports
+        if item.ticker.position.status == "holding"
+    ]
+    by_currency: dict[tuple[str, str], dict[str, object]] = {}
+    missing_stops: list[dict[str, str]] = []
+    for item in holdings:
+        pos = item.ticker.position
+        last = _metric_float(item, "last_close")
+        if last is None or pos.shares is None or pos.shares <= 0:
+            continue
+        currency = item.ticker.currency.upper()
+        market = _market_bucket(item.ticker.market)
+        row = by_currency.setdefault((market, currency), {
+            "market": market,
+            "currency": currency,
+            "market_value": 0.0,
+            "risk_at_stop": 0.0,
+            "positions": 0,
+            "with_stop": 0,
+        })
+        market_value = last * pos.shares
+        row["market_value"] = float(row["market_value"]) + market_value
+        row["positions"] = int(row["positions"]) + 1
+        if pos.stop_loss is not None and 0 < pos.stop_loss < last:
+            risk = (last - pos.stop_loss) * pos.shares
+            row["risk_at_stop"] = float(row["risk_at_stop"]) + risk
+            row["with_stop"] = int(row["with_stop"]) + 1
+        else:
+            missing_stops.append({"symbol": item.ticker.symbol, "market": market})
+
+    settings = report.settings.portfolio if report.settings else None
+    currency_rows: list[dict[str, object]] = []
+    for (_market, currency), row in sorted(by_currency.items()):
+        market_value = float(row["market_value"])
+        risk_at_stop = float(row["risk_at_stop"])
+        budget = settings.risk_budget_by_currency.get(currency) if settings else None
+        currency_rows.append({
+            **row,
+            "market_value": round(market_value, 2),
+            "risk_at_stop": round(risk_at_stop, 2),
+            "risk_pct": round(risk_at_stop / market_value * 100.0, 2) if market_value else None,
+            "risk_budget": budget,
+            "budget_usage_pct": round(risk_at_stop / budget * 100.0, 1) if budget else None,
+            "over_budget": bool(budget and risk_at_stop > budget),
+        })
+
+    return_series = {
+        item.ticker.symbol: _dated_close_returns(item)
+        for item in holdings
+    }
+    correlated_pairs: list[dict[str, object]] = []
+    for left_index, left in enumerate(holdings):
+        for right in holdings[left_index + 1:]:
+            if _market_bucket(left.ticker.market) != _market_bucket(right.ticker.market):
+                continue
+            left_values = return_series.get(left.ticker.symbol, {})
+            right_values = return_series.get(right.ticker.symbol, {})
+            shared = sorted(set(left_values) & set(right_values))
+            if len(shared) < 20:
+                continue
+            correlation = _pearson_correlation(
+                [left_values[key] for key in shared],
+                [right_values[key] for key in shared],
+            )
+            if correlation is None or correlation < 0.75:
+                continue
+            correlated_pairs.append({
+                "left": left.ticker.symbol,
+                "right": right.ticker.symbol,
+                "market": _market_bucket(left.ticker.market),
+                "correlation": round(correlation, 2),
+                "sessions": len(shared),
+                "combined_weight": round(
+                    float(left.ticker.position.portfolio_weight or 0.0)
+                    + float(right.ticker.position.portfolio_weight or 0.0),
+                    2,
+                ),
+            })
+    correlated_pairs.sort(
+        key=lambda row: (float(row["correlation"]), float(row["combined_weight"])),
+        reverse=True,
+    )
+    return {
+        "currencies": currency_rows,
+        "missing_stops": missing_stops,
+        "correlated_pairs": correlated_pairs[:8],
+        "holding_count": len(holdings),
+    }
+
+
+def _fx_rate_to_base(report: DailyReport, currency: str, base_currency: str) -> float | None:
+    currency = currency.upper()
+    base_currency = base_currency.upper()
+    if currency == base_currency:
+        return 1.0
+    rates = report.market_context.fx_rates if report.market_context else {}
+    direct = _as_float(rates.get(f"{currency}/{base_currency}"))
+    if direct is not None and direct > 0:
+        return direct
+    inverse = _as_float(rates.get(f"{base_currency}/{currency}"))
+    if inverse is not None and inverse > 0:
+        return 1.0 / inverse
+    return None
+
+
+def portfolio_risk_overview(report: DailyReport) -> dict[str, object]:
+    """Show open, reserved, and gap-stressed account risk without double counting."""
+    items = {item.ticker.symbol: item for item in report.ticker_reports}
+    holdings = [
+        item
+        for item in report.ticker_reports
+        if item.ticker.position.status == "holding"
+    ]
+    journal = trade_journal_summary(report)
+    by_market_currency: dict[tuple[str, str], dict[str, object]] = {}
+    missing_stops: list[dict[str, str]] = []
+    liquidity_alerts: list[dict[str, object]] = []
+    tracked_shares: dict[str, float] = {}
+
+    def bucket(item: TickerReport) -> dict[str, object]:
+        market = _market_bucket(item.ticker.market)
+        currency = item.ticker.currency.upper()
+        return by_market_currency.setdefault((market, currency), {
+            "market": market,
+            "currency": currency,
+            "market_value": 0.0,
+            "open_risk": 0.0,
+            "pending_risk": 0.0,
+            "stress_risk": 0.0,
+            "positions": 0,
+            "planned_orders": 0,
+            "with_stop": 0,
+        })
+
+    def add_liquidity(
+        item: TickerReport,
+        shares: float,
+        price: float,
+        *,
+        kind: str,
+    ) -> None:
+        notional = shares * price
+        average = _metric_float(item, "avg_dollar_volume_20d")
+        if average is None or average <= 0:
+            return
+        adv_pct = notional / average * 100.0
+        days = notional / (average * 0.10)
+        alert = adv_pct > 1.0 if kind == "planned" else days > 1.0
+        if alert:
+            liquidity_alerts.append({
+                "symbol": item.ticker.symbol,
+                "market": _market_bucket(item.ticker.market),
+                "currency": item.ticker.currency.upper(),
+                "kind": kind,
+                "notional": round(notional, 2),
+                "adv_pct": round(adv_pct, 2),
+                "days_to_liquidate": round(days, 2),
+            })
+
+    for journal_row in journal["rows"]:
+        trade = journal_row["trade"]
+        item = items.get(trade.ticker)
+        if item is None:
+            continue
+        row = bucket(item)
+        if journal_row["planned"]:
+            planned_shares = _as_float(journal_row.get("planned_shares"))
+            entry = _as_float(journal_row.get("average_entry"))
+            planned_risk = _as_float(journal_row.get("initial_risk"))
+            if planned_shares and entry:
+                add_liquidity(item, planned_shares, entry, kind="planned")
+            row["planned_orders"] = int(row["planned_orders"]) + 1
+            if planned_risk is not None:
+                row["pending_risk"] = float(row["pending_risk"]) + planned_risk
+                notional = (planned_shares or 0.0) * (entry or 0.0)
+                atr = _metric_float(item, "atr_20")
+                gap_buffer = max(
+                    (atr or 0.0) * (planned_shares or 0.0),
+                    notional * 0.03,
+                )
+                row["stress_risk"] = float(row["stress_risk"]) + planned_risk + gap_buffer
+            else:
+                missing_stops.append({
+                    "symbol": trade.ticker,
+                    "market": _market_bucket(item.ticker.market),
+                    "kind": "planned",
+                })
+            continue
+
+        remaining = _as_float(journal_row.get("remaining_shares")) or 0.0
+        if journal_row["closed"] or remaining <= 0:
+            continue
+        mark = _as_float(journal_row.get("mark_price"))
+        if mark is None:
+            continue
+        tracked_shares[trade.ticker] = tracked_shares.get(trade.ticker, 0.0) + remaining
+        market_value = mark * remaining
+        row["market_value"] = float(row["market_value"]) + market_value
+        row["positions"] = int(row["positions"]) + 1
+        add_liquidity(item, remaining, mark, kind="position")
+        current_risk = _as_float(journal_row.get("current_risk"))
+        if current_risk is None:
+            missing_stops.append({
+                "symbol": trade.ticker,
+                "market": _market_bucket(item.ticker.market),
+                "kind": "open",
+            })
+            continue
+        row["open_risk"] = float(row["open_risk"]) + current_risk
+        row["with_stop"] = int(row["with_stop"]) + 1
+        atr = _metric_float(item, "atr_20")
+        gap_buffer = max((atr or 0.0) * remaining, market_value * 0.03)
+        row["stress_risk"] = float(row["stress_risk"]) + current_risk + gap_buffer
+
+    for item in holdings:
+        position = item.ticker.position
+        last = _metric_float(item, "last_close")
+        total_shares = position.shares or 0.0
+        residual_shares = max(0.0, total_shares - tracked_shares.get(item.ticker.symbol, 0.0))
+        if last is None or residual_shares <= 0:
+            continue
+        row = bucket(item)
+        market_value = last * residual_shares
+        row["market_value"] = float(row["market_value"]) + market_value
+        row["positions"] = int(row["positions"]) + 1
+        add_liquidity(item, residual_shares, last, kind="position")
+        if position.stop_loss is None or not 0 < position.stop_loss < last:
+            missing_stops.append({
+                "symbol": item.ticker.symbol,
+                "market": _market_bucket(item.ticker.market),
+                "kind": "holding",
+            })
+            continue
+        current_risk = (last - position.stop_loss) * residual_shares
+        row["open_risk"] = float(row["open_risk"]) + current_risk
+        row["with_stop"] = int(row["with_stop"]) + 1
+        atr = _metric_float(item, "atr_20")
+        gap_buffer = max((atr or 0.0) * residual_shares, market_value * 0.03)
+        row["stress_risk"] = float(row["stress_risk"]) + current_risk + gap_buffer
+
+    settings = report.settings.portfolio if report.settings else None
+    totals_by_currency: dict[str, float] = {}
+    for row in by_market_currency.values():
+        currency = str(row["currency"])
+        combined = float(row["open_risk"]) + float(row["pending_risk"])
+        totals_by_currency[currency] = totals_by_currency.get(currency, 0.0) + combined
+
+    currency_rows: list[dict[str, object]] = []
+    for (_market, currency), row in sorted(by_market_currency.items()):
+        market_value = float(row["market_value"])
+        open_risk = float(row["open_risk"])
+        pending_risk = float(row["pending_risk"])
+        combined_risk = open_risk + pending_risk
+        currency_risk = totals_by_currency[currency]
+        budget = settings.risk_budget_by_currency.get(currency) if settings else None
+        remaining_budget = budget - currency_risk if budget is not None else None
+        currency_rows.append({
+            **row,
+            "market_value": round(market_value, 2),
+            "risk_at_stop": round(open_risk, 2),
+            "open_risk": round(open_risk, 2),
+            "pending_risk": round(pending_risk, 2),
+            "combined_risk": round(combined_risk, 2),
+            "stress_risk": round(float(row["stress_risk"]), 2),
+            "risk_pct": round(open_risk / market_value * 100.0, 2) if market_value else None,
+            "risk_budget": budget,
+            "remaining_budget": round(remaining_budget, 2) if remaining_budget is not None else None,
+            "budget_usage_pct": round(currency_risk / budget * 100.0, 1) if budget else None,
+            "over_budget": bool(budget and currency_risk > budget),
+        })
+
+    base_currency = settings.base_currency if settings else "TWD"
+    consolidated = {
+        "base_currency": base_currency,
+        "market_value": 0.0,
+        "open_risk": 0.0,
+        "pending_risk": 0.0,
+        "stress_risk": 0.0,
+        "complete": True,
+        "missing_currencies": [],
+        "as_of": report.market_context.retrieved_at if report.market_context else None,
+    }
+    for row in currency_rows:
+        rate = _fx_rate_to_base(report, str(row["currency"]), base_currency)
+        if rate is None:
+            consolidated["complete"] = False
+            consolidated["missing_currencies"].append(row["currency"])
+            continue
+        for key in ("market_value", "open_risk", "pending_risk", "stress_risk"):
+            consolidated[key] = float(consolidated[key]) + float(row[key]) * rate
+    for key in ("market_value", "open_risk", "pending_risk", "stress_risk"):
+        consolidated[key] = round(float(consolidated[key]), 2)
+    consolidated["risk_pct"] = (
+        round(float(consolidated["open_risk"]) / float(consolidated["market_value"]) * 100.0, 2)
+        if consolidated["market_value"]
+        else None
+    )
+
+    return_series = {item.ticker.symbol: _dated_close_returns(item) for item in holdings}
+    correlated_pairs: list[dict[str, object]] = []
+    for left_index, left in enumerate(holdings):
+        for right in holdings[left_index + 1:]:
+            if _market_bucket(left.ticker.market) != _market_bucket(right.ticker.market):
+                continue
+            left_values = return_series.get(left.ticker.symbol, {})
+            right_values = return_series.get(right.ticker.symbol, {})
+            shared = sorted(set(left_values) & set(right_values))
+            if len(shared) < 20:
+                continue
+            correlation = _pearson_correlation(
+                [left_values[key] for key in shared],
+                [right_values[key] for key in shared],
+            )
+            if correlation is None or correlation < 0.75:
+                continue
+            correlated_pairs.append({
+                "left": left.ticker.symbol,
+                "right": right.ticker.symbol,
+                "market": _market_bucket(left.ticker.market),
+                "correlation": round(correlation, 2),
+                "sessions": len(shared),
+                "combined_weight": round(
+                    float(left.ticker.position.portfolio_weight or 0.0)
+                    + float(right.ticker.position.portfolio_weight or 0.0),
+                    2,
+                ),
+            })
+    correlated_pairs.sort(
+        key=lambda row: (float(row["correlation"]), float(row["combined_weight"])),
+        reverse=True,
+    )
+    liquidity_alerts.sort(
+        key=lambda row: (float(row["days_to_liquidate"]), float(row["adv_pct"])),
+        reverse=True,
+    )
+
+    market_summaries: dict[str, dict[str, object]] = {}
+    for market in ("us", "taiwan", "crypto"):
+        market_rows = [row for row in currency_rows if row["market"] == market]
+        market_missing = [row for row in missing_stops if row["market"] == market]
+        if not market_rows and not market_missing:
+            continue
+        market_summary: dict[str, object] = {
+            "base_currency": base_currency,
+            "market_value": 0.0,
+            "open_risk": 0.0,
+            "pending_risk": 0.0,
+            "stress_risk": 0.0,
+            "complete": True,
+            "missing_currencies": [],
+            "missing_stops": len(market_missing),
+            "planned_count": sum(int(row["planned_orders"]) for row in market_rows),
+        }
+        for row in market_rows:
+            rate = _fx_rate_to_base(report, str(row["currency"]), base_currency)
+            if rate is None:
+                market_summary["complete"] = False
+                market_summary["missing_currencies"].append(row["currency"])
+                continue
+            for key in ("market_value", "open_risk", "pending_risk", "stress_risk"):
+                market_summary[key] = float(market_summary[key]) + float(row[key]) * rate
+        for key in ("market_value", "open_risk", "pending_risk", "stress_risk"):
+            market_summary[key] = round(float(market_summary[key]), 2)
+        market_value = float(market_summary["market_value"])
+        market_summary["risk_pct"] = (
+            round(float(market_summary["open_risk"]) / market_value * 100.0, 2)
+            if market_value
+            else None
+        )
+        market_summaries[market] = market_summary
+
+    return {
+        "currencies": currency_rows,
+        "consolidated": consolidated,
+        "market_summaries": market_summaries,
+        "missing_stops": missing_stops,
+        "liquidity_alerts": liquidity_alerts[:8],
+        "correlated_pairs": correlated_pairs[:8],
+        "holding_count": len(holdings),
+        "planned_count": int(journal["planned_count"]),
+    }
+
+
+def _dated_close_returns(item: TickerReport) -> dict[str, float]:
+    if not item.valuation:
+        return {}
+    dates = item.valuation.metrics.get("chart_dates_60")
+    closes = item.valuation.metrics.get("chart_close_60")
+    if not isinstance(dates, list) or not isinstance(closes, list):
+        return {}
+    cleaned: list[tuple[str, float]] = []
+    for label, raw_close in zip(dates, closes):
+        close = _as_float(raw_close)
+        if close is not None and close > 0:
+            cleaned.append((str(label), close))
+    returns: dict[str, float] = {}
+    for index in range(1, len(cleaned)):
+        previous = cleaned[index - 1][1]
+        if previous > 0:
+            returns[cleaned[index][0]] = (cleaned[index][1] - previous) / previous
+    return returns
+
+
+def _pearson_correlation(left: list[float], right: list[float]) -> float | None:
+    count = min(len(left), len(right))
+    if count < 2:
+        return None
+    left = left[:count]
+    right = right[:count]
+    left_mean = sum(left) / count
+    right_mean = sum(right) / count
+    numerator = sum((a - left_mean) * (b - right_mean) for a, b in zip(left, right))
+    left_var = sum((value - left_mean) ** 2 for value in left)
+    right_var = sum((value - right_mean) ** 2 for value in right)
+    denominator = (left_var * right_var) ** 0.5
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def price_structure_chart(item: TickerReport, width: int = 640, height: int = 190) -> str:
+    """Render an offline 60-session close/SMA/volume structure chart."""
+    if not item.valuation:
+        return ""
+    metrics = item.valuation.metrics
+    dates = metrics.get("chart_dates_60")
+    closes_raw = metrics.get("chart_close_60")
+    volumes_raw = metrics.get("chart_volume_60")
+    sma20_raw = metrics.get("chart_sma20_60")
+    sma60_raw = metrics.get("chart_sma60_60")
+    if not all(isinstance(value, list) for value in (dates, closes_raw, volumes_raw, sma20_raw, sma60_raw)):
+        return ""
+    count = min(len(dates), len(closes_raw), len(volumes_raw), len(sma20_raw), len(sma60_raw))
+    if count < 2:
+        return ""
+
+    closes = [_as_float(value) for value in closes_raw[:count]]
+    volumes = [_as_float(value) or 0.0 for value in volumes_raw[:count]]
+    sma20 = [_as_float(value) for value in sma20_raw[:count]]
+    sma60 = [_as_float(value) for value in sma60_raw[:count]]
+    adam = adam_reflection_scenario(item)
+    projection = [
+        value
+        for raw in (adam["projection"] if adam else [])
+        if (value := _as_float(raw)) is not None
+    ]
+    total_count = count + len(projection)
+    price_values = [value for value in closes + sma20 + sma60 + projection if value is not None]
+    if len(price_values) < 2:
+        return ""
+    low = min(price_values)
+    high = max(price_values)
+    span = (high - low) or 1.0
+    left, right = 8.0, float(width - 8)
+    price_top, price_bottom = 8.0, float(height - 48)
+    volume_top, volume_bottom = float(height - 38), float(height - 16)
+
+    def x_at(index: int) -> float:
+        return left + index / max(1, total_count - 1) * (right - left)
+
+    def y_at(value: float) -> float:
+        return price_bottom - (value - low) / span * (price_bottom - price_top)
+
+    def polyline(values: list[float | None], css_class: str, start_index: int = 0) -> str:
+        points = [
+            f"{x_at(start_index + index):.1f},{y_at(value):.1f}"
+            for index, value in enumerate(values)
+            if value is not None
+        ]
+        if len(points) < 2:
+            return ""
+        return f'<polyline class="{css_class}" points="{" ".join(points)}"/>'
+
+    historical_right = x_at(count - 1)
+    max_volume = max(volumes) or 1.0
+    bar_width = max(1.0, (right - left) / total_count * 0.62)
+    bars = []
+    for index, volume in enumerate(volumes):
+        bar_height = volume / max_volume * (volume_bottom - volume_top)
+        bars.append(
+            f'<rect x="{x_at(index) - bar_width / 2:.1f}" y="{volume_bottom - bar_height:.1f}" '
+            f'width="{bar_width:.1f}" height="{bar_height:.1f}"/>'
+        )
+
+    levels = []
+    for css_class, raw_value in (
+        ("price-level-pivot", metrics.get("breakout_pivot")),
+        ("price-level-stop", item.ticker.position.stop_loss),
+    ):
+        value = _as_float(raw_value)
+        if value is not None and low <= value <= high:
+            levels.append(
+                f'<line class="{css_class}" x1="{left:.1f}" x2="{historical_right:.1f}" '
+                f'y1="{y_at(value):.1f}" y2="{y_at(value):.1f}"/>'
+            )
+
+    scenario_line = ""
+    scenario_label = ""
+    scenario_divider = ""
+    if projection and closes[-1] is not None:
+        scenario_line = polyline(
+            [closes[-1], *projection],
+            "price-line-adam",
+            count - 1,
+        )
+        scenario_divider = (
+            f'<line class="price-chart-scenario-divider" '
+            f'x1="{historical_right:.1f}" x2="{historical_right:.1f}" '
+            f'y1="{price_top:.1f}" y2="{volume_bottom:.1f}"/>'
+        )
+        scenario_label = (
+            f'<text class="price-chart-date price-chart-scenario-label" '
+            f'x="{right}" y="{height - 2}" text-anchor="end">\u53cd\u5c04\u60c5\u5883 +{len(projection)}D</text>'
+        )
+
+    first_date = str(dates[0])[:10]
+    last_date = str(dates[count - 1])[:10]
+    return (
+        f'<svg class="price-structure-svg" viewBox="0 0 {width} {height}" '
+        f'role="img" aria-label="60 \u500b\u4ea4\u6613\u65e5\u50f9\u91cf\u7d50\u69cb\u8207\u4e9e\u7576\u53cd\u5c04\u60c5\u5883">'
+        f'<title>{item.ticker.symbol} 60 \u500b\u4ea4\u6613\u65e5\u50f9\u91cf\u7d50\u69cb</title>'
+        f'<line class="price-chart-divider" x1="{left}" x2="{right}" y1="{volume_top - 5}" y2="{volume_top - 5}"/>'
+        f'<g class="price-volume-bars">{"".join(bars)}</g>'
+        f'{"".join(levels)}'
+        f'{scenario_divider}'
+        f'{polyline(sma60, "price-line-sma60")}'
+        f'{polyline(sma20, "price-line-sma20")}'
+        f'{polyline(closes, "price-line-close")}'
+        f'{scenario_line}'
+        f'<text class="price-chart-date" x="{left}" y="{height - 2}">{first_date}</text>'
+        f'<text class="price-chart-date" x="{historical_right:.1f}" y="{height - 2}" text-anchor="end">{last_date}</text>'
+        f'{scenario_label}'
+        f'</svg>'
+    )
+
 def _trade_price(value: float) -> str:
     return f"{value:.4f}" if abs(value) < 10 else f"{value:.2f}"
 
@@ -4315,12 +6567,21 @@ def plan_triggers(report: DailyReport) -> list[dict[str, object]]:
                 continue
             status, tone = evaluated
             label = _PLAN_KIND_LABELS[kind]
+            display_label = {
+                "entry": "進場區",
+                "add": "加碼區",
+                "reduce": "減碼區",
+                "stop": "計畫停損",
+            }[kind]
             if kind == "stop":
                 headline = f"{symbol} broke plan stop ${hi:,.2f}"
+                display_headline = f"{symbol} 跌破計畫停損 ${hi:,.2f}"
             else:
                 zone = f"${lo:,.2f}" if lo == hi else f"${lo:,.2f}–${hi:,.2f}"
                 verb = {"in_zone": "entered", "below_zone": "below", "above_zone": "above"}[status]
                 headline = f"{symbol} {verb} {label.lower()} {zone}"
+                display_verb = {"in_zone": "進入", "below_zone": "跌破", "above_zone": "突破"}[status]
+                display_headline = f"{symbol} {display_verb}{display_label} {zone}"
             triggers.append(
                 {
                     "ticker": symbol,
@@ -4328,6 +6589,9 @@ def plan_triggers(report: DailyReport) -> list[dict[str, object]]:
                     "label": label,
                     "headline": headline,
                     "detail": f"Last ${last:,.2f}.",
+                    "display_label": display_label,
+                    "display_headline": display_headline,
+                    "display_detail": f"現價 ${last:,.2f}。",
                     "anchor": anchor,
                     "tone": tone,
                     "status": status,
@@ -4379,7 +6643,19 @@ def morning_actions(report: DailyReport) -> list[dict[str, object]]:
     actions: list[dict[str, object]] = []
     seen: set[tuple[str, str]] = set()
 
-    def add(symbol: str, label: str, headline: str, detail: str, anchor: str, tone: str, rank: int) -> None:
+    def add(
+        symbol: str,
+        label: str,
+        headline: str,
+        detail: str,
+        anchor: str,
+        tone: str,
+        rank: int,
+        *,
+        display_label: str | None = None,
+        display_headline: str | None = None,
+        display_detail: str | None = None,
+    ) -> None:
         key = (symbol, label)
         if key in seen:
             return
@@ -4390,6 +6666,9 @@ def morning_actions(report: DailyReport) -> list[dict[str, object]]:
                 "label": label,
                 "headline": headline,
                 "detail": detail,
+                "display_label": display_label or zh_text(label),
+                "display_headline": display_headline or zh_text(headline),
+                "display_detail": display_detail or zh_text(detail),
                 "anchor": anchor,
                 "tone": tone,
                 "rank": rank,
@@ -4407,6 +6686,9 @@ def morning_actions(report: DailyReport) -> list[dict[str, object]]:
             str(trigger["anchor"]),
             str(trigger["tone"]),
             rank,
+            display_label=str(trigger["display_label"]),
+            display_headline=str(trigger["display_headline"]),
+            display_detail=str(trigger["display_detail"]),
         )
 
     for tr in report.ticker_reports:
@@ -4416,23 +6698,88 @@ def morning_actions(report: DailyReport) -> list[dict[str, object]]:
         stop_alert = _stop_loss_alert(tr)
         if stop_alert is not None:
             detail, tone, _ = stop_alert
-            add(symbol, "Stop nearby", f"{symbol} near stop-loss", detail, anchor, tone, 5)
+            add(
+                symbol,
+                "Stop nearby",
+                f"{symbol} near stop-loss",
+                detail,
+                anchor,
+                tone,
+                5,
+                display_label="停損提醒",
+                display_headline=f"{symbol} 接近停損價",
+                display_detail="現價已接近停損，先確認部位風險與執行方式。",
+            )
 
         delta = earnings_delta(tr, report.report_date)
         if delta is not None and 0 <= delta <= 1:
             when = days_until(tr.earnings.earnings_date, report.report_date) if tr.earnings else "soon"
             tone = "danger" if delta == 0 else "warn"
-            add(symbol, "Earnings", f"{symbol} reports {when}", "Finalize stance before the print.", anchor, tone, 4)
+            display_when = "今日" if delta == 0 else "明日"
+            add(
+                symbol,
+                "Earnings",
+                f"{symbol} reports {when}",
+                "Finalize stance before the print.",
+                anchor,
+                tone,
+                4,
+                display_label="財報",
+                display_headline=f"{symbol} {display_when}公布財報",
+                display_detail="公布前先確認持有、加碼或減碼計畫。",
+            )
 
         state = research_state_for(report, symbol)
         if state.thesis_state in {"weakening", "broken"}:
-            add(symbol, "Thesis", f"{symbol} thesis {state.thesis_state}", "Revisit the case before adding.", anchor, "danger", 3)
+            state_label = "轉弱" if state.thesis_state == "weakening" else "失效"
+            add(
+                symbol,
+                "Thesis",
+                f"{symbol} thesis {state.thesis_state}",
+                "Revisit the case before adding.",
+                anchor,
+                "danger",
+                3,
+                display_label="投資論點",
+                display_headline=f"{symbol} 投資論點{state_label}",
+                display_detail="加碼前先重新檢查原始假設與失效條件。",
+            )
 
         gap = premarket_change_pct(report, symbol)
         if gap is not None and abs(gap) >= 3.0:
             tone = "warn" if gap < 0 else "good"
-            add(symbol, "Gap", f"{symbol} gapped {format_pct(gap)} pre-market", "Check the overnight driver.", anchor, tone, 2)
+            add(
+                symbol,
+                "Gap",
+                f"{symbol} gapped {format_pct(gap)} pre-market",
+                "Check the overnight driver.",
+                anchor,
+                tone,
+                2,
+                display_label="盤前缺口",
+                display_headline=f"{symbol} 盤前跳空 {format_pct(gap)}",
+                display_detail="先確認隔夜催化或風險，再決定是否追價。",
+            )
 
+        framework = trading_framework_analysis(tr)
+        if framework and int(framework["priority"]) >= 5:
+            framework_tone = str(framework["tone"])
+            wyckoff = framework["wyckoff"]
+            vpa = framework["vpa"]
+            operator = framework["operator"]
+            is_risk = framework_tone == "down"
+            add(
+                symbol,
+                "Structure risk" if is_risk else "Demand confirmed",
+                f"{symbol} {wyckoff['event']} \u00b7 {vpa['event']}",
+                str(operator["action"]),
+                anchor,
+                "danger" if is_risk else "good",
+                5 if is_risk else 3,
+                display_label="\u7d50\u69cb\u98a8\u96aa" if is_risk else "\u91cf\u50f9\u78ba\u8a8d",
+                display_headline=f"{symbol} {wyckoff['event']} \u00b7 {vpa['event']}",
+                display_detail=str(operator["action"]),
+            )
     actions.sort(key=lambda item: item["rank"], reverse=True)
     return actions[:6]
 
@@ -4650,6 +6997,8 @@ def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, f
     score_info = right_side_score(item, benchmarks)
     technical = technical_playbook(item)
     right_side = right_side_check(item, benchmarks=benchmarks, portfolio=portfolio)
+    framework = trading_framework_analysis(item)
+    price_regime = price_regime_status(item)
 
     return {
         "setup": setup,
@@ -4665,6 +7014,8 @@ def ticker_insights(item: TickerReport, anchor: date, *, benchmarks: dict[str, f
         "score": score_info,
         "technical": technical,
         "right_side": right_side,
+        "framework": framework,
+        "price_regime": price_regime,
     }
 
 

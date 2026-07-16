@@ -23,7 +23,14 @@ from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
 from .taiwan_market import TaiwanMarketDataProvider
-from .report import derive_portfolio_weights, holding_currencies, report_output_dir, right_side_check, write_report
+from .report import (
+    derive_portfolio_weights,
+    holding_currencies,
+    report_output_dir,
+    right_side_check,
+    right_side_execution_plan,
+    write_report,
+)
 from .storage import (
     export_research_state_file,
     import_research_state_file,
@@ -35,10 +42,15 @@ from .storage import (
     load_report_dates,
     load_ticker_history,
     load_ticker_research_states,
+    load_trade_journal_entries,
     save_report,
     save_report_run,
 )
-from .valuation import fetch_yfinance_earnings_date, fetch_yfinance_valuation
+from .valuation import (
+    TECHNICAL_HISTORY_VERSION,
+    fetch_yfinance_earnings_date,
+    fetch_yfinance_valuation,
+)
 from .x_signals import load_manual_x_signals
 
 
@@ -125,6 +137,7 @@ def run_daily(
         research_states = _apply_plan_defaults(research_states, config.tickers)
         tickers = _apply_position_overrides(config.tickers, research_states)
         post_earnings_reviews = load_post_earnings_reviews(conn, ticker_symbols)
+        trade_journal = load_trade_journal_entries(conn, ticker_symbols)
         if len(holding_currencies(tickers)) > 1:
             global_warnings.append("Mixed-currency holdings detected; combined unrealized P/L is intentionally hidden.")
 
@@ -140,7 +153,12 @@ def run_daily(
                 cached = load_fresh_valuation_snapshot(
                     conn, tc.symbol, max_age_hours=VALUATION_CACHE_TTL_HOURS
                 )
-                if cached is not None:
+                if (
+                    cached is not None
+                    and cached.metrics.get("technical_history_version") == TECHNICAL_HISTORY_VERSION
+                    and isinstance(cached.metrics.get("chart_close_60"), list)
+                    and len(cached.metrics["chart_close_60"]) >= 2
+                ):
                     prefetched_valuations[tc.symbol] = cached
 
         ticker_reports = _fetch_all_tickers(
@@ -197,14 +215,29 @@ def run_daily(
             premarket=premarket,
             research_states=research_states,
             post_earnings_reviews=post_earnings_reviews,
+            trade_journal=trade_journal,
             settings=config.settings,
         )
         benchmarks = market_context.benchmark_returns if market_context else {}
-        right_side_signals = {
-            item.ticker.symbol: signal
-            for item in ticker_reports
-            if (signal := right_side_check(item, benchmarks=benchmarks, portfolio=config.settings.portfolio)) is not None
-        }
+        right_side_signals: dict[str, dict[str, object]] = {}
+        for item in ticker_reports:
+            check = right_side_check(
+                item,
+                benchmarks=benchmarks,
+                portfolio=config.settings.portfolio,
+            )
+            if check is None:
+                continue
+            signal = dict(check)
+            execution = right_side_execution_plan(preliminary_report, item)
+            if execution:
+                signal.update({
+                    "status": "Right-side ready" if execution["status"] == "ready" else check["status"],
+                    "entry_reference": execution.get("entry_reference"),
+                    "invalidation": execution.get("invalidation"),
+                    "risk_pct": execution.get("risk_pct"),
+                })
+            right_side_signals[item.ticker.symbol] = signal
         save_report(conn, preliminary_report)
         save_report_run(
             conn,
@@ -243,6 +276,7 @@ def run_daily(
         premarket=premarket,
         research_states=research_states,
         post_earnings_reviews=post_earnings_reviews,
+        trade_journal=trade_journal,
         ticker_history=ticker_history,
         history_overview=history_overview,
         settings=config.settings,

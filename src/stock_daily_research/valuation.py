@@ -12,6 +12,8 @@ from .models import EarningsDate, TickerConfig, ValuationSnapshot
 # Explicit bound on yfinance price-history calls. yfinance defaults to 10s
 # internally; pin it here so the timeout is visible and tunable in one place.
 YF_HISTORY_TIMEOUT = 10
+TECHNICAL_HISTORY_VERSION = 2
+PRICE_REGIME_RESET_PCT = 50.0
 
 
 YFINANCE_FIELD_MAP = {
@@ -48,7 +50,14 @@ def fetch_yfinance_valuation(ticker: TickerConfig) -> ValuationSnapshot:
         # Assets without fundamentals have no analyst estimates; keep the keys so downstream
         # consumers see a consistent metrics shape.
         metrics.update(empty_estimate_metrics())
-    metrics.update(fetch_technical_indicators(yf_ticker))
+    technical = fetch_technical_indicators(yf_ticker)
+    metrics.update(technical)
+    chart_closes = technical.get("chart_close_60")
+    if isinstance(chart_closes, list) and chart_closes:
+        if _finite_float(metrics.get("last_close")) is None:
+            metrics["last_close"] = _finite_float(chart_closes[-1])
+        if len(chart_closes) >= 2 and _finite_float(metrics.get("previous_close")) is None:
+            metrics["previous_close"] = _finite_float(chart_closes[-2])
     return ValuationSnapshot(
         ticker=ticker.symbol,
         as_of_date=retrieved_at.date(),
@@ -72,6 +81,7 @@ def fetch_moving_averages(yf_ticker: Any, period: str = "1y") -> dict[str, float
         return empty
     if hist is None or hist.empty or "Close" not in hist.columns:
         return empty
+    hist, _regime = _latest_technical_history_regime(hist)
     closes = _series_floats(hist["Close"])
     return {
         "sma_5": _mean_last_n(closes, 5),
@@ -81,8 +91,8 @@ def fetch_moving_averages(yf_ticker: Any, period: str = "1y") -> dict[str, float
     }
 
 
-def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, float | None]:
-    keys = (
+def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, Any]:
+    numeric_keys = (
         "sma_5",
         "sma_20",
         "sma_60",
@@ -96,6 +106,8 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         "prior_20d_low",
         "sma_20_slope_5d",
         "volume_vs_20d",
+        "avg_volume_20d",
+        "avg_dollar_volume_20d",
         "atr_20",
         "atr_20_percent",
         "move_vs_atr",
@@ -110,17 +122,34 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         "breakout_hold_pct",
         "breakout_volume_vs_20d",
     )
-    empty = {k: None for k in keys}
+    empty: dict[str, Any] = {key: None for key in numeric_keys}
+    empty.update({
+        "chart_dates_60": [],
+        "chart_close_60": [],
+        "chart_high_60": [],
+        "chart_low_60": [],
+        "chart_volume_60": [],
+        "chart_sma20_60": [],
+        "chart_sma60_60": [],
+        "technical_history_version": TECHNICAL_HISTORY_VERSION,
+        "price_regime_change_date": None,
+        "price_regime_change_pct": None,
+        "price_history_sessions": 0,
+    })
     try:
         hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
     except Exception:
         return empty
     if hist is None or hist.empty or "Close" not in hist.columns:
         return empty
+    hist, regime = _latest_technical_history_regime(hist)
+    if hist is None or hist.empty:
+        return {**empty, **regime}
     closes = _series_floats(hist["Close"])
     quality = compute_move_quality_metrics(hist)
     trend_structure = compute_trend_structure_metrics(hist)
     right_side_setup = compute_right_side_setup_metrics(hist)
+    price_chart = compute_price_chart_metrics(hist)
     return {
         "sma_5": _mean_last_n(closes, 5),
         "sma_20": _mean_last_n(closes, 20),
@@ -134,7 +163,95 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         **trend_structure,
         **quality,
         **right_side_setup,
+        **price_chart,
+        **regime,
     }
+
+
+def compute_price_chart_metrics(hist: Any, window: int = 60) -> dict[str, Any]:
+    """Return aligned OHLCV chart data and liquidity from one history frame."""
+    empty: dict[str, Any] = {
+        "avg_volume_20d": None,
+        "avg_dollar_volume_20d": None,
+        "chart_dates_60": [],
+        "chart_close_60": [],
+        "chart_high_60": [],
+        "chart_low_60": [],
+        "chart_volume_60": [],
+        "chart_sma20_60": [],
+        "chart_sma60_60": [],
+    }
+    if hist is None or hist.empty or "Close" not in hist.columns or window <= 0:
+        return empty
+
+    rows: list[dict[str, Any]] = []
+    try:
+        for index, row in hist.iterrows():
+            close = _finite_float(row.get("Close"))
+            if close is None or close <= 0:
+                continue
+            high = _finite_float(row.get("High")) or close
+            low = _finite_float(row.get("Low")) or close
+            volume = _finite_float(row.get("Volume")) or 0.0
+            try:
+                label = index.date().isoformat()
+            except (AttributeError, TypeError, ValueError):
+                label = str(index).split(" ", 1)[0]
+            rows.append({
+                "date": label,
+                "close": close,
+                "high": high,
+                "low": low,
+                "volume": max(0.0, volume),
+            })
+    except (AttributeError, TypeError, ValueError):
+        return empty
+    if not rows:
+        return empty
+
+    closes = [row["close"] for row in rows]
+    sma20 = _rolling_means(closes, 20)
+    sma60 = _rolling_means(closes, 60)
+    start = max(0, len(rows) - window)
+    visible = rows[start:]
+
+    liquid_rows = [row for row in rows[-20:] if row["volume"] > 0]
+    avg_volume = None
+    avg_dollar_volume = None
+    if liquid_rows:
+        avg_volume = sum(row["volume"] for row in liquid_rows) / len(liquid_rows)
+        avg_dollar_volume = sum(row["close"] * row["volume"] for row in liquid_rows) / len(liquid_rows)
+
+    return {
+        "avg_volume_20d": round(avg_volume, 2) if avg_volume is not None else None,
+        "avg_dollar_volume_20d": round(avg_dollar_volume, 2) if avg_dollar_volume is not None else None,
+        "chart_dates_60": [row["date"] for row in visible],
+        "chart_close_60": [round(row["close"], 4) for row in visible],
+        "chart_high_60": [round(row["high"], 4) for row in visible],
+        "chart_low_60": [round(row["low"], 4) for row in visible],
+        "chart_volume_60": [round(row["volume"], 2) for row in visible],
+        "chart_sma20_60": [round(value, 4) if value is not None else None for value in sma20[start:]],
+        "chart_sma60_60": [round(value, 4) if value is not None else None for value in sma60[start:]],
+    }
+
+
+def _rolling_means(values: list[float], period: int) -> list[float | None]:
+    result: list[float | None] = []
+    running = 0.0
+    for index, value in enumerate(values):
+        running += value
+        if index >= period:
+            running -= values[index - period]
+        result.append(running / period if index + 1 >= period else None)
+    return result
+
+
+def _finite_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _n_session_return(closes: list[float], n: int) -> float | None:
@@ -166,6 +283,73 @@ def _series_floats(series: Any) -> list[float]:
         except (TypeError, ValueError):
             continue
     return out
+
+
+def _latest_technical_history_regime(hist: Any) -> tuple[Any, dict[str, Any]]:
+    """Keep technical calculations inside the latest comparable price regime.
+
+    Some feeds leave pre-split prices unadjusted even when ``auto_adjust`` is
+    enabled. Mixing both regimes corrupts RSI, moving averages, ATR, and price
+    levels. A large discontinuity therefore resets the technical history; no
+    split ratio is guessed or interpolated.
+    """
+    metadata: dict[str, Any] = {
+        "technical_history_version": TECHNICAL_HISTORY_VERSION,
+        "price_regime_change_date": None,
+        "price_regime_change_pct": None,
+        "price_history_sessions": 0,
+    }
+    if hist is None or hist.empty or "Close" not in hist.columns:
+        return hist, metadata
+
+    try:
+        close_values = [_finite_float(value) for value in hist["Close"].tolist()]
+        valid_positions = [
+            index
+            for index, value in enumerate(close_values)
+            if value is not None and value > 0
+        ]
+        frame = hist.iloc[valid_positions]
+        if "Volume" in frame.columns:
+            volumes = [_finite_float(value) for value in frame["Volume"].tolist()]
+            if any(value is not None and value > 0 for value in volumes):
+                active_positions = [
+                    index
+                    for index, value in enumerate(volumes)
+                    if value is not None and value > 0
+                ]
+                frame = frame.iloc[active_positions]
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return hist, metadata
+
+    if frame.empty:
+        return frame, metadata
+
+    closes = [_finite_float(value) for value in frame["Close"].tolist()]
+    reset_position: int | None = None
+    reset_change: float | None = None
+    for index in range(1, len(closes)):
+        previous = closes[index - 1]
+        current = closes[index]
+        if previous in (None, 0) or current is None:
+            continue
+        change_pct = (current - previous) / previous * 100.0
+        if abs(change_pct) >= PRICE_REGIME_RESET_PCT:
+            reset_position = index
+            reset_change = change_pct
+
+    if reset_position is not None and reset_change is not None:
+        frame = frame.iloc[reset_position:]
+        label = frame.index[0]
+        try:
+            change_date = label.date().isoformat()
+        except (AttributeError, TypeError, ValueError):
+            change_date = str(label).split(" ", 1)[0]
+        metadata["price_regime_change_date"] = change_date
+        metadata["price_regime_change_pct"] = round(reset_change, 2)
+
+    metadata["price_history_sessions"] = len(frame)
+    return frame, metadata
 
 
 def compute_rsi(values: list[float], period: int = 14) -> float | None:

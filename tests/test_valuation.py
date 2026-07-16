@@ -8,6 +8,7 @@ from stock_daily_research.valuation import (
     compute_right_side_setup_metrics,
     compute_trend_structure_metrics,
     compute_rsi,
+    fetch_technical_indicators,
     fetch_yfinance_eps_metrics,
     format_metric_value,
     normalize_yfinance_metrics,
@@ -83,6 +84,41 @@ def test_compute_rsi_buckets_recent_closes() -> None:
     assert compute_rsi(mixed, 14) is not None
     assert compute_rsi([100, 101], 14) is None
 
+
+def test_fetch_technical_indicators_resets_after_price_regime_jump() -> None:
+    dates = pd.date_range("2026-05-01", periods=42, freq="B")
+    pre_split = [240.0 + index for index in range(30)]
+    post_split = [11.5 + index * 0.1 for index in range(12)]
+    closes = pre_split + post_split
+    volumes = [1_000_000] * 30 + [8_000_000] * 12
+    for index in range(32, 36):
+        volumes[index] = 0
+    hist = pd.DataFrame(
+        {
+            "Open": closes,
+            "High": [value + 0.2 for value in closes],
+            "Low": [value - 0.2 for value in closes],
+            "Close": closes,
+            "Volume": volumes,
+        },
+        index=dates,
+    )
+
+    class FakeTicker:
+        def history(self, **_kwargs):
+            return hist
+
+    metrics = fetch_technical_indicators(FakeTicker())
+
+    assert metrics["technical_history_version"] == 2
+    assert metrics["price_regime_change_date"] == dates[30].date().isoformat()
+    assert metrics["price_regime_change_pct"] < -90.0
+    assert metrics["price_history_sessions"] == 8
+    assert metrics["sma_20"] is None
+    assert metrics["rsi_14"] is None
+    assert metrics["prior_20d_high"] is None
+    assert len(metrics["chart_close_60"]) == 8
+    assert max(metrics["chart_close_60"]) < 20.0
 
 def test_compute_move_quality_metrics_volume_gap_and_atr() -> None:
     rows = []
@@ -269,7 +305,7 @@ def test_fetch_yfinance_valuation_skips_fundamentals_for_etf(monkeypatch) -> Non
     monkeypatch.setattr(
         valuation_mod,
         "fetch_technical_indicators",
-        lambda _ticker: {"last_close": 52.4, "rsi_14": 51.0},
+        lambda _ticker: {"chart_close_60": [51.8, 52.4], "rsi_14": 51.0},
     )
 
     def boom(*_args, **_kwargs):
@@ -286,6 +322,7 @@ def test_fetch_yfinance_valuation_skips_fundamentals_for_etf(monkeypatch) -> Non
     snapshot = valuation_mod.fetch_yfinance_valuation(ticker)
 
     assert snapshot.metrics["last_close"] == 52.4
+    assert snapshot.metrics["previous_close"] == 51.8
     assert snapshot.metrics["rsi_14"] == 51.0
     assert snapshot.metrics["next_fy_eps"] is None
 

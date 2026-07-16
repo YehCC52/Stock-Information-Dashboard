@@ -44,6 +44,22 @@ def detect_price_anomaly(item: TickerReport) -> str | None:
     return None
 
 
+def detect_price_regime_change(item: TickerReport) -> str | None:
+    """Flag technical history that was reset after a large price discontinuity."""
+    if not item.valuation:
+        return None
+    metrics = item.valuation.metrics
+    change_date = metrics.get("price_regime_change_date")
+    if not change_date:
+        return None
+    sessions = int(_as_float(metrics.get("price_history_sessions")) or 0)
+    change_pct = _as_float(metrics.get("price_regime_change_pct"))
+    change_text = f"{change_pct:+.1f}%" if change_pct is not None else "N/A"
+    return (
+        f"\u50f9\u683c\u57fa\u6e96\u65bc {change_date} \u767c\u751f {change_text} \u8df3\u8b8a\uff0c"
+        f"\u50c5\u4fdd\u7559 {sessions} \u500b\u6709\u6548\u4ea4\u6613\u65e5\uff0c\u6280\u8853\u6307\u6a19\u91cd\u5efa\u4e2d"
+    )
+
 def detect_market_cap_drift(
     today_metrics: dict[str, Any], prior_metrics: dict[str, Any]
 ) -> str | None:
@@ -205,6 +221,7 @@ def confidence(
             penalties.append(penalty)
 
     add(detect_price_anomaly(item), 20)
+    add(detect_price_regime_change(item), 25)
     add(detect_pe_anomaly(item), 10)
     add(detect_news_overflow(item), 20)
     add(detect_earnings_source_risk(item), 10)
