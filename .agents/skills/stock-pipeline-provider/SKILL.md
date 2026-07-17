@@ -1,137 +1,93 @@
 ---
 name: stock-pipeline-provider
-description: "Add or modify a data provider in the stock-daily-research pipeline. Use when integrating a new free/paid data source (e.g. Alpha Vantage earnings, FMP valuation, alternate news RSS, sentiment API), or when changing how an existing provider (Google News RSS, yfinance, official macro calendar) fetches/normalizes data. Knows the runner orchestration, parallel fetch architecture, storage schema, and provider boundary contract."
+description: "Add or modify a data provider in the stock daily research pipeline. Use for fetch, normalization, caching, fallback, storage, CLI flags, market capability gates, or provider failure handling."
 ---
 
 # Stock Pipeline Provider
 
-## When to use
+## Goal
 
-Adding a new data source — sentiment, alt-news, paid earnings calendar, options flow, insider transactions — or changing how an existing one works. The pipeline already has 4 providers as templates:
+Integrate reliable data without making one provider failure abort the report. Free and official sources are the default; ask before adding a paid or usage-billed dependency.
 
-| Provider | Module | Pattern |
+## Current Provider Patterns
+
+| Source | Module | Scope |
 | --- | --- | --- |
-| Google News RSS | [news.py](src/stock_daily_research/news.py) | Per-ticker class with `fetch_for_ticker(ticker, ...)` returning `(articles, warnings)` |
-| yfinance valuation | [valuation.py](src/stock_daily_research/valuation.py) | Module-level `fetch_yfinance_valuation(ticker)` and `fetch_yfinance_earnings_date(ticker)` |
-| Manual X signals | [x_signals.py](src/stock_daily_research/x_signals.py) | File-based loader, called once before per-ticker loop |
-| Official macro calendar | [macro.py](src/stock_daily_research/macro.py) | Class with `fetch(report_date, timezone_name, days_ahead)` returning `MacroFetchResult` (events + warnings) |
+| Google News RSS | `news.py` | Per ticker |
+| yfinance price, valuation, technicals, earnings | `valuation.py` | Per ticker |
+| Official macro calendar | `macro.py` | Global |
+| Official Taiwan disclosures | `taiwan_market.py` | Taiwan ticker batch |
+| Manual X signals | `x_signals.py` | Local file, global load |
 
-## Architecture
+Orchestration belongs in `runner.py`. Frozen normalized models belong in `models.py`, persistence in `storage.py`, and decision-oriented presentation in `report.py`.
 
-```
-runner.run_daily
-├── load_dotenv + load_config
-├── pre-flight global_warnings
-├── load_manual_x_signals (single, sync)
-├── _fetch_all_tickers (ThreadPoolExecutor, max_workers=6)
-│   └── _fetch_one_ticker per worker:
-│       ├── news_provider.fetch_for_ticker
-│       ├── fetch_yfinance_valuation
-│       └── fetch_yfinance_earnings_date
-├── macro: OfficialMacroCalendarProvider().fetch (single, sync, post-tickers)
-├── DailyReport (preliminary)
-├── save_report → SQLite
-├── send_telegram (optional)
-└── write_report → markdown + html
-```
+## Provider Contract
 
-Two flavors of provider:
+- Return normalized data plus warnings, or a result object with equivalent fields.
+- Isolate network, parsing, and missing-data failures to the affected source or ticker.
+- Include source attribution, source date, and retrieval time when the model supports them.
+- Use a timeout for every HTTP request.
+- Retry only transient exceptions, rate limits, and 5xx responses with bounded backoff.
+- Do not retry expected capability gaps or ordinary 4xx responses.
+- Do not mutate `TickerConfig` or shared mutable state.
+- Make per-ticker providers thread-safe.
+- Preserve enough raw meaning to distinguish unavailable, stale, fallback, pending, and true zero.
 
-1. **Per-ticker** (news, valuation, earnings) — runs inside `_fetch_one_ticker`, parallelized across tickers. Must be thread-safe and not share state.
-2. **Global** (x_signals, macro) — runs once. Can be slow / serial.
+## Capability Gate
 
-## Adding a per-ticker provider
+Check asset capabilities before a request:
 
-Reference: [news.py](src/stock_daily_research/news.py) and how it's wired in [runner.py:_fetch_one_ticker](src/stock_daily_research/runner.py).
+- `ticker.has_fundamentals` gates company fundamentals.
+- `ticker.has_earnings` gates earnings-calendar calls.
+- ETFs, leveraged ETFs, and crypto should still fetch price and technical history.
+- Taiwan-specific disclosures apply only to `twse` and `tpex`.
+- A missing ETF earnings endpoint is expected, not evidence that the symbol is delisted.
+- Market-scoped data must remain attached to the originating ticker and market.
 
-1. **Module** — create `src/stock_daily_research/<source>.py`:
-   - Class with `__init__(self, timeout_seconds=20, max_retries=2)` constants
-   - Method signature: `fetch_for_ticker(self, ticker: TickerConfig, **provider_kwargs) -> tuple[list[Item], list[str]]`
-   - The `tuple[items, warnings]` shape is the contract: items go into the report, warnings are appended per-ticker
-   - Per-domain / per-call failures must NOT raise out — catch, append to warnings, continue
-   - Use `requests.get` with `timeout=self.timeout_seconds`, plus a `_request_with_retry` helper with exponential backoff (see news.py for the pattern)
+## Implementation Workflow
 
-2. **Model** — add a `@dataclass(frozen=True)` to [models.py](src/stock_daily_research/models.py) with `ticker`, source-specific fields, `source`, `source_retrieved_at`. Add it to `TickerReport` if it's per-ticker output.
+1. Inspect the provider's terms, rate limits, update cadence, and attribution needs.
+2. Decide whether it is per-ticker, global, or market-batch data.
+3. Define or extend a frozen normalized model.
+4. Implement fetch and normalization with dependency injection where practical.
+5. Add config and a `--no-<source>` CLI switch when users need deterministic disabling.
+6. Check fresh cache before network.
+7. Add SQLite schema and an idempotent migration only when persistence is necessary.
+8. Wire the provider through `runner.py` without adding analysis logic there.
+9. Add report logic only after defining the daily decision it supports.
+10. Test normalization, capability skips, transient retry, permanent failure, fallback, and runner warning flow.
 
-3. **Storage** — in [storage.py](src/stock_daily_research/storage.py):
-   - Add a `CREATE TABLE IF NOT EXISTS` block to `SCHEMA`
-   - Pick a UNIQUE constraint that prevents legitimate duplicates without losing cross-ticker rows. **Bad: `UNIQUE(url)` alone — see git history for the cross-ticker bug.** **Good: `UNIQUE(ticker, url)`** or `UNIQUE(ticker, as_of_date, source)` for snapshots
-   - Add a `save_<source>(conn, item)` function using `INSERT OR REPLACE`
-   - Call it from `save_report`'s per-ticker loop
-   - Add an index on `ticker` (and any time field): `CREATE INDEX IF NOT EXISTS idx_<source>_ticker ON <source>(ticker)`
-   - If you change a constraint on an existing table, add a migration block in `_migrate_schema` that detects the old schema and rewrites — pattern in storage.py for `news_articles` and `earnings_dates`
+## Cache and Fallback
 
-4. **Runner** — in [runner.py](src/stock_daily_research/runner.py):
-   - Add a `fetch_<source>: bool = True` parameter to `run_daily`
-   - Add `--no-<source>` global warning if disabled
-   - Pass the provider into `_fetch_all_tickers` as a kwarg
-   - In `_fetch_one_ticker`, call `provider.fetch_for_ticker(...)`, extend warnings, attach data to `TickerReport`
+- Prefer fresh SQLite cache before network. The valuation cache currently uses a four-hour TTL.
+- Save current valid data before deriving report signals.
+- Last-known-good fallback must keep its original source and as-of date.
+- Never relabel stale fallback as current data.
+- Avoid repeated requests when the upstream source cannot provide that asset class.
+- One failed ticker must not discard successful results for other tickers.
 
-5. **CLI** — in [cli.py](src/stock_daily_research/cli.py): add `--no-<source>` argparse flag, pass to `run_daily`
+## Storage Rules
 
-6. **Config** — in [config.py](src/stock_daily_research/config.py) + [models.py](src/stock_daily_research/models.py):
-   - Add a `<Source>Settings` dataclass to models
-   - Add `<source>: <Source>Settings` to `AppSettings`
-   - Add `_load_<source>_settings(data)` validator. Use `_positive_int(value, field)` for any int that must be > 0
-   - Update `load_config` to load it
-   - Update [watchlist.example.yaml](watchlist.example.yaml) with the new section
+- Choose uniqueness keys that retain legitimate cross-ticker rows, such as `(ticker, url)` for news or `(ticker, as_of_date, source)` for snapshots.
+- Add useful ticker/date indexes.
+- Detect old schemas before migration and keep migrations rerunnable.
+- Preserve existing user research state during provider migrations.
 
-7. **Report** — in [report.py](src/stock_daily_research/report.py) + [templates/daily_report.html.j2](src/stock_daily_research/templates/daily_report.html.j2):
-   - Decide if it surfaces in summary stats, a dedicated section, ticker cards, or all three
-   - If new section is needed, see `stock-dashboard-design` skill for layout integration
+## Free-Source Policy
 
-8. **Test** — add `tests/test_<source>.py`:
-   - Unit tests for normalization helpers
-   - Per-domain / per-call failure isolation (monkeypatch the network call, verify other items still come back)
-   - At least one runner integration test using `monkeypatch` to inject the provider, verifying warnings flow through
+- Prefer official disclosures, exchange data, RSS, local files, and yfinance personal-use prototypes.
+- Treat yfinance as unofficial and unstable; maintain cache and fallback paths.
+- Load optional credentials lazily from environment variables.
+- Missing optional credentials should disable that provider with a clear warning, not crash the run.
+- Do not imply real-time coverage when the source is delayed or the report is generated on demand.
 
-## Adding a global provider
+## Verification
 
-Reference: [macro.py](src/stock_daily_research/macro.py).
+Run provider unit tests, runner integration tests, storage tests when applicable, and the full suite. Then generate a report with the provider enabled and disabled. Confirm:
 
-Simpler shape — fetched once after `_fetch_all_tickers`:
-
-```python
-result = OfficialMacroCalendarProvider().fetch(
-    report_date=actual_report_date,
-    timezone_name=config.settings.report_timezone,
-    days_ahead=config.settings.macro.days_ahead,
-)
-events = result.events
-global_warnings.extend(result.warnings)
-```
-
-Conventions:
-- Return a result dataclass with `(items, warnings)` — same contract as per-ticker
-- Items go onto `DailyReport` directly (not `TickerReport`)
-- Stays serial — don't add to the ThreadPoolExecutor unless you need to parallelize internal fetches
-
-## Provider contract (the non-negotiables)
-
-- **Never raise** to the caller for transient/data issues — catch and emit a warning string. Only raise for programmer errors (bad config, missing required field).
-- **Always include `source` and `source_retrieved_at`** in stored items so reports can display attribution.
-- **Don't mutate input** — `TickerConfig` is `frozen=True` for a reason.
-- **Per-call timeout** on every HTTP request (`timeout=N` to `requests.get`).
-- **Retry transient errors** (`requests.RequestException`, 5xx) with exponential backoff. **Don't retry 4xx** (those are programmer errors or auth issues — fail loud).
-- **Thread safety** for per-ticker providers — don't store mutable state on the instance, or guard with `threading.Lock`.
-
-## Free-API hygiene
-
-This project's [README.md](README.md) "No Paid API Policy" — `.env` keeps optional keys but the MVP avoids paid endpoints. If a new provider needs a key:
-- Add the env var to `.env.example` with a comment
-- `os.getenv(...)`-load lazily inside the provider, never at module top
-- Treat missing key as "provider unavailable" — append a warning, not crash
-- Prefer free tiers (Alpha Vantage 5 req/min, Finnhub 60/min) and document rate limits in the provider docstring
-
-## Checklist before declaring done
-
-- [ ] Module follows `(items, warnings)` contract; no exceptions leak to caller
-- [ ] Storage has a UNIQUE constraint that prevents real duplicates without dropping legit rows
-- [ ] If schema changed for an existing table, migration block added & idempotent
-- [ ] Runner: kwarg + `--no-<source>` flag + global warning when disabled
-- [ ] Config: settings dataclass + validator with friendly error messages
-- [ ] watchlist.example.yaml updated
-- [ ] Tests: unit + per-call-failure isolation + runner integration via monkeypatch
-- [ ] `python -m pytest` green
-- [ ] `python run_daily.py` finishes without crashing; check the new section in `reports/<today>.html`
-- [ ] No paid endpoints unless the user explicitly asked
+- no uncaught provider exception;
+- no repetitive expected-error log;
+- source and freshness are visible;
+- market views remain isolated;
+- unavailable assets show a clear empty state;
+- cached and fallback paths behave as documented.

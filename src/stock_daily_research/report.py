@@ -208,6 +208,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         benchmarks = report.market_context.benchmark_returns
     portfolio_settings = report.settings.portfolio if report.settings else None
     env.filters["ticker_insights"] = lambda item: ticker_insights(item, report.report_date, benchmarks=benchmarks, portfolio=portfolio_settings)
+    env.filters["stock_health"] = lambda item: stock_health_diagnostic(item, report.report_date, benchmarks)
     env.filters["right_side_score"] = lambda item: right_side_score(item, benchmarks)
     env.filters["execution_plan"] = lambda item: right_side_execution_plan(report, item)
     env.filters["price_structure_chart"] = price_structure_chart
@@ -261,6 +262,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         news_clusters=event_clusters(report),
         hero=morning_briefing_cards(report),
         daily_summary=daily_summary(report),
+        strategy_screener=strategy_screener(report),
         right_side_validation=right_side_signal_validation(report),
         trade_journal=trade_journal_summary(report),
         morning_actions=morning_actions(report),
@@ -1709,6 +1711,480 @@ def technical_playbook(item: TickerReport) -> dict[str, object] | None:
         "tone": tone,
         "priority": priority,
         "criteria": criteria[:6],
+    }
+
+
+def _health_tone(score: int | None) -> str:
+    """Map an explainable health score to the dashboard tone vocabulary."""
+    if score is None:
+        return "na"
+    if score >= 70:
+        return "good"
+    if score >= 50:
+        return "mixed"
+    return "danger"
+
+
+def _health_dimension(
+    key: str,
+    label: str,
+    score: float | None,
+    evidence: list[str],
+) -> dict[str, object]:
+    normalized = None if score is None else int(round(max(0.0, min(100.0, score))))
+    return {
+        "key": key,
+        "label": label,
+        "short_label": {"trend": "趨", "momentum": "動", "volume": "量", "fundamental": "基", "risk": "險"}.get(key, label[:1]),
+        "score": normalized,
+        "tone": _health_tone(normalized),
+        "evidence": evidence[:3],
+        "available": normalized is not None,
+    }
+
+
+def _health_average(dimensions: list[dict[str, object]], weights: dict[str, float]) -> int | None:
+    available = [dimension for dimension in dimensions if dimension["available"]]
+    denominator = sum(weights[str(dimension["key"])] for dimension in available)
+    if not available or denominator <= 0:
+        return None
+    weighted = sum(
+        float(dimension["score"]) * weights[str(dimension["key"])]
+        for dimension in available
+    )
+    return int(round(weighted / denominator))
+
+
+def stock_health_diagnostic(
+    item: TickerReport,
+    anchor: date,
+    benchmarks: dict[str, float] | None = None,
+) -> dict[str, object]:
+    """Build a transparent five-dimension stock health diagnostic.
+
+    The diagnostic only uses values already collected for the daily report. A
+    missing fundamental dimension (for example an ETF or crypto asset) is
+    excluded from the weighted average instead of being treated as a failure.
+    """
+    benchmarks = benchmarks or {}
+    metrics = item.valuation.metrics if item.valuation else {}
+    last = _as_float(metrics.get("last_close"))
+    regime = price_regime_status(item)
+    rebuilding = bool(regime and not regime["ready"])
+
+    trend_evidence: list[str] = []
+    trend_score: float | None = None
+    if last is not None and not rebuilding:
+        sma20 = _as_float(metrics.get("sma_20"))
+        sma60 = _as_float(metrics.get("sma_60"))
+        sma120 = _as_float(metrics.get("sma_120"))
+        available_mas = [value for value in (sma20, sma60, sma120) if value is not None]
+        if available_mas:
+            trend_score = 50.0
+            above = sum(1 for value in available_mas if last > value)
+            if len(available_mas) == 3 and last > sma20 > sma60 > sma120:
+                trend_score += 25
+                trend_evidence.append("價格與均線呈多頭排列")
+            elif len(available_mas) == 3 and last < sma20 < sma60 < sma120:
+                trend_score -= 30
+                trend_evidence.append("價格與均線呈空頭排列")
+            else:
+                trend_score += (above / len(available_mas) - 0.5) * 30
+                trend_evidence.append(f"站上 {above}/{len(available_mas)} 條主要均線")
+
+            slope20 = _as_float(metrics.get("sma_20_slope_5d"))
+            if slope20 is not None:
+                trend_score += 10 if slope20 >= 1 else 5 if slope20 > 0 else -10 if slope20 <= -1 else -5
+                trend_evidence.append(f"20 日線五日斜率 {slope20:+.1f}%")
+            return20 = _as_float(metrics.get("return_20d"))
+            if return20 is not None:
+                trend_score += 8 if return20 >= 8 else 4 if return20 > 0 else -8 if return20 <= -8 else -4
+                trend_evidence.append(f"近 20 日報酬 {return20:+.1f}%")
+
+            technical = technical_playbook(item)
+            if technical:
+                technical_labels = {
+                    "Breakout confirmed": "突破確認",
+                    "Trend weakening": "趨勢轉弱",
+                    "Extended, do not chase": "延伸過大，不追價",
+                    "Pullback watch": "回檔觀察",
+                    "Trend healthy": "趨勢健康",
+                    "Mixed / neutral": "中性整理",
+                }
+                status = str(technical["status"])
+                trend_score += 10 if status == "Breakout confirmed" else -15 if status == "Trend weakening" else 0
+                trend_evidence.append(technical_labels.get(status, status))
+
+    momentum_evidence: list[str] = []
+    momentum_score: float | None = None
+    if last is not None and not rebuilding:
+        rs = relative_strength(item, benchmarks)
+        rsi = _as_float(metrics.get("rsi_14"))
+        return5 = _as_float(metrics.get("return_5d"))
+        if rs or rsi is not None or return5 is not None:
+            momentum_score = 50.0
+            if rs:
+                average_spread = sum(rs.values()) / len(rs)
+                momentum_score += 22 if average_spread >= 8 else 12 if average_spread > 0 else -22 if average_spread <= -8 else -12
+                momentum_evidence.append(f"相對大盤 20 日強弱 {average_spread:+.1f} 個百分點")
+            if rsi is not None:
+                if 50 <= rsi <= 65:
+                    momentum_score += 12
+                    momentum_evidence.append(f"RSI {rsi:.0f} 位於強勢區")
+                elif rsi >= 75:
+                    momentum_score -= 12
+                    momentum_evidence.append(f"RSI {rsi:.0f} 過熱")
+                elif rsi < 40:
+                    momentum_score -= 10
+                    momentum_evidence.append(f"RSI {rsi:.0f} 動能偏弱")
+                else:
+                    momentum_evidence.append(f"RSI {rsi:.0f}")
+            if return5 is not None:
+                momentum_score += 10 if return5 >= 5 else 5 if return5 > 0 else -10 if return5 <= -5 else -5
+                momentum_evidence.append(f"近 5 日報酬 {return5:+.1f}%")
+
+    volume_evidence: list[str] = []
+    volume_score: float | None = None
+    squeeze_flags = 0
+    if last is not None and not rebuilding:
+        volume_ratio = _as_float(metrics.get("volume_vs_20d"))
+        atr_contraction = _as_float(metrics.get("atr_contraction_ratio"))
+        bb_percentile = _as_float(metrics.get("bb_width_20_percentile"))
+        volume5 = _as_float(metrics.get("volume_5d_vs_20d"))
+        breakout_volume = _as_float(metrics.get("breakout_volume_vs_20d"))
+        vpa = volume_price_analysis(item)
+        if any(value is not None for value in (volume_ratio, atr_contraction, bb_percentile, volume5, breakout_volume)) or vpa:
+            volume_score = 50.0
+            if vpa:
+                adjustment = int(vpa["score_adjustment"])
+                volume_score += adjustment * 4
+                volume_evidence.append(f"量價判讀：{vpa['event']}")
+            if volume_ratio is not None:
+                change = daily_change_pct(item)
+                if volume_ratio >= 1.5:
+                    volume_score += 12 if change is not None and change > 0 else -8 if change is not None and change < 0 else 4
+                elif volume_ratio < 0.6:
+                    volume_score -= 5
+                volume_evidence.append(f"成交量為 20 日均量 {volume_ratio:.2f} 倍")
+            if atr_contraction is not None and atr_contraction <= 0.8:
+                squeeze_flags += 1
+                volume_score += 6
+            if bb_percentile is not None and bb_percentile <= 25:
+                squeeze_flags += 1
+                volume_score += 6
+            if volume5 is not None and volume5 <= 0.8:
+                squeeze_flags += 1
+                volume_score += 4
+            if squeeze_flags:
+                volume_evidence.append(f"波動收縮條件符合 {squeeze_flags}/3")
+            if breakout_volume is not None and breakout_volume >= 1.5:
+                volume_score += 10
+                volume_evidence.append(f"突破量達均量 {breakout_volume:.2f} 倍")
+
+    fundamental_evidence: list[str] = []
+    fundamental_score: float | None = None
+    fundamental_values = {
+        "revision": _as_float(metrics.get("fy1_eps_revision_30d")),
+        "eps_growth": _as_float(metrics.get("eps_growth_pct")),
+        "revenue_growth": _as_float(metrics.get("revenue_growth_pct")),
+        "surprise": _as_float(metrics.get("latest_eps_surprise_pct")),
+    }
+    if item.ticker.has_fundamentals and any(value is not None for value in fundamental_values.values()):
+        fundamental_score = 50.0
+        ttm_eps = _as_float(metrics.get("ttm_eps"))
+        unstable_eps = ttm_eps is not None and ttm_eps <= 0
+        if unstable_eps:
+            fundamental_score -= 12
+            fundamental_evidence.append("近 12 月 EPS 為負，成長率可信度較低")
+        revision = fundamental_values["revision"]
+        if revision is not None:
+            fundamental_score += 22 if revision >= 3 else 12 if revision > 0 else -22 if revision <= -3 else -12
+            fundamental_evidence.append(f"FY1 EPS 預估近 30 日調整 {revision:+.1f}%")
+        eps_growth = fundamental_values["eps_growth"]
+        if eps_growth is not None:
+            growth_adjustment = 15 if eps_growth >= 20 else 8 if eps_growth > 0 else -15
+            fundamental_score += min(5, growth_adjustment) if unstable_eps and growth_adjustment > 0 else growth_adjustment
+            fundamental_evidence.append(f"預估 EPS 成長 {eps_growth:+.1f}%")
+        revenue_growth = fundamental_values["revenue_growth"]
+        if revenue_growth is not None:
+            fundamental_score += 10 if revenue_growth >= 10 else 5 if revenue_growth > 0 else -10
+            fundamental_evidence.append(f"預估營收成長 {revenue_growth:+.1f}%")
+        surprise = fundamental_values["surprise"]
+        if surprise is not None:
+            fundamental_score += 8 if surprise >= 5 else 4 if surprise > 0 else -8
+            fundamental_evidence.append(f"最近 EPS 驚喜 {surprise:+.1f}%")
+
+    risk_evidence: list[str] = []
+    risk_score: float | None = None
+    if last is not None or item.warnings or item.ticker.position.status == "holding":
+        risk_score = 75.0
+        atr_pct = _as_float(metrics.get("atr_20_percent"))
+        if atr_pct is not None:
+            risk_score += 8 if atr_pct <= 2.5 else -18 if atr_pct >= 8 else -8 if atr_pct >= 5 else 0
+            if atr_pct >= 5:
+                risk_evidence.append(f"ATR {atr_pct:.1f}% 顯示波動偏高")
+        from_high = from_52w_high_pct(item)
+        rsi = _as_float(metrics.get("rsi_14"))
+        if from_high is not None and from_high >= -2 and rsi is not None and rsi >= 70:
+            risk_score -= 12
+            risk_evidence.append("接近 52 週高點且 RSI 過熱")
+        elif from_high is not None and from_high <= -30:
+            risk_score -= 10
+            risk_evidence.append(f"距 52 週高點 {from_high:.1f}%")
+        daily_change = daily_change_pct(item)
+        if daily_change is not None and daily_change <= -5:
+            risk_score -= 15
+            risk_evidence.append(f"單日下跌 {daily_change:.1f}%")
+        valuation_risk = valuation_risk_label(item)
+        if valuation_risk in {"High", "Extreme"}:
+            risk_score -= 10
+            risk_evidence.append("估值容錯空間偏低")
+        if item.earnings and item.earnings.earnings_date:
+            earnings_days = (item.earnings.earnings_date - anchor).days
+            if 0 <= earnings_days <= 3:
+                risk_score -= 12
+                risk_evidence.append(f"財報事件剩 {earnings_days} 天")
+        position = item.ticker.position
+        if position.status == "holding" and position.stop_loss is None:
+            risk_score -= 12
+            risk_evidence.append("持有部位尚未設定停損")
+        if item.warnings:
+            risk_score -= min(20, len(item.warnings) * 5)
+            risk_evidence.append(f"有 {len(item.warnings)} 項資料品質警示")
+        if rebuilding:
+            risk_score = min(risk_score, 35)
+            risk_evidence.insert(0, "價格制度切換，技術指標重建中")
+        if not risk_evidence:
+            risk_evidence.append("目前未偵測到重大事件或波動風險")
+
+    dimensions = [
+        _health_dimension("trend", "趨勢結構", trend_score, trend_evidence),
+        _health_dimension("momentum", "相對動能", momentum_score, momentum_evidence),
+        _health_dimension("volume", "量價能量", volume_score, volume_evidence),
+        _health_dimension("fundamental", "基本面動能", fundamental_score, fundamental_evidence),
+        _health_dimension("risk", "風險控制", risk_score, risk_evidence),
+    ]
+    dimension_map = {str(dimension["key"]): dimension for dimension in dimensions}
+    score = _health_average(
+        dimensions,
+        {"trend": 30, "momentum": 20, "volume": 20, "fundamental": 15, "risk": 15},
+    )
+    coverage = sum(1 for dimension in dimensions if dimension["available"])
+
+    if rebuilding:
+        status, tone = "指標重建中", "warn"
+    elif score is None or coverage < 2:
+        status, tone = "資料不足", "quiet"
+    elif score >= 75:
+        status, tone = "強勢", "good"
+    elif score >= 62:
+        status, tone = "偏多", "good"
+    elif score >= 48:
+        status, tone = "中性", "mixed"
+    elif score >= 35:
+        status, tone = "偏弱", "warn"
+    else:
+        status, tone = "高風險", "danger"
+
+    technical = technical_playbook(item) if not rebuilding else None
+    technical_status = str(technical["status"]) if technical else ""
+    recent_breakout = _as_float(metrics.get("breakout_days_ago"))
+    breakout_hold = _as_float(metrics.get("breakout_hold_pct"))
+    breakout_match = bool(
+        technical_status == "Breakout confirmed"
+        or (
+            recent_breakout is not None
+            and 0 <= recent_breakout <= 5
+            and (breakout_hold is None or breakout_hold >= -1)
+        )
+    )
+    pullback_match = technical_status == "Pullback watch"
+    squeeze_match = squeeze_flags >= 2 and bool(dimension_map["trend"]["score"] is not None and int(dimension_map["trend"]["score"]) >= 45)
+    fundamental_match = bool(
+        dimension_map["fundamental"]["score"] is not None
+        and int(dimension_map["fundamental"]["score"]) >= 65
+    )
+    change = daily_change_pct(item)
+    volume_ratio = _as_float(metrics.get("volume_vs_20d"))
+    gap = _as_float(metrics.get("gap_percent"))
+    move_atr = _as_float(metrics.get("move_vs_atr"))
+    unusual_match = bool(
+        (change is not None and abs(change) >= 3)
+        or (volume_ratio is not None and volume_ratio >= 1.5)
+        or (gap is not None and abs(gap) >= 2)
+        or (move_atr is not None and abs(move_atr) >= 1.5)
+    )
+    risk_match = bool(
+        rebuilding
+        or (dimension_map["risk"]["score"] is not None and int(dimension_map["risk"]["score"]) < 45)
+        or technical_status == "Trend weakening"
+        or (item.ticker.position.status == "holding" and item.ticker.position.stop_loss is None)
+    )
+    matches = [
+        key
+        for key, matched in (
+            ("breakout", breakout_match),
+            ("pullback", pullback_match),
+            ("squeeze", squeeze_match),
+            ("fundamental", fundamental_match),
+            ("unusual", unusual_match),
+            ("risk", risk_match),
+        )
+        if matched
+    ]
+
+    match_reasons: dict[str, str] = {}
+    if breakout_match:
+        match_reasons["breakout"] = "價格突破且結構仍守在關鍵價位之上"
+    if pullback_match:
+        match_reasons["pullback"] = "多頭均線未破，價格回到可控的觀察區"
+    if squeeze_match:
+        match_reasons["squeeze"] = f"波動與量能收縮條件符合 {squeeze_flags}/3"
+    if fundamental_match:
+        match_reasons["fundamental"] = fundamental_evidence[0] if fundamental_evidence else "基本面動能優於觀察名單"
+    if unusual_match:
+        unusual_parts: list[str] = []
+        if change is not None and abs(change) >= 3:
+            unusual_parts.append(f"單日 {change:+.1f}%")
+        if volume_ratio is not None and volume_ratio >= 1.5:
+            unusual_parts.append(f"量比 {volume_ratio:.2f} 倍")
+        if gap is not None and abs(gap) >= 2:
+            unusual_parts.append(f"跳空 {gap:+.1f}%")
+        if move_atr is not None and abs(move_atr) >= 1.5:
+            unusual_parts.append(f"波動 {move_atr:+.1f} ATR")
+        match_reasons["unusual"] = "、".join(unusual_parts[:3])
+    if risk_match:
+        match_reasons["risk"] = risk_evidence[0] if risk_evidence else "風險控制分數偏低"
+
+    if rebuilding:
+        action = "等待累積足夠交易日，再使用技術訊號。"
+    elif risk_match:
+        action = "先處理風險與停損，不新增部位。"
+    elif breakout_match:
+        action = "確認突破守穩與量能延續，再依計畫分批。"
+    elif pullback_match:
+        action = "等待回檔止穩，不在下跌途中搶進。"
+    elif squeeze_match:
+        action = "設好觸發價，等待帶量脫離整理區。"
+    elif score is not None and score >= 62:
+        action = "列入優先觀察，等價格觸發既定計畫。"
+    else:
+        action = "維持觀察，暫無需要追價的訊號。"
+
+    return {
+        "score": score,
+        "status": status,
+        "tone": tone,
+        "coverage": coverage,
+        "dimensions": dimensions,
+        "dimension_map": dimension_map,
+        "matches": matches,
+        "match_reasons": match_reasons,
+        "action": action,
+        "updated_basis": "產檔時的日線與基本面資料",
+    }
+
+
+def strategy_screener(report: DailyReport, limit_per_market: int = 8) -> dict[str, object]:
+    """Rank the watchlist with transparent rules and existing free data."""
+    definitions = [
+        ("overall", "綜合排行", "依五維健診總分排序，缺少的維度會自動排除後重新加權。"),
+        ("breakout", "突破動能", "尋找突破近期關鍵價位，且量價與風險條件仍可控的標的。"),
+        ("pullback", "回檔續強", "尋找多頭結構中的健康回檔，不把急跌誤判為便宜。"),
+        ("squeeze", "波動收縮", "尋找 ATR、布林帶寬度與量能同步收斂的蓄勢標的。"),
+        ("fundamental", "基本面動能", "依 EPS 預估修正、成長與財報驚喜篩選；ETF 與加密貨幣不套用。"),
+        ("unusual", "今日異動", "依本次產檔的單日漲跌、量比、跳空與 ATR 異常篩選，並非盤中即時訊號。"),
+        ("risk", "風險優先", "先找出趨勢轉弱、波動升高、事件逼近或缺少停損的標的。"),
+    ]
+    benchmarks = report.market_context.benchmark_returns if report.market_context and report.market_context.benchmark_returns else {}
+    candidates: dict[str, dict[str, list[dict[str, object]]]] = {
+        key: {} for key, _label, _description in definitions
+    }
+
+    for item in report.ticker_reports:
+        health = stock_health_diagnostic(item, report.report_date, benchmarks)
+        market = _market_bucket(item.ticker.market)
+        dimension_map = health["dimension_map"]
+        overall_score = health["score"]
+        metrics = item.valuation.metrics if item.valuation else {}
+        change = daily_change_pct(item)
+        volume_ratio = _as_float(metrics.get("volume_vs_20d"))
+        gap = _as_float(metrics.get("gap_percent"))
+        move_atr = _as_float(metrics.get("move_vs_atr"))
+
+        strategy_scores: dict[str, int] = {}
+        if overall_score is not None and int(health["coverage"]) >= 2:
+            strategy_scores["overall"] = int(overall_score)
+        if "breakout" in health["matches"]:
+            strategy_scores["breakout"] = int(round(
+                int(dimension_map["trend"]["score"] or 0) * 0.45
+                + int(dimension_map["momentum"]["score"] or 0) * 0.25
+                + int(dimension_map["volume"]["score"] or 0) * 0.30
+            ))
+        if "pullback" in health["matches"]:
+            strategy_scores["pullback"] = int(round(
+                int(dimension_map["trend"]["score"] or 0) * 0.55
+                + int(dimension_map["risk"]["score"] or 0) * 0.30
+                + int(dimension_map["momentum"]["score"] or 0) * 0.15
+            ))
+        if "squeeze" in health["matches"]:
+            strategy_scores["squeeze"] = min(100, int(dimension_map["trend"]["score"] or 50) + 15)
+        if "fundamental" in health["matches"]:
+            strategy_scores["fundamental"] = int(dimension_map["fundamental"]["score"] or 0)
+        if "unusual" in health["matches"]:
+            strategy_scores["unusual"] = min(100, int(round(
+                40
+                + (abs(change) * 5 if change is not None else 0)
+                + (max(0, volume_ratio - 1) * 15 if volume_ratio is not None else 0)
+                + (abs(gap) * 3 if gap is not None else 0)
+                + (max(0, abs(move_atr) - 1) * 10 if move_atr is not None else 0)
+            )))
+        if "risk" in health["matches"]:
+            risk_score = dimension_map["risk"]["score"]
+            strategy_scores["risk"] = 100 - int(risk_score) if risk_score is not None else 80
+
+        for key, strategy_score in strategy_scores.items():
+            reason = (
+                health["match_reasons"].get(key)
+                if key != "overall"
+                else "、".join(
+                    str(dimension["evidence"][0])
+                    for dimension in health["dimensions"]
+                    if dimension["available"] and dimension["evidence"]
+                )[:120]
+            )
+            row = {
+                "ticker": item.ticker.symbol,
+                "display_symbol": item.ticker.display_symbol,
+                "company": item.ticker.company_name,
+                "market": market,
+                "market_label": {"us": "美股", "taiwan": "台股", "crypto": "加密貨幣", "other": "其他"}.get(market, market),
+                "score": strategy_score,
+                "health": health,
+                "reason": reason or "依目前可用資料列入觀察",
+                "action": health["action"],
+                "anchor": f"ticker-{item.ticker.symbol.lower()}",
+            }
+            candidates[key].setdefault(market, []).append(row)
+
+    strategies: list[dict[str, object]] = []
+    market_order = ("us", "taiwan", "crypto", "other")
+    for key, label, description in definitions:
+        rows: list[dict[str, object]] = []
+        for market in market_order:
+            market_rows = sorted(
+                candidates[key].get(market, []),
+                key=lambda row: (-int(row["score"]), str(row["ticker"])),
+            )[:max(1, limit_per_market)]
+            for rank, row in enumerate(market_rows, start=1):
+                row["rank"] = rank
+                rows.append(row)
+        strategies.append({"key": key, "label": label, "description": description, "rows": rows})
+
+    return {
+        "strategies": strategies,
+        "default_strategy": "overall",
+        "updated_basis": "使用現有免費資料，於每日報表產生時更新",
     }
 
 def _aligned_ohlcv(item: TickerReport) -> dict[str, list[object]] | None:

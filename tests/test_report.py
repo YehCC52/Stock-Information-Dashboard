@@ -3597,3 +3597,157 @@ def test_right_side_signal_validation_uses_archived_observations_and_dedupes_str
     assert rows[20]["win_rate"] == 100.0
     assert rows[5]["expectancy_r"] == 1.0
     assert rows[20]["expectancy_r"] == 4.0
+
+
+def test_stock_health_diagnostic_scores_strong_and_weak_setups() -> None:
+    from stock_daily_research.report import stock_health_diagnostic
+
+    strong = _score_item({
+        "last_close": 120.0, "previous_close": 116.0,
+        "sma_20": 110.0, "sma_60": 100.0, "sma_120": 90.0,
+        "sma_20_slope_5d": 1.5, "prior_20d_high": 118.0,
+        "return_5d": 6.0, "return_20d": 14.0, "rsi_14": 60.0,
+        "volume_vs_20d": 1.8, "atr_contraction_ratio": 0.75,
+        "bb_width_20_percentile": 20.0, "volume_5d_vs_20d": 0.75,
+        "breakout_volume_vs_20d": 1.8, "atr_20_percent": 2.0,
+        "fy1_eps_revision_30d": 4.0, "eps_growth_pct": 28.0,
+        "revenue_growth_pct": 16.0, "latest_eps_surprise_pct": 7.0,
+        "fifty_two_week_high": 130.0,
+    })
+    weak = replace(
+        _score_item({
+            "last_close": 50.0, "previous_close": 55.0,
+            "sma_20": 60.0, "sma_60": 70.0, "sma_120": 80.0,
+            "sma_20_slope_5d": -2.0, "return_5d": -8.0,
+            "return_20d": -18.0, "rsi_14": 35.0,
+            "volume_vs_20d": 2.0, "atr_20_percent": 9.0,
+            "fy1_eps_revision_30d": -5.0, "eps_growth_pct": -20.0,
+            "revenue_growth_pct": -12.0, "latest_eps_surprise_pct": -8.0,
+            "fifty_two_week_high": 100.0, "forward_pe": 250.0,
+        }),
+        warnings=["stale valuation"],
+    )
+
+    strong_result = stock_health_diagnostic(
+        strong,
+        date(2026, 5, 12),
+        {"spy_20d": 3.0, "qqq_20d": 5.0},
+    )
+    weak_result = stock_health_diagnostic(
+        weak,
+        date(2026, 5, 12),
+        {"spy_20d": 3.0, "qqq_20d": 5.0},
+    )
+
+    assert strong_result["score"] >= 75
+    assert strong_result["coverage"] == 5
+    assert {"breakout", "squeeze", "fundamental", "unusual"}.issubset(strong_result["matches"])
+    assert weak_result["score"] < strong_result["score"]
+    assert weak_result["dimension_map"]["risk"]["score"] < 45
+    assert "risk" in weak_result["matches"]
+
+
+def test_stock_health_diagnostic_excludes_missing_fundamentals_from_average() -> None:
+    from stock_daily_research.report import stock_health_diagnostic
+
+    item = replace(
+        _score_item({
+            "last_close": 101.0, "previous_close": 100.0,
+            "sma_20": 99.0, "sma_60": 95.0, "sma_120": 90.0,
+            "sma_20_slope_5d": 0.5, "return_5d": 2.0,
+            "return_20d": 6.0, "rsi_14": 55.0,
+            "volume_vs_20d": 1.0, "atr_20_percent": 2.5,
+        }),
+        ticker=TickerConfig(
+            symbol="0050.TW", company_name="ETF", market="twse",
+            currency="TWD", has_fundamentals=False,
+        ),
+    )
+
+    result = stock_health_diagnostic(item, date(2026, 5, 12), {"twii_20d": 2.0})
+
+    assert result["score"] is not None
+    assert result["dimension_map"]["fundamental"]["score"] is None
+    assert result["coverage"] == 4
+
+
+def test_stock_health_diagnostic_suspends_technical_dimensions_during_regime_reset() -> None:
+    from stock_daily_research.report import stock_health_diagnostic
+
+    item = _score_item({
+        "last_close": 100.0, "previous_close": 99.0,
+        "sma_20": 95.0, "sma_60": 90.0, "sma_120": 85.0,
+        "price_regime_change_date": "2026-05-08",
+        "price_regime_change_pct": -50.0,
+        "price_history_sessions": 4,
+    })
+
+    result = stock_health_diagnostic(item, date(2026, 5, 12))
+
+    assert result["status"] == "\u6307\u6a19\u91cd\u5efa\u4e2d"
+    assert result["dimension_map"]["trend"]["score"] is None
+    assert result["dimension_map"]["momentum"]["score"] is None
+    assert "risk" in result["matches"]
+
+
+def test_strategy_screener_keeps_market_rankings_separate() -> None:
+    from stock_daily_research.report import strategy_screener
+
+    metrics = {
+        "last_close": 120.0, "previous_close": 115.0,
+        "sma_20": 110.0, "sma_60": 100.0, "sma_120": 90.0,
+        "sma_20_slope_5d": 1.2, "prior_20d_high": 118.0,
+        "return_5d": 5.0, "return_20d": 12.0, "rsi_14": 60.0,
+        "volume_vs_20d": 1.8, "atr_20_percent": 2.0,
+        "fy1_eps_revision_30d": 4.0, "eps_growth_pct": 20.0,
+    }
+    us = replace(_score_item(metrics), ticker=TickerConfig("NVDA", "NVIDIA", market="us"))
+    tw = replace(
+        _score_item(metrics),
+        ticker=TickerConfig("2330.TW", "TSMC", market="twse", currency="TWD"),
+    )
+    crypto = replace(
+        _score_item({key: value for key, value in metrics.items() if key not in {"fy1_eps_revision_30d", "eps_growth_pct"}}),
+        ticker=TickerConfig("BTC-USD", "Bitcoin", market="crypto", has_fundamentals=False),
+    )
+    report = DailyReport(
+        report_date=date(2026, 5, 12),
+        generated_at=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        ticker_reports=[us, tw, crypto],
+    )
+
+    result = strategy_screener(report, limit_per_market=1)
+    overall = next(strategy for strategy in result["strategies"] if strategy["key"] == "overall")
+    breakout = next(strategy for strategy in result["strategies"] if strategy["key"] == "breakout")
+
+    assert [row["market"] for row in overall["rows"]] == ["us", "taiwan", "crypto"]
+    assert [row["rank"] for row in overall["rows"]] == [1, 1, 1]
+    assert {row["ticker"] for row in breakout["rows"]} == {"NVDA", "2330.TW", "BTC-USD"}
+
+
+def test_html_report_renders_free_strategy_screener_and_health_diagnostic() -> None:
+    output = render_html_report(_sample_report())
+
+    assert 'id="strategy-screener"' in output
+    assert 'id="strategy-screen-select"' in output
+    assert 'stock-daily-screener-strategy' in output
+    assert 'class="health-diagnostic"' in output
+    assert 'data-health-score=' in output
+    assert 'class="strategy-screen-row" data-market="us"' in output
+
+def test_stock_health_diagnostic_does_not_overrate_negative_eps_growth() -> None:
+    from stock_daily_research.report import stock_health_diagnostic
+
+    item = _score_item({
+        "last_close": 20.0, "previous_close": 19.0,
+        "sma_20": 18.0, "sma_60": 17.0, "sma_120": 16.0,
+        "ttm_eps": -1.0, "eps_growth_pct": 120.0,
+        "fy1_eps_revision_30d": 4.0, "revenue_growth_pct": 30.0,
+        "latest_eps_surprise_pct": 12.0,
+    })
+
+    result = stock_health_diagnostic(item, date(2026, 5, 12))
+    fundamental = result["dimension_map"]["fundamental"]
+
+    assert fundamental["score"] < 100
+    assert any("EPS" in evidence for evidence in fundamental["evidence"])
