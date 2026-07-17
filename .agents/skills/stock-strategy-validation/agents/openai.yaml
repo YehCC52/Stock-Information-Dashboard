@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stock Strategy Validation"
+  short_description: "Validate transparent stock scores and strategy signals."
+  default_prompt: "Use $stock-strategy-validation to change or verify five-dimension scores, screener rules, and signal outcome logic."

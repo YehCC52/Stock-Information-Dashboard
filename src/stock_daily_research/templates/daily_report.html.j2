@@ -421,6 +421,223 @@
     .command-alert .ca-label { font-weight: 800; font-size: 12px; min-width: 48px; }
     .command-alert .ca-title { font-size: 12px; color: var(--text); line-height: 1.3; }
 
+    .strategy-screener {
+      margin-bottom: 14px;
+      scroll-margin-top: 56px;
+      border-color: color-mix(in srgb, var(--good) 26%, var(--border));
+      background: color-mix(in srgb, var(--surface) 94%, var(--good-bg));
+    }
+    .strategy-screener::before { background: var(--good); }
+    .strategy-screener-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .strategy-screener-title h2 { margin: 0; }
+    .strategy-screener-basis {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .strategy-screener-control {
+      display: grid;
+      gap: 3px;
+      min-width: min(240px, 100%);
+    }
+    .strategy-screener-control label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .strategy-screener-control select {
+      width: 100%;
+      min-height: 36px;
+      padding: 6px 30px 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+    }
+    .strategy-screen-description {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .strategy-screen-panel[hidden] { display: none; }
+    .strategy-screen-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border-top: 1px solid var(--border);
+    }
+    .strategy-screen-row {
+      display: grid;
+      grid-template-columns: 32px minmax(132px, 0.72fr) 62px minmax(210px, 0.9fr) minmax(220px, 1.35fr);
+      gap: 10px;
+      align-items: center;
+      min-height: 58px;
+      padding: 8px 4px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .strategy-screen-row:hover { background: color-mix(in srgb, var(--surface-alt) 72%, transparent); }
+    .strategy-rank {
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+    .strategy-identity {
+      min-width: 0;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .strategy-identity:hover .strategy-symbol { color: var(--link); }
+    .strategy-symbol {
+      display: block;
+      font-size: 15px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+    .strategy-company {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .strategy-score {
+      font-size: 17px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+    .health-tone-good { color: var(--good); }
+    .health-tone-mixed { color: var(--warning); }
+    .health-tone-danger { color: var(--danger); }
+    .health-tone-warn { color: var(--warning); }
+    .health-tone-na, .health-tone-quiet { color: var(--muted); }
+    .health-dimension-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 5px;
+      min-width: 0;
+    }
+    .health-mini {
+      display: grid;
+      grid-template-columns: 14px minmax(0, 1fr);
+      gap: 3px;
+      align-items: center;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .health-mini-bar {
+      display: block;
+      height: 5px;
+      overflow: hidden;
+      background: var(--border-soft);
+    }
+    .health-mini-bar::after {
+      content: "";
+      display: block;
+      width: var(--health-value, 0%);
+      height: 100%;
+      background: var(--warning);
+    }
+    .health-mini.health-tone-good .health-mini-bar::after { background: var(--good); }
+    .health-mini.health-tone-danger .health-mini-bar::after { background: var(--danger); }
+    .health-mini.health-tone-na .health-mini-bar::after { background: var(--border); }
+    .strategy-reason {
+      min-width: 0;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .strategy-action {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .strategy-empty {
+      margin: 0;
+      padding: 14px 4px 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .health-diagnostic {
+      margin: 9px 0 0;
+      padding: 0;
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .health-diagnostic > summary {
+      display: grid;
+      grid-template-columns: minmax(78px, 1fr) auto auto auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 34px;
+      color: var(--text);
+      list-style-position: inside;
+    }
+    .health-diagnostic-title { font-size: 12px; font-weight: 800; }
+    .health-diagnostic-score { font-size: 15px; font-variant-numeric: tabular-nums; }
+    .health-diagnostic-status { font-size: 12px; font-weight: 700; }
+    .health-diagnostic-coverage { color: var(--muted); font-size: 10px; }
+    .health-diagnostic-body {
+      display: grid;
+      gap: 6px;
+      padding: 2px 0 9px;
+    }
+    .health-dimension-row {
+      display: grid;
+      grid-template-columns: 74px 34px minmax(80px, 0.55fr) minmax(140px, 1.45fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      font-size: 11px;
+    }
+    .health-dimension-label { font-weight: 700; }
+    .health-dimension-score { font-variant-numeric: tabular-nums; text-align: right; }
+    .health-dimension-meter {
+      display: block;
+      height: 6px;
+      overflow: hidden;
+      background: var(--border-soft);
+    }
+    .health-dimension-meter > span {
+      display: block;
+      width: var(--health-value, 0%);
+      height: 100%;
+      background: var(--warning);
+    }
+    .health-dimension-row.health-tone-good .health-dimension-meter > span { background: var(--good); }
+    .health-dimension-row.health-tone-danger .health-dimension-meter > span { background: var(--danger); }
+    .health-dimension-evidence {
+      min-width: 0;
+      color: var(--muted);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .health-diagnostic-action {
+      margin-top: 2px;
+      padding-top: 7px;
+      border-top: 1px solid var(--border-soft);
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .health-diagnostic-action strong { color: var(--muted); }
     .daily-summary {
       border-color: color-mix(in srgb, var(--info) 28%, var(--border));
       background: color-mix(in srgb, var(--surface) 90%, var(--info-bg));
@@ -2449,7 +2666,9 @@
     }
     @media (max-width: 760px) {
       .market-workspace { grid-template-columns: 1fr; padding: 10px; }
-      .market-workspace-stats { grid-column: auto; }
+      .market-workspace-stats { grid-column: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+      .market-workspace-stat { padding: 7px 6px; }
+      .market-workspace-stat strong { overflow-wrap: anywhere; }
       .page { padding: 14px; }
       .header { flex-direction: column; align-items: flex-start; }
       .header-right { align-items: stretch; width: 100%; }
@@ -2459,6 +2678,14 @@
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .sentiment-panel { grid-template-columns: 1fr; }
       .toc { position: static; }
+      .strategy-screener-head { flex-direction: column; align-items: stretch; }
+      .strategy-screener-control { width: 100%; }
+      .strategy-screen-row {
+        grid-template-columns: 28px minmax(0, 1fr) 54px;
+        gap: 7px;
+      }
+      .health-dimension-strip, .strategy-reason { grid-column: 2 / -1; }
+      .health-dimension-row { grid-template-columns: 68px 32px minmax(70px, 0.5fr) minmax(110px, 1fr); }
       .daily-summary-head { flex-direction: column; align-items: flex-start; gap: 4px; }
       .daily-summary-detail { text-align: left; }
       .daily-summary-body { grid-template-columns: 1fr; }
@@ -2467,6 +2694,15 @@
     }
     @media (max-width: 480px) {
       .summary-grid { grid-template-columns: 1fr 1fr; }
+      .strategy-screen-row { padding: 9px 0; }
+      .health-dimension-strip { gap: 3px; }
+      .health-mini { grid-template-columns: 12px minmax(0, 1fr); }
+      .health-dimension-row {
+        grid-template-columns: 62px 30px minmax(70px, 1fr);
+      }
+      .health-dimension-evidence { grid-column: 1 / -1; }
+      .health-diagnostic > summary { grid-template-columns: minmax(72px, 1fr) auto auto; }
+      .health-diagnostic-coverage { display: none; }
       .daily-summary-list { grid-template-columns: 1fr; }
       .daily-summary-item a { grid-template-columns: 1fr; }
       .daily-summary-text { grid-column: 1; }
@@ -3025,6 +3261,7 @@
     <nav class="toc" aria-label="Sections">
       {% if morning_actions %}<a href="#morning-actions" class="toc-pill" style="background:var(--danger-bg);color:var(--danger)">行動 {{ morning_actions|length }}</a>{% endif %}
       <a href="#daily-summary">摘要</a>
+      <a href="#strategy-screener">策略選股</a>
       <a href="#portfolio-heat">&#x7D44;&#x5408;&#x98A8;&#x96AA;</a>
       <a href="#right-side-validation">&#x53F3;&#x5074;&#x9A57;&#x8B49;</a>
       <a href="#trade-journal">&#x4EA4;&#x6613;&#x65E5;&#x8A8C;</a>
@@ -3089,6 +3326,54 @@
       </div>
     </section>
 
+    <section id="strategy-screener" class="section strategy-screener" aria-label="策略選股雷達">
+      <div class="strategy-screener-head">
+        <div class="strategy-screener-title">
+          <h2>策略選股雷達</h2>
+          <span class="strategy-screener-basis">{{ strategy_screener.updated_basis }}，不是盤中即時訊號</span>
+        </div>
+        <div class="strategy-screener-control">
+          <label for="strategy-screen-select">選股策略</label>
+          <select id="strategy-screen-select">
+            {% for strategy in strategy_screener.strategies %}
+            <option value="{{ strategy.key }}" data-description="{{ strategy.description }}"{% if strategy.key == strategy_screener.default_strategy %} selected{% endif %}>{{ strategy.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <p id="strategy-screen-description" class="strategy-screen-description">
+        {% for strategy in strategy_screener.strategies %}{% if strategy.key == strategy_screener.default_strategy %}{{ strategy.description }}{% endif %}{% endfor %}
+      </p>
+      {% for strategy in strategy_screener.strategies %}
+      <div class="strategy-screen-panel" data-strategy-panel="{{ strategy.key }}"{% if strategy.key != strategy_screener.default_strategy %} hidden{% endif %}>
+        <ol class="strategy-screen-list">
+          {% for row in strategy.rows %}
+          <li class="strategy-screen-row" data-market="{{ row.market }}" data-symbol="{{ row.ticker }}">
+            <span class="strategy-rank">{{ row.rank }}</span>
+            <a class="strategy-identity" href="#{{ row.anchor }}">
+              <span class="strategy-symbol">{{ row.display_symbol }}</span>
+              <span class="strategy-company">{{ row.company }}</span>
+            </a>
+            <span class="strategy-score health-tone-{{ row.health.tone }}" title="五維健診 {{ row.health.score if row.health.score is not none else 'N/A' }}/100">{{ row.score }}</span>
+            <div class="health-dimension-strip" aria-label="五維健診">
+              {% for dimension in row.health.dimensions %}
+              <span class="health-mini health-tone-{{ dimension.tone }}" title="{{ dimension.label }}：{% if dimension.score is not none %}{{ dimension.score }} 分{% else %}資料不足{% endif %}{% if dimension.evidence %} · {{ dimension.evidence|join('；') }}{% endif %}">
+                <span>{{ dimension.short_label }}</span>
+                <span class="health-mini-bar" style="--health-value: {{ dimension.score if dimension.score is not none else 0 }}%"></span>
+              </span>
+              {% endfor %}
+            </div>
+            <div class="strategy-reason">
+              {{ row.reason }}
+              <span class="strategy-action">下一步：{{ row.action }}</span>
+            </div>
+          </li>
+          {% endfor %}
+        </ol>
+        <p class="strategy-empty"{% if strategy.rows %} hidden{% endif %}>目前市場沒有符合這項條件的標的。</p>
+      </div>
+      {% endfor %}
+    </section>
     {% if portfolio_risk and (portfolio_risk.currencies or portfolio_risk.missing_stops or portfolio_risk.liquidity_alerts) %}
     {% set heat = portfolio_risk.consolidated %}
     <section id="portfolio-heat" class="section section-primary" aria-label="Portfolio heat">
@@ -4361,7 +4646,8 @@
         {% set price_regime = insights.price_regime %}
         {% set execution = item|execution_plan %}
         {% set structure_chart = item|price_structure_chart %}
-        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-technical-priority="{{ technical.priority if technical else 0 }}" data-technical-label="{{ technical.status|zh_text if technical else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}">
+        {% set health = item|stock_health %}
+        <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-technical-priority="{{ technical.priority if technical else 0 }}" data-technical-label="{{ technical.status|zh_text if technical else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}" data-health-score="{{ health.score if health.score is not none else '' }}" data-health-status="{{ health.status }}">
           <div class="ticker-head">
             <div>
               <div class="ticker-symbol">{{ item.ticker.display_symbol }}<span class="market-badge">{{ item.ticker.market|market_label }}</span></div>
@@ -4507,6 +4793,25 @@
           </section>
           {% endif %}
 
+          <details class="health-diagnostic">
+            <summary>
+              <span class="health-diagnostic-title">五維健診</span>
+              <strong class="health-diagnostic-score health-tone-{{ health.tone }}">{{ health.score if health.score is not none else 'N/A' }}</strong>
+              <span class="health-diagnostic-status health-tone-{{ health.tone }}">{{ health.status }}</span>
+              <span class="health-diagnostic-coverage">{{ health.coverage }}/5 維</span>
+            </summary>
+            <div class="health-diagnostic-body">
+              {% for dimension in health.dimensions %}
+              <div class="health-dimension-row health-tone-{{ dimension.tone }}">
+                <span class="health-dimension-label">{{ dimension.label }}</span>
+                <span class="health-dimension-score">{{ dimension.score if dimension.score is not none else 'N/A' }}</span>
+                <span class="health-dimension-meter" aria-hidden="true"><span style="--health-value: {{ dimension.score if dimension.score is not none else 0 }}%"></span></span>
+                <span class="health-dimension-evidence">{% if dimension.evidence %}{{ dimension.evidence|join('；') }}{% else %}目前資料不足，不列入總分{% endif %}</span>
+              </div>
+              {% endfor %}
+              <div class="health-diagnostic-action"><strong>下一步：</strong>{{ health.action }}</div>
+            </div>
+          </details>
           {% if item.taiwan_market %}
           {% set tw = item.taiwan_market %}
           <section class="tw-market-snapshot" aria-label="Taiwan market disclosure">
@@ -5690,7 +5995,7 @@
         });
 
         var selectors = [
-          "#morning-actions .morning-action", "#daily-summary .daily-summary-item", "#hero .hero-card",
+          "#strategy-screener .strategy-screen-row[data-market]", "#morning-actions .morning-action", "#daily-summary .daily-summary-item", "#hero .hero-card",
           ".command-alert", "#todays-focus .focus-list li", "#capital-allocation tbody tr",
           "#research-queue .focus-list li", "#today-catalysts li", "#post-earnings-scoreboard tbody tr",
           "#overextended li", "#rule-alerts li", "#earnings .earnings-pill",
@@ -7738,6 +8043,54 @@
       });
     })();
 
+    // The free-data strategy screener follows the global market switch and
+    // remembers its own selected strategy without changing any report data.
+    (function () {
+      var root = document.getElementById("strategy-screener");
+      var select = document.getElementById("strategy-screen-select");
+      if (!root || !select) return;
+      var panels = Array.prototype.slice.call(root.querySelectorAll("[data-strategy-panel]"));
+      var description = document.getElementById("strategy-screen-description");
+      var STRATEGY_KEY = "stock-daily-screener-strategy";
+      var MARKET_KEY = "stock-daily-market-tab";
+      var activeMarket = "us";
+      try { activeMarket = localStorage.getItem(MARKET_KEY) || "us"; } catch (e) {}
+
+      function syncRows(panel) {
+        var rows = Array.prototype.slice.call(panel.querySelectorAll(".strategy-screen-row[data-market]"));
+        rows.forEach(function (row) {
+          row.classList.toggle("is-market-hidden", row.dataset.market !== activeMarket);
+        });
+        var visible = rows.filter(function (row) { return row.dataset.market === activeMarket; });
+        var empty = panel.querySelector(".strategy-empty");
+        if (empty) empty.hidden = visible.length > 0;
+      }
+
+      function activate(key) {
+        var option = Array.prototype.find.call(select.options, function (entry) { return entry.value === key; });
+        if (!option) option = select.options[0];
+        if (!option) return;
+        select.value = option.value;
+        panels.forEach(function (panel) {
+          var selected = panel.dataset.strategyPanel === option.value;
+          panel.hidden = !selected;
+          if (selected) syncRows(panel);
+        });
+        if (description) description.textContent = option.dataset.description || "";
+      }
+
+      var savedStrategy = select.value;
+      try { savedStrategy = localStorage.getItem(STRATEGY_KEY) || savedStrategy; } catch (e) {}
+      activate(savedStrategy);
+      select.addEventListener("change", function () {
+        try { localStorage.setItem(STRATEGY_KEY, select.value); } catch (e) {}
+        activate(select.value);
+      });
+      document.addEventListener("stock-daily:market", function (event) {
+        activeMarket = (event.detail || {}).market || "us";
+        panels.forEach(syncRows);
+      });
+    })();
     // Sector map follows the single market switcher at the top of the page.
     (function () {
       var panels = Array.prototype.slice.call(document.querySelectorAll(".map-market-panel[data-market-panel]"));

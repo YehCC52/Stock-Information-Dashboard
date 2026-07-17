@@ -1,238 +1,201 @@
 # Stock Daily Research Dashboard
 
-Personal stock research dashboard with daily HTML report generation. Features technical analysis, earnings tracking, valuation checks, news clustering, and manual research state management.
+Personal, offline-first stock research system that generates a daily static HTML report. It supports US equities, Taiwan equities/ETFs, and crypto while keeping each market's workspace and rankings separate.
 
-## Project Status
+## Product Mission
 
-**Latest iteration (2026-06-08)**: Completed Features C–H — Day-over-Day Delta Badges (C), Valuation Retry + TTL Cache (D), Plan Triggers (E), Morning Actions decision block (F), Attention Sparkline (G), and My Book P&L with auto-weighted portfolio (H). Earlier: Features #1 (Investment Plan), #3 (Event Pre/Post-earnings), #4 (Data Quality), A (News Read Markers), B (Thesis Manual Fill).
+The report should answer three questions quickly:
 
-**Test Suite**: 219 tests, all passing. Report generation: ~15s with full fetch, <1s with `--no-news --no-valuation --no-macro`.
+1. What needs attention today?
+2. Why does it matter?
+3. What is the next planned action?
+
+Prefer decision clarity over feature count. Do not add a new top-level section unless it replaces, consolidates, or materially improves an existing daily decision.
+
+## Current Status
+
+Updated: 2026-07-17
+
+- Test suite: 310 tests passing.
+- Report output: `reports/YYYY/MM/YYYY-MM-DD.html` plus Markdown and brief text.
+- Markets: `us`, `twse`, `tpex`, and `crypto`; UI groups TWSE/TPEX under Taiwan.
+- Data policy: free sources by default; no paid API dependency.
+- Report cadence: generated snapshots, not intraday real-time data.
+- UI language: Traditional Chinese for Taiwan users. Keep standard market terms such as ticker, ETF, EPS, RSI, ATR, P/E, and API when translating them would reduce clarity.
+
+### Major Capabilities
+
+- Morning actions and daily decision summary.
+- Market-specific tabs, summaries, rankings, news, valuation, and ticker cards.
+- Five-dimension health diagnostic: trend, momentum, volume/price, fundamentals, and risk.
+- Strategy screener: overall, breakout, pullback, squeeze, fundamental, daily unusual activity, and risk-first.
+- Right-side trading score, execution gates, entry/invalidation/2R planning, and signal validation.
+- Moving averages, relative strength, RSI, ATR, volume, gap, squeeze, breakout-hold, Wyckoff, VPA, Adam Theory scenario, and operator discipline analysis.
+- Earnings, valuation, estimate revisions, data-quality confidence, trusted news, manual X signals, and macro context.
+- Taiwan monthly revenue, dividends, and institutional flow from official/free sources.
+- Portfolio weighting, P&L, concentration, stop-risk, correlation, liquidity, and mixed-currency safeguards.
+- Research state, thesis, plans, post-earnings reviews, trade journal, export/import, and local save API.
 
 ## Quick Commands
 
-```bash
-# Generate full daily report (fetches news, valuation, earnings, macro)
+```powershell
+# Full daily report using enabled free providers
 python run_daily.py
 
-# Fast HTML-only regen (no network)
-python run_daily.py --no-news --no-valuation --no-macro
+# Data-rich report without news or macro fetches
+python run_daily.py --no-news --no-macro
 
-# Run full test suite
+# Fully offline structural/template regeneration
+python run_daily.py --no-news --no-valuation --no-macro --no-taiwan-data
+
+# Generate a historical date
+python run_daily.py --date 2026-07-17
+
+# Full test suite
 python -m pytest tests/ -q
 
-# Import research state from JSON
-python -m stock_daily_research.cli --import-research-state research-state-2026-06-02.json
+# Focused report tests
+python -m pytest tests/test_report.py -q
 
-# Export current research state
-# (Available via UI export button or CLI)
+# Validate configuration
+python -c "from stock_daily_research.config import load_config; load_config('watchlist.yaml')"
+
+# Local API used by the report's Save button
+python -m stock_daily_research.api_server
 ```
+
+On Windows, pytest may need an accessible `--basetemp` or an unsandboxed run when the default user temp directory denies access.
 
 ## Architecture
 
-### Data Flow
-1. **YAML config** (`watchlist.yaml`): Ticker list + YAML defaults (plan, position)
-2. **Fetchers** (`news.py`, `valuation.py`, `earnings.py`, `macro.py`): Populate dataclasses
-3. **Models** (`models.py`): Frozen dataclasses for immutability
-4. **SQLite** (`storage.py`): Persists research state, post-earnings reviews
-5. **Report** (`report.py`): Computes insights, scores, confidence
-6. **Template** (`daily_report.html.j2`): Renders + interactive JS layer
-
-### Precedence (State Wins)
-- YAML defaults → DB → localStorage (wins on edit in session) → export JSON → re-import → DB
+```text
+watchlist.yaml
+    -> config.py
+    -> runner.py
+       -> news.py / valuation.py / macro.py / taiwan_market.py / x_signals.py
+       -> frozen dataclasses in models.py
+       -> SQLite persistence in storage.py
+       -> analysis and view models in report.py
+       -> daily_report.html.j2 / daily_report.md.j2
+```
 
 ### Key Files
-| File | Purpose |
-|------|---------|
-| `src/stock_daily_research/report.py` | Hero items, insights, scoring, confidence |
-| `src/stock_daily_research/storage.py` | SQLite schema, migrations, CRUD |
-| `src/stock_daily_research/models.py` | Frozen dataclasses (TickerResearchState, ValuationSnapshot, etc.) |
-| `src/stock_daily_research/templates/daily_report.html.j2` | HTML + JS interactivity |
-| `watchlist.yaml` | Ticker config + plan defaults |
-| `tests/` | 183 unit tests |
 
-## Recent Features (June 2026)
+| File | Responsibility |
+| --- | --- |
+| `watchlist.yaml` | Market, symbol, aliases, capabilities, plan, and position baseline |
+| `src/stock_daily_research/models.py` | Frozen domain models and market defaults |
+| `src/stock_daily_research/runner.py` | Provider orchestration, cache/fallback flow, persistence, report assembly |
+| `src/stock_daily_research/report.py` | Pure analysis helpers, scoring, summaries, portfolio logic, render context |
+| `src/stock_daily_research/storage.py` | SQLite schema, migrations, snapshots, research state, history |
+| `src/stock_daily_research/valuation.py` | yfinance normalization and technical metric calculation |
+| `src/stock_daily_research/taiwan_market.py` | Official Taiwan market disclosures |
+| `src/stock_daily_research/templates/daily_report.html.j2` | Static UI, responsive CSS, and local-only interactivity |
+| `src/stock_daily_research/api_server.py` | Local research-state save endpoint on `127.0.0.1:8765` |
+| `tests/` | Unit and integration coverage |
 
-### Feature A: News Individual Read Marking
-- Each news item has a ✓ button
-- Click to mark read → dims article (opacity 0.35, strikethrough)
-- State persists in localStorage (`stock-daily-read-news`)
-- No export/import needed (session-local only)
+## State and Persistence
 
-### Feature B: Thesis Manual Fill (Recommended Choice)
-- New field: `TickerResearchState.thesis_text` (max 120 chars)
-- Manage panel: one-line text input for thesis statement
-- Card head: italic preview of thesis
-- Compare table: Thesis column shows thesis_text if set, else thesis_state
-- localStorage: `stock-daily-draft-thesis-text`
-- Full export/import support
+Durable precedence:
 
-### Feature C: Day-over-Day Delta Badges
-- Inline ±delta badges on each ticker card: attention score, RSI, news count, valuation risk direction
-- `ticker_delta(report, symbol)` in `report.py` diffs today vs yesterday using `_current_history_point` / `_previous_history_point`
-- Reuses stored `news_daily_summary` history; renders nothing on first day (no prior point) and suppresses zero-deltas
-- CSS: `.delta-up` (green) / `.delta-down` (red)
-
-### Feature D: Valuation Retry + TTL Cache (robustness)
-- `load_fresh_valuation_snapshot(conn, ticker, max_age_hours=4)` in `storage.py`: serves a SQLite snapshot <4h old, skipping the network call
-- `runner.py`: pre-fetches cache in the main thread (thread-safe) before the `ThreadPoolExecutor`; uncached tickers get 3 exponential-backoff retries (1s/2s/4s)
-- Stricter `_has_usable_valuation()` now requires `last_close` (not just any non-None field) before accepting a fetch
-- Constants: `VALUATION_CACHE_TTL_HOURS = 4`, `_VALUATION_MAX_RETRIES = 3`
-
-### Feature E: Plan Triggers (live plan-vs-price signals)
-- `plan_triggers(report)` in `report.py` parses numeric levels out of free-text plan fields (`entry_plan`, `add_zone`, `reduce_zone`, `stop_loss`) and compares against `last_close`
-- `_parse_price_levels()` extracts price tokens; `_plausible_levels()` filters outliers (keeps 0.3x–3x of last close) to ignore stray numbers
-- Emits actionable signals: "NVDA entered add zone $800–820", "broke plan stop", etc.; rendered as colored chips on the card
-- Turns the static investment plan (Feature #1) into morning signals — no manual price math needed
-
-### Feature F: Morning Actions (30-sec decision block)
-- `morning_actions(report)` consolidates plan triggers + stop-loss proximity + imminent earnings (≤1d) + thesis cracks (weakening/broken) + large overnight gaps (±3%)
-- Deduped by (ticker, label), prioritized by severity (stop 6 > earnings 4 > thesis 3 > gap 2), capped at 6
-- Renders as the first section of the report (`#morning-actions`) with a red "Actions N" TOC pill; hidden entirely when nothing needs a decision
-
-### Feature G: Attention Sparkline
-- `ticker_sparkline(report, symbol)` renders an inline SVG trend line (zero dependencies) of the stored attention-score history (oldest→newest)
-- Green if rising, red if falling; needs ≥2 days of history, otherwise renders nothing
-- Shown next to the Attn Score metric on each card
-
-### Feature H: My Book P&L (auto-weighted portfolio + total return)
-- **Auto portfolio weights**: `derive_portfolio_weights(report)` in `report.py` fills `portfolio_weight` for any holding missing one, from `position_size = shares × last_close` (falls back to `shares × avg_cost`), normalized across holdings. Manual weights are preserved. Called once in `runner.py` after the report is assembled (before `write_report`), so HTML/markdown/notifications all see weights.
-- **Why it matters**: weight was the gate for `book_impact_ranking`, `portfolio_impact_summary`, sector concentration, and the `book_today` cards — all previously empty because no weight was set. Auto-weighting lights them up with zero manual input (no need to enter total assets).
-- **Total return view**: `portfolio_impact_summary()` now also emits per-holding `pl_pct` / `pl_dollar` (current price vs avg cost), plus `pl_leaders` / `pl_laggards` (top/bottom 3 by total return) and book totals `total_pl_dollar` / `total_pl_pct`.
-- **Template** (`#my-book` section): new "Unrealized P&L" stat (`$+X (+Y%)`) and "Total return leaders / laggards" cards, alongside the existing today's-impact winners/losers (daily move × weight) and sector concentration.
-- **Position source**: holdings live in `watchlist.yaml` per-ticker `position:` block (`status: holding`, `shares`, `avg_cost`, optional numeric `stop_loss`). YAML is the durable baseline; DB `position_json` overrides field-by-field if edited via the UI and re-imported.
-
-## Data Model Highlights
-
-### TickerResearchState (SQLite + localStorage)
-```python
-ticker: str
-tag: str                          # user tag
-thesis_state: str                 # Unmarked/watching/building/active/weakening/broken
-thesis_trigger: str               # Valuation/Guidance/Regulation/Macro/Execution/...
-thesis_text: str                  # New: one-liner thesis statement (Feature B)
-note: str                         # Free-text notes
-checklist: list[str]              # [earnings, guidance, valuation, news, thesis]
-revisit_date: date | None         # Next review
-pinned: bool                       # Pin to top
-review_status: str                # not-reviewed / reviewed
-bull_case, bear_case, entry_plan, add_zone, reduce_zone, stop_loss: str  # Investment plan (Feature #1)
-earnings_questions: list[str]     # Pre-earnings card (Feature #3)
-position: PositionConfig          # Hold/Watch/Avoid + shares, avg cost, weight, stop loss
+```text
+YAML defaults -> SQLite overrides -> localStorage session drafts -> export/import -> SQLite
 ```
 
-### PostEarningsReview (SQLite)
-```python
-ticker: str
-earnings_date: date | None
-eps, revenue, guide: str          # Beat/Miss/In line
-eps_surprise_pct, revenue_surprise_pct: float | None
-fy1_eps_revision_after, fy1_revenue_revision_after: float | None
-conclusion: str                   # Thesis intact / Cracked / Pivoting
-next_step: str                    # Hold / Add / Trim / Re-evaluate
-gross_margin_change: str          # Feature #3: manual
-management_keywords: str          # Feature #3: manual
-thesis_changed: str               # Feature #3: Y/N
-```
+- Do not silently overwrite user research state.
+- `watchlist.yaml` is the durable baseline for positions and plans.
+- SQLite stores research state, valuation/history snapshots, reviews, trades, and report runs.
+- localStorage is a session editing layer; preserve intentional empty values.
+- Reports are organized by year and month through `report_output_dir()`.
 
-## localStorage Keys (Session Draft State)
+## Market and Asset Rules
 
-| Key | Value Shape | Purpose |
-|-----|-------------|---------|
-| `stock-daily-draft-pins` | `string[]` | Pinned ticker symbols |
-| `stock-daily-draft-tags` | `{ [sym]: string }` | User tags |
-| `stock-daily-draft-thesis` | `{ [sym]: string }` | Thesis state dropdown |
-| `stock-daily-draft-thesis-triggers` | `{ [sym]: string }` | Trigger dropdown |
-| `stock-daily-draft-thesis-text` | `{ [sym]: string }` | **New (Feature B)**: one-liner thesis |
-| `stock-daily-draft-notes` | `{ [sym]: { note, revisit } }` | Notes + revisit date |
-| `stock-daily-draft-checklist` | `{ [sym]: string[] }` | Reviewed items |
-| `stock-daily-draft-plans` | `{ [sym]: { bull_case, ... } }` | Investment plan fields |
-| `stock-daily-draft-earnings-questions` | `{ [sym]: string[] }` | Pre-earnings questions |
-| `stock-daily-draft-positions` | `{ [sym]: position object }` | Position editor state |
-| `stock-daily-read-news` | `{ [url]: true }` | **New (Feature A)**: read news URLs |
-| `stock-daily-theme` | `"auto" \| "light" \| "dark"` | Theme preference |
+- Never mix US, Taiwan, and crypto rows in a market-scoped view.
+- Cross-market links such as `TSM` and `2330.TW` are references, not shared market membership.
+- Use `TickerConfig.market` as the source of truth; use the report's market bucket helper for UI grouping.
+- Respect `has_fundamentals` and `has_earnings`. ETFs and crypto must not trigger meaningless fundamental or earnings calls.
+- Missing dimensions are unavailable, not zero. Reweight composite scores across available dimensions.
+- Do not label daily data as real-time, smart monitoring, Level 2, or intraday alerts.
+- Mixed currencies must not be summed without a valid FX conversion.
 
-## CSS Variables (Light/Dark)
+## Decision-Engine Rules
 
-```css
-:root {
-  --bg: #fafafa;
-  --surface: #ffffff;
-  --text: #1a1a1a;
-  --muted: #666;
-  --border: #e0e0e0;
-  --warning-bg: #fff8f0;
-  --danger-bg: #fff5f5;
-  --good-bg: #f0fdf4;
-  --info-bg: #f0f9ff;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1a1a1a;
-    --surface: #2a2a2a;
-    --text: #f0f0f0;
-    --muted: #aaa;
-    --border: #444;
-  }
-}
-```
+The five-dimension diagnostic and strategy screener live in `report.py`.
 
-## Filters Available in Template
+- Keep rules inspectable and deterministic; every score needs evidence text.
+- Keep calculation out of Jinja and JavaScript.
+- Clamp scores to 0-100 and test strong, weak, missing-data, ETF/crypto, and regime-reset cases.
+- Penalize unstable or negative EPS before rewarding large projected EPS growth.
+- Do not let a missing fundamental dimension punish ETFs or crypto.
+- A strategy match is a candidate for review, not a buy/sell instruction.
+- Persist a signal before evaluating future performance. Never use future data when generating a historical signal.
+- Keep new strategy thresholds market-aware and verify per-market ranking limits.
 
-| Filter | Purpose |
-|--------|---------|
-| `metric_value` | Format 1.25T, 50M, N/A |
-| `days_until` | "today", "tomorrow", "in 3d", "2d ago" |
-| `earnings_urgency` | "imminent", "soon", "week", "later", "past" |
-| `card_state` | "hot", "warm", "warn", "quiet" |
-| `ticker_insights` | dict with setup/risk/watch lists |
-| `right_side_score` | Score object (planned Feature #2) |
+## UI and UX Rules
 
-Jinja globals (registered in `render_html_report`): `ticker_delta(symbol)` (Feature C), `ticker_sparkline(symbol)` (Feature G), `plan_triggers_for(symbol)` (Feature E). `morning_actions` is passed via render context (Feature F).
+- The first visible workflow is the actual dashboard, not a landing page.
+- Keep the hierarchy: daily decisions -> portfolio risk -> candidates -> ticker detail.
+- Put advanced evidence in collapsed details instead of adding more badges or sections.
+- Reuse CSS variables and existing spacing. No CDN, external font, or external runtime dependency.
+- Preserve offline HTML, dark/light themes, print behavior, and localStorage interactions.
+- Test at desktop and at 760px/480px. Text, scores, buttons, and market stats must not overlap or create horizontal page overflow.
+- Use the existing market switch event (`stock-daily:market`) for market-scoped UI.
+- A new feature must pass at least three of these checks:
+  - changes a daily decision;
+  - uses reliable available data;
+  - can be understood in about 10 seconds;
+  - replaces manual work or an existing section.
 
-## Testing
+## Provider Rules
 
-```bash
-# Specific test
-pytest tests/test_storage.py -q
+- Free providers are the default. Ask before adding a paid or usage-billed dependency.
+- Cache before network, set timeouts, retry transient failures, and do not retry expected 4xx capability gaps.
+- Isolate failures into warnings so one ticker/provider cannot abort the report.
+- Preserve `source`, `as_of_date`, and retrieval timestamps.
+- Prefer official Taiwan disclosures for Taiwan-specific fields.
+- yfinance is an unofficial personal-use source; always retain last-known-good fallback behavior.
 
-# Coverage
-pytest --cov=src tests/ -q
+## Testing Expectations
 
-# Verbose (show failures)
-pytest tests/ -v
-```
+Scale tests with the change:
 
-## Common Tasks
+| Change | Minimum verification |
+| --- | --- |
+| Watchlist/config | `tests/test_config.py` plus config load |
+| News | `tests/test_news.py` |
+| Valuation/earnings | `tests/test_valuation.py` and fallback/storage tests |
+| Taiwan data | `tests/test_taiwan_market.py` |
+| Scoring/strategy/UI | focused `tests/test_report.py`, rendered report, browser market/mobile checks |
+| Storage/schema/state | `tests/test_storage.py`, `tests/test_api_server.py`, migration coverage |
+| Runner/provider | provider unit tests plus `tests/test_runner.py` |
+| Trading workflow | `tests/test_trading_workflow.py` |
 
-### Add a New Ticker
-Edit `watchlist.yaml`:
-```yaml
-- symbol: XYZ
-  company_name: XYZ Corp
-  aliases: [XYZ]
-  keywords: [semiconductor, AI]
-```
-Run: `python run_daily.py`
+Before declaring a user-facing report change complete:
 
-### Check Data Quality
-Open report → Global Warnings section shows anomaly flags + confidence scores (Feature #4, planned).
+1. Run focused tests.
+2. Run `python -m pytest tests/ -q`.
+3. Generate a real report with the required data enabled.
+4. Verify US/Taiwan/crypto isolation.
+5. Check desktop, mobile, empty states, expand/collapse, and browser console.
 
-### Export Research State
-Click "Export research" button in report, or:
-```bash
-python -m stock_daily_research.cli --export-research-state
-```
-Import on new machine with `--import-research-state research-state-*.json`.
+## Project Skills
 
-### Debug Valuation
-Valuation fallback → Look for "Valuation fallback used" in warnings. Data Quality confidence will drop (-20pts). Check: ticker aliases match news domain / yfinance query.
+Use the narrowest applicable skill:
 
-## Future Roadmap (Planned)
+| Skill | Use for |
+| --- | --- |
+| `stock-dashboard-design` | Report layout, information hierarchy, responsive behavior, localization, template interactions |
+| `stock-strategy-validation` | Five-dimension scores, screener rules, right-side logic, signal persistence, backtest integrity |
+| `stock-watchlist` | Add/remove/configure US, Taiwan, ETF, or crypto symbols |
+| `stock-pipeline-provider` | Add or change a data provider and its orchestration/storage boundary |
+| `stock-news-curator` | Trusted news collection, relevance, deduplication, classification, ranking |
+| `stock-valuation-calendar` | Valuation, technical snapshots, earnings capability, cache/fallback behavior |
+| `stock-x-signal-curator` | Manual or official-API X signals without unsafe scraping |
 
-- **Feature #2 (Right-side Trading Score)**: Composite 0–100 score + status badge (Breakout / Pullback / Extended / Weakening / Avoid) ✓ Planned
-- **Feature #4 (Data Quality Check)**: Anomaly detection + 0–100 confidence score + per-ticker freshness flags ✓ Planned
-- **Phase 6**: Web dashboard (real-time, charting, alerts) — future iterations
+## Known Boundaries
 
----
-
-Last updated: 2026-06-08 (Features C–H completed: delta badges, valuation retry/cache, plan triggers, morning actions, sparkline, My Book P&L auto-weighting)
+- The seven new strategy categories are current-day rankings; they do not yet have separate persisted performance histories.
+- The report is static and generated on demand. It is not a broker terminal.
+- No Level 2, options flow, broker order routing, or guaranteed real-time alerts without an appropriate licensed source.
+- Avoid building a generic AI chat surface until a concrete daily workflow justifies it.
+- Favor background validation and compact confidence indicators over additional visible sections.
