@@ -496,6 +496,19 @@ class TickerHistoryPoint:
     right_side_ready_count: int = 0
     right_side_check_count: int = 0
 
+    score_data_date: date | None = None
+    health_score: float | None = None
+    health_trend_score: float | None = None
+    health_momentum_score: float | None = None
+    health_volume_score: float | None = None
+    health_fundamental_score: float | None = None
+    health_risk_score: float | None = None
+    health_status: str = ""
+    health_coverage: int = 0
+    health_rule_version: str = ""
+    right_side_score: float | None = None
+    right_side_rule_version: str = ""
+
     signal_entry: float | None = None
     signal_stop: float | None = None
     signal_risk_pct: float | None = None

@@ -16,7 +16,7 @@ Prefer decision clarity over feature count. Do not add a new top-level section u
 
 Updated: 2026-07-17
 
-- Test suite: 310 tests passing.
+- Test suite: 319 tests passing.
 - Report output: `reports/YYYY/MM/YYYY-MM-DD.html` plus Markdown and brief text.
 - Markets: `us`, `twse`, `tpex`, and `crypto`; UI groups TWSE/TPEX under Taiwan.
 - Data policy: free sources by default; no paid API dependency.
@@ -27,9 +27,9 @@ Updated: 2026-07-17
 
 - Morning actions and daily decision summary.
 - Market-specific tabs, summaries, rankings, news, valuation, and ticker cards.
-- Five-dimension health diagnostic: trend, momentum, volume/price, fundamentals, and risk.
+- Five-dimension health diagnostic: trend, momentum, volume/price, fundamentals, and risk, with a persisted five-session score trend.
 - Strategy screener: overall, breakout, pullback, squeeze, fundamental, daily unusual activity, and risk-first.
-- Right-side trading score, execution gates, entry/invalidation/2R planning, and signal validation.
+- Right-side trading score with persisted five-session trend, execution gates, entry/invalidation/2R planning, and signal validation.
 - Moving averages, relative strength, RSI, ATR, volume, gap, squeeze, breakout-hold, Wyckoff, VPA, Adam Theory scenario, and operator discipline analysis.
 - Earnings, valuation, estimate revisions, data-quality confidence, trusted news, manual X signals, and macro context.
 - Taiwan monthly revenue, dividends, and institutional flow from official/free sources.

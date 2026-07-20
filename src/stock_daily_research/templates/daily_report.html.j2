@@ -515,11 +515,30 @@
       white-space: nowrap;
     }
     .strategy-score {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
       font-size: 17px;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
       text-align: center;
+      white-space: nowrap;
     }
+    .score-trend {
+      display: inline-flex;
+      gap: 2px;
+      align-items: center;
+      font-size: 10px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .score-trend-up { color: var(--good); }
+    .score-trend-down { color: var(--danger); }
+    .score-trend-flat { color: var(--muted); }
     .health-tone-good { color: var(--good); }
     .health-tone-mixed { color: var(--warning); }
     .health-tone-danger { color: var(--danger); }
@@ -591,7 +610,14 @@
       list-style-position: inside;
     }
     .health-diagnostic-title { font-size: 12px; font-weight: 800; }
-    .health-diagnostic-score { font-size: 15px; font-variant-numeric: tabular-nums; }
+    .health-diagnostic-score {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
     .health-diagnostic-status { font-size: 12px; font-weight: 700; }
     .health-diagnostic-coverage { color: var(--muted); font-size: 10px; }
     .health-diagnostic-body {
@@ -3354,7 +3380,10 @@
               <span class="strategy-symbol">{{ row.display_symbol }}</span>
               <span class="strategy-company">{{ row.company }}</span>
             </a>
-            <span class="strategy-score health-tone-{{ row.health.tone }}" title="五維健診 {{ row.health.score if row.health.score is not none else 'N/A' }}/100">{{ row.score }}</span>
+            {% set row_health_trend = score_trend(row.ticker, 'health') if strategy.key == 'overall' else None %}
+            <span class="strategy-score health-tone-{{ row.health.tone }}" title="五維健診 {{ row.health.score if row.health.score is not none else 'N/A' }}/100{% if row_health_trend %} · {{ row_health_trend.title }}{% endif %}">
+              {{ row.score }}{% if row_health_trend %}<span class="score-trend {{ row_health_trend.css_class }}" aria-label="{{ row_health_trend.title }}">{{ row_health_trend.arrow }} {{ row_health_trend.delta_label }}</span>{% endif %}
+            </span>
             <div class="health-dimension-strip" aria-label="五維健診">
               {% for dimension in row.health.dimensions %}
               <span class="health-mini health-tone-{{ dimension.tone }}" title="{{ dimension.label }}：{% if dimension.score is not none %}{{ dimension.score }} 分{% else %}資料不足{% endif %}{% if dimension.evidence %} · {{ dimension.evidence|join('；') }}{% endif %}">
@@ -3821,21 +3850,21 @@
         {% endfor %}
       </div>
       {% endif %}
-      {% if report.premarket.watchlist_movers %}
+      {% if premarket_watchlist_movers %}
       <div class="catalyst-grid" style="margin-top: 10px;">
         <div class="catalyst-card">
           <span class="label">觀察清單主要異動</span>
           <ul class="mover-list">
-            {% for move in report.premarket.watchlist_movers[:6] %}
+            {% for move in premarket_watchlist_movers[:6] %}
             <li><a href="#ticker-{{ move.symbol|lower }}">{{ move.symbol }}</a><span class="change change-{{ move.change_pct|change_class }}">{{ move.change_pct|format_pct }}</span></li>
             {% endfor %}
           </ul>
         </div>
         <div class="catalyst-card">
           <span class="label">盤前缺口 &gt; +/-2%</span>
-          {% if report.premarket.gap_movers %}
+          {% if premarket_gap_movers %}
           <ul class="mover-list">
-            {% for move in report.premarket.gap_movers[:8] %}
+            {% for move in premarket_gap_movers[:8] %}
             <li><a href="#ticker-{{ move.symbol|lower }}">{{ move.symbol }}</a><span class="change change-{{ move.change_pct|change_class }}">{{ move.change_pct|format_pct }}</span></li>
             {% endfor %}
           </ul>
@@ -4647,6 +4676,8 @@
         {% set execution = item|execution_plan %}
         {% set structure_chart = item|price_structure_chart %}
         {% set health = item|stock_health %}
+        {% set health_score_trend = score_trend(item.ticker.symbol, 'health') %}
+        {% set right_side_score_trend = score_trend(item.ticker.symbol, 'right_side') %}
         <article class="ticker-card {{ state }}" id="{{ item.ticker.symbol|ticker_anchor }}" data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-state="{{ state }}" data-has-risk="{{ '1' if item|has_risk_signal else '0' }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}" data-topics="{{ item|topic_tags|join(' ') }}" data-last-close="{{ item|metric_raw('last_close') }}" data-previous-close="{{ item|metric_raw('previous_close') }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-trailing-pe="{{ item|metric_raw('trailing_pe') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{{ item|metric_raw('eps_growth_pct') }}" data-eps-rev-30d="{{ item|metric_raw('fy1_eps_revision_30d') }}" data-revenue-rev-30d="{{ item|metric_raw('fy1_revenue_revision_30d') }}" data-next-q-revenue-rev-30d="{{ item|metric_raw('next_q_revenue_revision_30d') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-volume-x="{{ item|metric_raw('volume_vs_20d') }}" data-gap-pct="{{ item|metric_raw('gap_percent') }}" data-atr-pct="{{ item|metric_raw('atr_20_percent') }}" data-premarket-change="{% if pmchg is not none %}{{ pmchg }}{% endif %}" data-position-status="{{ pos.status }}" data-position-shares="{% if pos.shares is not none %}{{ pos.shares }}{% endif %}" data-position-avg-cost="{% if pos.avg_cost is not none %}{{ pos.avg_cost }}{% endif %}" data-position-size="{% if pos.position_size is not none %}{{ pos.position_size }}{% endif %}" data-position-stop-loss="{% if pos.stop_loss is not none %}{{ pos.stop_loss }}{% endif %}" data-position-weight="{% if pos.portfolio_weight is not none %}{{ pos.portfolio_weight }}{% endif %}" data-pl-pct="{% if pos.pl_pct is not none %}{{ pos.pl_pct }}{% endif %}" data-book-impact="{% if pos.book_impact is not none %}{{ pos.book_impact }}{% endif %}" data-watch="{{ item.ticker.keywords[:3]|join(', ') }}" data-news-count="{{ item.articles|length }}" data-top-news-count="{{ item|top_news_count }}" data-top-news-signatures="{{ item|top_news_signatures }}" data-valuation-risk="{{ item|valuation_risk }}" data-sector="{{ (sector or '')|lower }}" data-cluster="{{ cluster or '' }}" data-daily-change="{% if dchg is not none %}{{ dchg }}{% endif %}" data-from-high="{% if fhigh is not none %}{{ fhigh }}{% endif %}" data-trend="{{ insights.trend|join(' / ') if insights.trend else '' }}" data-trend-tone="{{ insights.trend_tone }}" data-right-side-score="{{ insights.score.score if insights.score else '' }}" data-right-side-status="{{ insights.score.slug if insights.score else '' }}" data-right-side-tone="{{ insights.score.tone if insights.score else '' }}" data-technical-priority="{{ technical.priority if technical else 0 }}" data-technical-label="{{ technical.status|zh_text if technical else '' }}" data-thesis-state="{{ research.thesis_state }}" data-thesis-trigger="{{ research.thesis_trigger }}" data-review-status="{{ research.review_status }}" data-last-reviewed-at="{{ research.last_reviewed_at.isoformat() if research.last_reviewed_at else '' }}" data-news-burst="{% if history_current %}{{ history_current.news_burst_score }}{% endif %}" data-attention-score="{% if history_current %}{{ history_current.attention_score }}{% endif %}" data-confidence-score="{{ dq.score }}" data-confidence-tag="{{ dq.tag }}" data-health-score="{{ health.score if health.score is not none else '' }}" data-health-status="{{ health.status }}">
           <div class="ticker-head">
             <div>
@@ -4796,7 +4827,9 @@
           <details class="health-diagnostic">
             <summary>
               <span class="health-diagnostic-title">五維健診</span>
-              <strong class="health-diagnostic-score health-tone-{{ health.tone }}">{{ health.score if health.score is not none else 'N/A' }}</strong>
+              <strong class="health-diagnostic-score health-tone-{{ health.tone }}" title="{% if health_score_trend %}{{ health_score_trend.title }}{% else %}至少需要 3 個不同資料日才會顯示趨勢{% endif %}">
+                {{ health.score if health.score is not none else 'N/A' }}{% if health_score_trend %}<span class="score-trend {{ health_score_trend.css_class }}" aria-label="{{ health_score_trend.title }}">{{ health_score_trend.arrow }} {{ health_score_trend.delta_label }}</span>{% endif %}
+              </strong>
               <span class="health-diagnostic-status health-tone-{{ health.tone }}">{{ health.status }}</span>
               <span class="health-diagnostic-coverage">{{ health.coverage }}/5 維</span>
             </summary>
@@ -4939,7 +4972,7 @@
             <details class="insight-row score score-{{ insights.score.tone }}">
               <summary>
                 <span class="insight-label">分數</span>
-                <span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status|zh_text }}</span>
+                <span class="insight-text">{{ insights.score.score }}/100 — {{ insights.score.status|zh_text }}{% if right_side_score_trend %} <span class="score-trend {{ right_side_score_trend.css_class }}" title="{{ right_side_score_trend.title }}" aria-label="{{ right_side_score_trend.title }}">{{ right_side_score_trend.arrow }} {{ right_side_score_trend.delta_label }}</span>{% endif %}</span>
               </summary>
               {% if insights.score.reasons %}
               <ul class="score-breakdown">

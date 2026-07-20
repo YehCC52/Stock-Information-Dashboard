@@ -47,6 +47,7 @@ from stock_daily_research.report import (
     post_earnings_items,
     pre_earnings_card,
     premarket_triage,
+    premarket_watchlist_moves,
     priority_items,
     quality_of_move,
     render_html_report,
@@ -2516,6 +2517,47 @@ def _sample_report() -> DailyReport:
     )
 
 
+def test_premarket_section_excludes_non_us_watchlist_rows() -> None:
+    report = _sample_report()
+    taiwan_item = TickerReport(
+        ticker=TickerConfig(
+            symbol="2330.TW",
+            company_name="台積電",
+            market="twse",
+            currency="TWD",
+        ),
+        articles=[],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+    taiwan_move = PremarketMove(
+        symbol="2330.TW",
+        name="台積電",
+        last=1100.0,
+        previous_close=1000.0,
+        change_pct=10.0,
+        source="latest close",
+    )
+    assert report.premarket is not None
+    mixed = replace(
+        report,
+        ticker_reports=[*report.ticker_reports, taiwan_item],
+        premarket=replace(
+            report.premarket,
+            watchlist_movers=[taiwan_move, *report.premarket.watchlist_movers],
+            gap_movers=[taiwan_move, *report.premarket.gap_movers],
+        ),
+    )
+
+    output = render_html_report(mixed)
+    premarket_html = output.split('<section id="premarket"', 1)[1].split("</section>", 1)[0]
+
+    assert "2330.TW" not in premarket_html
+    assert [move.symbol for move in premarket_watchlist_moves(mixed)] == ["NVDA"]
+    assert [move.symbol for move in premarket_watchlist_moves(mixed, gaps=True)] == ["NVDA"]
+    assert build_summary(mixed)["premarket_gap_count"] == 1
+
 def test_position_view_includes_unrealized_pl_dollar_and_stop_distance() -> None:
     item = TickerReport(
         ticker=TickerConfig(
@@ -3724,6 +3766,203 @@ def test_strategy_screener_keeps_market_rankings_separate() -> None:
     assert [row["rank"] for row in overall["rows"]] == [1, 1, 1]
     assert {row["ticker"] for row in breakout["rows"]} == {"NVDA", "2330.TW", "BTC-USD"}
 
+
+def _score_trend_point(
+    report_date: date,
+    data_date: date,
+    *,
+    health_score: float | None = None,
+    right_side_score: float | None = None,
+    health_version: str = "health-v1",
+    right_side_version: str = "right-side-v1",
+) -> TickerHistoryPoint:
+    return TickerHistoryPoint(
+        report_date=report_date,
+        generated_at=datetime.combine(report_date, datetime.min.time(), tzinfo=timezone.utc),
+        ticker="NVDA",
+        score_data_date=data_date,
+        health_score=health_score,
+        health_rule_version=health_version,
+        right_side_score=right_side_score,
+        right_side_rule_version=right_side_version,
+    )
+
+
+def test_score_trend_uses_distinct_data_dates_and_ignores_weekend_duplicates() -> None:
+    from stock_daily_research.report import score_trend
+
+    report = DailyReport(
+        report_date=date(2026, 7, 20),
+        generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={
+            "NVDA": [
+                _score_trend_point(date(2026, 7, 20), date(2026, 7, 17), health_score=71),
+                _score_trend_point(date(2026, 7, 19), date(2026, 7, 17), health_score=70),
+                _score_trend_point(date(2026, 7, 18), date(2026, 7, 17), health_score=69),
+                _score_trend_point(date(2026, 7, 16), date(2026, 7, 16), health_score=68),
+                _score_trend_point(date(2026, 7, 15), date(2026, 7, 15), health_score=65),
+            ]
+        },
+    )
+
+    trend = score_trend(report, "NVDA", "health")
+
+    assert trend is not None
+    assert trend["direction"] == "up"
+    assert trend["delta"] == 6.0
+    assert trend["observations"] == 3
+    assert trend["start_date"] == date(2026, 7, 15)
+    assert trend["end_date"] == date(2026, 7, 17)
+
+
+def test_score_trend_requires_three_observations_from_the_same_rule_version() -> None:
+    from stock_daily_research.report import score_trend
+
+    report = DailyReport(
+        report_date=date(2026, 7, 20),
+        generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={
+            "NVDA": [
+                _score_trend_point(
+                    date(2026, 7, 20),
+                    date(2026, 7, 18),
+                    health_score=72,
+                    health_version="health-v2",
+                ),
+                _score_trend_point(date(2026, 7, 17), date(2026, 7, 17), health_score=68),
+                _score_trend_point(date(2026, 7, 16), date(2026, 7, 16), health_score=65),
+            ]
+        },
+    )
+
+    assert score_trend(report, "NVDA", "health") is None
+
+
+def test_score_trend_does_not_show_stale_history_when_current_score_is_missing() -> None:
+    from stock_daily_research.report import score_trend
+
+    report = DailyReport(
+        report_date=date(2026, 7, 20),
+        generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={
+            "NVDA": [
+                _score_trend_point(date(2026, 7, 20), date(2026, 7, 20)),
+                _score_trend_point(date(2026, 7, 17), date(2026, 7, 17), health_score=70),
+                _score_trend_point(date(2026, 7, 16), date(2026, 7, 16), health_score=66),
+                _score_trend_point(date(2026, 7, 15), date(2026, 7, 15), health_score=62),
+            ]
+        },
+    )
+
+    assert score_trend(report, "NVDA", "health") is None
+
+def test_score_trend_handles_flat_health_and_rising_right_side_scores() -> None:
+    from stock_daily_research.report import score_trend
+
+    report = DailyReport(
+        report_date=date(2026, 7, 18),
+        generated_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={
+            "NVDA": [
+                _score_trend_point(
+                    date(2026, 7, 18),
+                    date(2026, 7, 18),
+                    health_score=62,
+                    right_side_score=68,
+                ),
+                _score_trend_point(
+                    date(2026, 7, 17),
+                    date(2026, 7, 17),
+                    health_score=61,
+                    right_side_score=64,
+                ),
+                _score_trend_point(
+                    date(2026, 7, 16),
+                    date(2026, 7, 16),
+                    health_score=60,
+                    right_side_score=60,
+                ),
+            ]
+        },
+    )
+
+    health = score_trend(report, "NVDA", "health")
+    right_side = score_trend(report, "NVDA", "right_side")
+
+    assert health is not None
+    assert health["direction"] == "flat"
+    assert health["delta_label"] == "+2"
+    assert right_side is not None
+    assert right_side["direction"] == "up"
+    assert right_side["delta_label"] == "+8"
+
+
+def test_score_history_snapshot_records_dimensions_and_rule_versions() -> None:
+    from stock_daily_research.report import score_history_snapshot
+
+    item = _score_item({
+        "last_close": 120.0,
+        "previous_close": 116.0,
+        "sma_20": 110.0,
+        "sma_60": 100.0,
+        "sma_120": 90.0,
+        "return_5d": 4.0,
+        "return_20d": 12.0,
+        "rsi_14": 60.0,
+        "volume_vs_20d": 1.6,
+        "atr_20_percent": 2.0,
+        "fy1_eps_revision_30d": 4.0,
+        "eps_growth_pct": 20.0,
+        "chart_dates_60": ["2026-05-08", "2026-05-09"],
+    })
+
+    snapshot = score_history_snapshot(item, date(2026, 5, 12), {"spy_20d": 3.0})
+
+    assert snapshot["data_date"] == date(2026, 5, 9)
+    assert snapshot["health_score"] is not None
+    assert snapshot["health_trend_score"] is not None
+    assert snapshot["health_coverage"] >= 3
+    assert snapshot["health_rule_version"] == "health-v1"
+    assert snapshot["right_side_score"] is not None
+    assert snapshot["right_side_rule_version"] == "right-side-v1"
+
+
+def test_html_report_renders_health_and_right_side_score_trends() -> None:
+    report = replace(
+        _sample_report(),
+        ticker_history={
+            "NVDA": [
+                _score_trend_point(
+                    date(2026, 4, 28),
+                    date(2026, 4, 28),
+                    health_score=72,
+                    right_side_score=75,
+                ),
+                _score_trend_point(
+                    date(2026, 4, 27),
+                    date(2026, 4, 27),
+                    health_score=68,
+                    right_side_score=70,
+                ),
+                _score_trend_point(
+                    date(2026, 4, 26),
+                    date(2026, 4, 26),
+                    health_score=62,
+                    right_side_score=65,
+                ),
+            ]
+        },
+    )
+
+    output = render_html_report(report)
+
+    assert "近 3 個有效資料日" in output
+    assert "score-trend score-trend-up" in output
+    assert "↑ +10" in output
 
 def test_html_report_renders_free_strategy_screener_and_health_diagnostic() -> None:
     output = render_html_report(_sample_report())
