@@ -29,6 +29,7 @@ from .report import (
     report_output_dir,
     right_side_check,
     right_side_execution_plan,
+    score_history_snapshot,
     write_report,
 )
 from .storage import (
@@ -220,7 +221,13 @@ def run_daily(
         )
         benchmarks = market_context.benchmark_returns if market_context else {}
         right_side_signals: dict[str, dict[str, object]] = {}
+        score_snapshots: dict[str, dict[str, object]] = {}
         for item in ticker_reports:
+            score_snapshots[item.ticker.symbol] = score_history_snapshot(
+                item,
+                actual_report_date,
+                benchmarks,
+            )
             check = right_side_check(
                 item,
                 benchmarks=benchmarks,
@@ -244,6 +251,7 @@ def run_daily(
             preliminary_report,
             html_path=report_path,
             right_side_signals=right_side_signals,
+            score_snapshots=score_snapshots,
         )
         ticker_history = load_ticker_history(
             conn,

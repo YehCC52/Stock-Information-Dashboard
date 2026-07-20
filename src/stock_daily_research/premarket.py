@@ -31,6 +31,7 @@ def fetch_overnight_premarket(
     back to the latest regular-market quote so the dashboard still has a
     morning tape read instead of failing the whole report.
     """
+    us_tickers = [ticker for ticker in tickers if ticker.market == "us"]
     retrieved_at = datetime.now(timezone.utc)
     warnings: list[str] = []
 
@@ -43,11 +44,11 @@ def fetch_overnight_premarket(
         benchmarks.append(move)
 
     watchlist_moves: list[PremarketMove] = []
-    workers = max(1, min(max_workers, len(tickers) or 1))
+    workers = max(1, min(max_workers, len(us_tickers) or 1))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(_fetch_move, ticker.symbol, ticker.company_name): ticker
-            for ticker in tickers
+            for ticker in us_tickers
         }
         for future in as_completed(futures):
             ticker = futures[future]

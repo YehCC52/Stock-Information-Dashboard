@@ -185,6 +185,18 @@ CREATE TABLE IF NOT EXISTS news_daily_summary (
   right_side_tone TEXT NOT NULL DEFAULT '',
   right_side_ready_count INTEGER NOT NULL DEFAULT 0,
   right_side_check_count INTEGER NOT NULL DEFAULT 0,
+  score_data_date TEXT,
+  health_score REAL,
+  health_trend_score REAL,
+  health_momentum_score REAL,
+  health_volume_score REAL,
+  health_fundamental_score REAL,
+  health_risk_score REAL,
+  health_status TEXT NOT NULL DEFAULT '',
+  health_coverage INTEGER NOT NULL DEFAULT 0,
+  health_rule_version TEXT NOT NULL DEFAULT '',
+  right_side_score REAL,
+  right_side_rule_version TEXT NOT NULL DEFAULT '',
   signal_entry REAL,
   signal_stop REAL,
   signal_risk_pct REAL,
@@ -297,6 +309,18 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "news_daily_summary", "right_side_tone", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "right_side_ready_count", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "news_daily_summary", "right_side_check_count", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "news_daily_summary", "score_data_date", "TEXT")
+    _ensure_column(conn, "news_daily_summary", "health_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "health_trend_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "health_momentum_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "health_volume_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "health_fundamental_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "health_risk_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "health_status", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "news_daily_summary", "health_coverage", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "news_daily_summary", "health_rule_version", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "news_daily_summary", "right_side_score", "REAL")
+    _ensure_column(conn, "news_daily_summary", "right_side_rule_version", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "news_daily_summary", "signal_entry", "REAL")
     _ensure_column(conn, "news_daily_summary", "signal_stop", "REAL")
     _ensure_column(conn, "news_daily_summary", "signal_risk_pct", "REAL")
@@ -1226,6 +1250,7 @@ def save_report_run(
     *,
     html_path: str | Path = "",
     right_side_signals: dict[str, dict[str, object]] | None = None,
+    score_snapshots: dict[str, dict[str, object]] | None = None,
 ) -> int:
     html_text = str(html_path)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -1248,9 +1273,18 @@ def save_report_run(
         for move in (report.premarket.watchlist_movers if report.premarket else [])
     }
     signals = right_side_signals or {}
+    scores = score_snapshots or {}
     for item in report.ticker_reports:
         state = report.research_states.get(item.ticker.symbol, TickerResearchState(ticker=item.ticker.symbol))
         signal = signals.get(item.ticker.symbol, {})
+        score = scores.get(item.ticker.symbol, {})
+        score_data_date = score.get("data_date")
+        if isinstance(score_data_date, date):
+            score_data_date_text = score_data_date.isoformat()
+        elif score_data_date:
+            score_data_date_text = str(score_data_date)
+        else:
+            score_data_date_text = None
         baseline_top_news = _load_prior_top_news_baseline(conn, item.ticker.symbol, report.report_date, days=30)
         top_news_count = sum(1 for article in item.articles if article.importance_score >= 1.0)
         news_burst_score = float(top_news_count) - baseline_top_news
@@ -1272,8 +1306,19 @@ def save_report_run(
              last_reviewed_at, news_count, top_news_count, valuation_risk, rsi, daily_change_pct,
              premarket_change_pct, earnings_days, warning_count, attention_score, news_burst_score,
              last_close, right_side_status, right_side_tone, right_side_ready_count,
-             right_side_check_count, signal_entry, signal_stop, signal_risk_pct)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             right_side_check_count, score_data_date, health_score, health_trend_score,
+             health_momentum_score, health_volume_score, health_fundamental_score,
+             health_risk_score, health_status, health_coverage, health_rule_version,
+             right_side_score, right_side_rule_version, signal_entry, signal_stop, signal_risk_pct)
+            VALUES
+            (:report_run_id, :report_date, :generated_at, :ticker, :thesis_state, :review_status,
+             :last_reviewed_at, :news_count, :top_news_count, :valuation_risk, :rsi, :daily_change_pct,
+             :premarket_change_pct, :earnings_days, :warning_count, :attention_score, :news_burst_score,
+             :last_close, :right_side_status, :right_side_tone, :right_side_ready_count,
+             :right_side_check_count, :score_data_date, :health_score, :health_trend_score,
+             :health_momentum_score, :health_volume_score, :health_fundamental_score,
+             :health_risk_score, :health_status, :health_coverage, :health_rule_version,
+             :right_side_score, :right_side_rule_version, :signal_entry, :signal_stop, :signal_risk_pct)
             ON CONFLICT(report_date, ticker) DO UPDATE SET
               report_run_id = excluded.report_run_id,
               generated_at = excluded.generated_at,
@@ -1295,37 +1340,61 @@ def save_report_run(
               right_side_tone = excluded.right_side_tone,
               right_side_ready_count = excluded.right_side_ready_count,
               right_side_check_count = excluded.right_side_check_count,
+              score_data_date = COALESCE(excluded.score_data_date, news_daily_summary.score_data_date),
+              health_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_score ELSE news_daily_summary.health_score END,
+              health_trend_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_trend_score ELSE news_daily_summary.health_trend_score END,
+              health_momentum_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_momentum_score ELSE news_daily_summary.health_momentum_score END,
+              health_volume_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_volume_score ELSE news_daily_summary.health_volume_score END,
+              health_fundamental_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_fundamental_score ELSE news_daily_summary.health_fundamental_score END,
+              health_risk_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_risk_score ELSE news_daily_summary.health_risk_score END,
+              health_status = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_status ELSE news_daily_summary.health_status END,
+              health_coverage = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_coverage ELSE news_daily_summary.health_coverage END,
+              health_rule_version = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.health_rule_version ELSE news_daily_summary.health_rule_version END,
+              right_side_score = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.right_side_score ELSE news_daily_summary.right_side_score END,
+              right_side_rule_version = CASE WHEN excluded.score_data_date IS NOT NULL THEN excluded.right_side_rule_version ELSE news_daily_summary.right_side_rule_version END,
               signal_entry = excluded.signal_entry,
               signal_stop = excluded.signal_stop,
               signal_risk_pct = excluded.signal_risk_pct
             """,
-            (
-                run_id,
-                report.report_date.isoformat(),
-                report.generated_at.isoformat(),
-                item.ticker.symbol,
-                state.thesis_state,
-                state.review_status,
-                state.last_reviewed_at.isoformat() if state.last_reviewed_at else None,
-                len(item.articles),
-                top_news_count,
-                _valuation_risk(item),
-                rsi,
-                _daily_change_pct(item),
-                premarket_changes.get(item.ticker.symbol),
-                _earnings_days(item, report.report_date),
-                len(item.warnings),
-                round(attention_score, 2),
-                round(news_burst_score, 2),
-                _metric_float(item.valuation.metrics.get("last_close")) if item.valuation else None,
-                str(signal.get("status", "")),
-                str(signal.get("tone", "")),
-                int(signal.get("ready_count", 0) or 0),
-                int(signal.get("check_count", 0) or 0),
-                signal.get("entry_reference"),
-                signal.get("invalidation"),
-                signal.get("risk_pct"),
-            ),
+            {
+                "report_run_id": run_id,
+                "report_date": report.report_date.isoformat(),
+                "generated_at": report.generated_at.isoformat(),
+                "ticker": item.ticker.symbol,
+                "thesis_state": state.thesis_state,
+                "review_status": state.review_status,
+                "last_reviewed_at": state.last_reviewed_at.isoformat() if state.last_reviewed_at else None,
+                "news_count": len(item.articles),
+                "top_news_count": top_news_count,
+                "valuation_risk": _valuation_risk(item),
+                "rsi": rsi,
+                "daily_change_pct": _daily_change_pct(item),
+                "premarket_change_pct": premarket_changes.get(item.ticker.symbol),
+                "earnings_days": _earnings_days(item, report.report_date),
+                "warning_count": len(item.warnings),
+                "attention_score": round(attention_score, 2),
+                "news_burst_score": round(news_burst_score, 2),
+                "last_close": _metric_float(item.valuation.metrics.get("last_close")) if item.valuation else None,
+                "right_side_status": str(signal.get("status", "")),
+                "right_side_tone": str(signal.get("tone", "")),
+                "right_side_ready_count": int(signal.get("ready_count", 0) or 0),
+                "right_side_check_count": int(signal.get("check_count", 0) or 0),
+                "score_data_date": score_data_date_text,
+                "health_score": score.get("health_score"),
+                "health_trend_score": score.get("health_trend_score"),
+                "health_momentum_score": score.get("health_momentum_score"),
+                "health_volume_score": score.get("health_volume_score"),
+                "health_fundamental_score": score.get("health_fundamental_score"),
+                "health_risk_score": score.get("health_risk_score"),
+                "health_status": str(score.get("health_status", "")),
+                "health_coverage": int(score.get("health_coverage", 0) or 0),
+                "health_rule_version": str(score.get("health_rule_version", "")),
+                "right_side_score": score.get("right_side_score"),
+                "right_side_rule_version": str(score.get("right_side_rule_version", "")),
+                "signal_entry": signal.get("entry_reference"),
+                "signal_stop": signal.get("invalidation"),
+                "signal_risk_pct": signal.get("risk_pct"),
+            },
         )
     conn.commit()
     return run_id
@@ -1348,6 +1417,9 @@ def load_ticker_history(
                news_count, top_news_count, valuation_risk, rsi, daily_change_pct, premarket_change_pct,
                earnings_days, warning_count, attention_score, news_burst_score, last_close,
                right_side_status, right_side_tone, right_side_ready_count, right_side_check_count,
+               score_data_date, health_score, health_trend_score, health_momentum_score,
+               health_volume_score, health_fundamental_score, health_risk_score, health_status,
+               health_coverage, health_rule_version, right_side_score, right_side_rule_version,
                signal_entry, signal_stop, signal_risk_pct
         FROM news_daily_summary
         WHERE ticker IN ({placeholders})
@@ -1380,9 +1452,21 @@ def load_ticker_history(
             right_side_tone=row[18] or "",
             right_side_ready_count=int(row[19] or 0),
             right_side_check_count=int(row[20] or 0),
-            signal_entry=row[21],
-            signal_stop=row[22],
-            signal_risk_pct=row[23],
+            score_data_date=date.fromisoformat(row[21]) if row[21] else None,
+            health_score=row[22],
+            health_trend_score=row[23],
+            health_momentum_score=row[24],
+            health_volume_score=row[25],
+            health_fundamental_score=row[26],
+            health_risk_score=row[27],
+            health_status=row[28] or "",
+            health_coverage=int(row[29] or 0),
+            health_rule_version=row[30] or "",
+            right_side_score=row[31],
+            right_side_rule_version=row[32] or "",
+            signal_entry=row[33],
+            signal_stop=row[34],
+            signal_risk_pct=row[35],
         )
         result.setdefault(point.ticker, []).append(point)
     return result

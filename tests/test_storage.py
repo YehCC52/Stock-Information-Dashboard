@@ -565,6 +565,39 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
                     "risk_pct": 5.71,
                 }
             },
+            score_snapshots={
+                "NVDA": {
+                    "data_date": date(2026, 4, 28),
+                    "health_score": 78.0,
+                    "health_trend_score": 82.0,
+                    "health_momentum_score": 76.0,
+                    "health_volume_score": 74.0,
+                    "health_fundamental_score": 80.0,
+                    "health_risk_score": 72.0,
+                    "health_status": "強勢",
+                    "health_coverage": 5,
+                    "health_rule_version": "health-v1",
+                    "right_side_score": 75.0,
+                    "right_side_rule_version": "right-side-v1",
+                }
+            },
+        )
+        # A same-day regeneration without a score snapshot must not erase the
+        # valid values already captured for that report date.
+        save_report_run(
+            conn,
+            new_report,
+            right_side_signals={
+                "NVDA": {
+                    "status": "Right-side ready",
+                    "tone": "up",
+                    "ready_count": 4,
+                    "check_count": 4,
+                    "entry_reference": 105.0,
+                    "invalidation": 99.0,
+                    "risk_pct": 5.71,
+                }
+            },
         )
         history = load_ticker_history(conn, ["NVDA"], report_date=date(2026, 4, 28), history_days=30)["NVDA"]
 
@@ -579,11 +612,57 @@ def test_save_report_run_persists_history_points(tmp_path: Path) -> None:
     assert history[0].right_side_status == "Right-side ready"
     assert history[0].right_side_ready_count == 4
     assert history[0].right_side_check_count == 4
+    assert history[0].score_data_date == date(2026, 4, 28)
+    assert history[0].health_score == 78.0
+    assert history[0].health_trend_score == 82.0
+    assert history[0].health_fundamental_score == 80.0
+    assert history[0].health_status == "強勢"
+    assert history[0].health_coverage == 5
+    assert history[0].health_rule_version == "health-v1"
+    assert history[0].right_side_score == 75.0
+    assert history[0].right_side_rule_version == "right-side-v1"
     assert history[0].signal_entry == 105.0
     assert history[0].signal_stop == 99.0
     assert history[0].signal_risk_pct == 5.71
     assert history[1].thesis_state == "building"
 
+
+def test_init_db_migrates_score_history_columns(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE news_daily_summary (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              report_run_id INTEGER NOT NULL,
+              report_date TEXT NOT NULL,
+              generated_at TEXT NOT NULL DEFAULT '',
+              ticker TEXT NOT NULL,
+              UNIQUE(report_run_id, ticker)
+            )
+            """
+        )
+
+    with init_db(db_path) as conn:
+        columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(news_daily_summary)").fetchall()
+        }
+
+    assert {
+        "score_data_date",
+        "health_score",
+        "health_trend_score",
+        "health_momentum_score",
+        "health_volume_score",
+        "health_fundamental_score",
+        "health_risk_score",
+        "health_status",
+        "health_coverage",
+        "health_rule_version",
+        "right_side_score",
+        "right_side_rule_version",
+    }.issubset(columns)
 
 def _insert_valuation_row(conn, ticker: str, retrieved_at: datetime, last_close: float | None = 150.0) -> None:
     as_of = retrieved_at.date().isoformat()

@@ -12,12 +12,17 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .data_quality import confidence as data_quality_confidence
 from .models import TradeFill, TradeJournalEntry
-from .models import DailyReport, MARKET_LABELS, MarketContext, NewsArticle, PositionConfig, PortfolioSettings, PostEarningsReview, TickerHistoryPoint, TickerReport, TickerResearchState
+from .models import DailyReport, MARKET_LABELS, MarketContext, NewsArticle, PositionConfig, PortfolioSettings, PostEarningsReview, PremarketMove, TickerHistoryPoint, TickerReport, TickerResearchState
 from .news import EVENT_LABELS, normalize_title
 from .valuation import format_metric_value
 
 
 DEFAULT_MAX_SINGLE_WEIGHT = 15.0  # single-name weight % above which My Book flags concentration
+RIGHT_SIDE_SCORE_RULE_VERSION = "right-side-v1"
+STOCK_HEALTH_RULE_VERSION = "health-v1"
+SCORE_TREND_WINDOW = 5
+SCORE_TREND_MIN_OBSERVATIONS = 3
+SCORE_TREND_MEANINGFUL_DELTA = 3.0
 
 METRIC_LABELS = {
     "last_close": "Last Close",
@@ -244,6 +249,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["research_state"] = lambda item: research_state_for(report, item.ticker.symbol)
     env.filters["history_points"] = lambda item: report.ticker_history.get(item.ticker.symbol, [])
     env.globals["ticker_delta"] = lambda symbol: ticker_delta(report, symbol)
+    env.globals["score_trend"] = lambda symbol, kind="health": score_trend(report, symbol, kind)
     env.globals["ticker_sparkline"] = lambda symbol: ticker_sparkline(report, symbol)
     plan_triggers_by_symbol: dict[str, list[dict[str, object]]] = {}
     for trigger in plan_triggers(report):
@@ -274,6 +280,8 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         book_today=book_today_summary(report),
         book_impact=book_impact_ranking(report),
         sector_map_markets=map_markets,
+        premarket_watchlist_movers=premarket_watchlist_moves(report),
+        premarket_gap_movers=premarket_watchlist_moves(report, gaps=True),
         premarket_triage=premarket_triage(report),
         priority_items=priority_items(report),
         rule_alerts=rule_alerts(report),
@@ -345,7 +353,7 @@ def build_summary(report: DailyReport) -> dict[str, int]:
         1 for item in report.ticker_reports
         if (rsi := rsi_value(item)) is not None and rsi <= 30
     )
-    premarket_gap_count = len(report.premarket.gap_movers) if report.premarket else 0
+    premarket_gap_count = len(premarket_watchlist_moves(report, gaps=True))
     reviewed_count = sum(
         1
         for state in report.research_states.values()
@@ -1618,6 +1626,7 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
         "tone": tone,
         "slug": slug,
         "reasons": formatted_reasons,
+        "rule_version": RIGHT_SIDE_SCORE_RULE_VERSION,
     }
 
 
@@ -2082,8 +2091,63 @@ def stock_health_diagnostic(
         "match_reasons": match_reasons,
         "action": action,
         "updated_basis": "產檔時的日線與基本面資料",
+        "rule_version": STOCK_HEALTH_RULE_VERSION,
     }
 
+
+def _score_data_date(item: TickerReport) -> date | None:
+    if not item.valuation:
+        return None
+    chart_dates = item.valuation.metrics.get("chart_dates_60")
+    if isinstance(chart_dates, list) and chart_dates:
+        try:
+            return date.fromisoformat(str(chart_dates[-1])[:10])
+        except ValueError:
+            pass
+    return item.valuation.as_of_date
+
+
+def score_history_snapshot(
+    item: TickerReport,
+    anchor: date,
+    benchmarks: dict[str, float] | None = None,
+) -> dict[str, object]:
+    """Capture comparable score values at report-generation time."""
+    health = stock_health_diagnostic(item, anchor, benchmarks)
+    right_side = right_side_score(item, benchmarks)
+    dimension_map = health["dimension_map"]
+
+    def dimension_score(key: str) -> float | None:
+        dimension = dimension_map.get(key, {})
+        value = dimension.get("score")
+        return float(value) if isinstance(value, (int, float)) else None
+
+    health_score = health.get("score")
+    if int(health.get("coverage", 0) or 0) < 2:
+        health_score = None
+
+    return {
+        "data_date": _score_data_date(item),
+        "health_score": float(health_score) if isinstance(health_score, (int, float)) else None,
+        "health_trend_score": dimension_score("trend"),
+        "health_momentum_score": dimension_score("momentum"),
+        "health_volume_score": dimension_score("volume"),
+        "health_fundamental_score": dimension_score("fundamental"),
+        "health_risk_score": dimension_score("risk"),
+        "health_status": str(health.get("status", "")),
+        "health_coverage": int(health.get("coverage", 0) or 0),
+        "health_rule_version": str(health.get("rule_version", STOCK_HEALTH_RULE_VERSION)),
+        "right_side_score": (
+            float(right_side["score"])
+            if right_side and isinstance(right_side.get("score"), (int, float))
+            else None
+        ),
+        "right_side_rule_version": (
+            str(right_side.get("rule_version", RIGHT_SIDE_SCORE_RULE_VERSION))
+            if right_side
+            else RIGHT_SIDE_SCORE_RULE_VERSION
+        ),
+    }
 
 def strategy_screener(report: DailyReport, limit_per_market: int = 8) -> dict[str, object]:
     """Rank the watchlist with transparent rules and existing free data."""
@@ -4546,7 +4610,8 @@ def _surprise_label(value: float | None) -> str | None:
 
 
 def premarket_change_pct(report: DailyReport, symbol: str) -> float | None:
-    if not report.premarket:
+    item = _ticker_map(report).get(symbol)
+    if not report.premarket or item is None or _market_bucket(item.ticker.market) != "us":
         return None
     for move in report.premarket.watchlist_movers:
         if move.symbol == symbol:
@@ -4555,7 +4620,8 @@ def premarket_change_pct(report: DailyReport, symbol: str) -> float | None:
 
 
 def premarket_move_for(report: DailyReport, symbol: str) -> object | None:
-    if not report.premarket:
+    item = _ticker_map(report).get(symbol)
+    if not report.premarket or item is None or _market_bucket(item.ticker.market) != "us":
         return None
     for move in report.premarket.watchlist_movers:
         if move.symbol == symbol:
@@ -4589,6 +4655,83 @@ def _window_history_point(report: DailyReport, symbol: str, days: int) -> Ticker
             return point
     return points[-1] if len(points) > 1 else None
 
+
+_SCORE_TREND_FIELDS: dict[str, tuple[str, str]] = {
+    "health": ("health_score", "health_rule_version"),
+    "right_side": ("right_side_score", "right_side_rule_version"),
+}
+
+
+def score_trend(
+    report: DailyReport,
+    symbol: str,
+    score_kind: str = "health",
+    *,
+    window: int = SCORE_TREND_WINDOW,
+    min_observations: int = SCORE_TREND_MIN_OBSERVATIONS,
+    meaningful_delta: float = SCORE_TREND_MEANINGFUL_DELTA,
+) -> dict[str, object] | None:
+    """Compare recent persisted scores across distinct market-data dates."""
+    fields = _SCORE_TREND_FIELDS.get(score_kind)
+    if fields is None:
+        raise ValueError(f"Unknown score trend kind: {score_kind}")
+    score_field, version_field = fields
+    points = _history_points(report, symbol)
+    if not points:
+        return None
+    latest = points[0]
+    latest_score = getattr(latest, score_field)
+    latest_version = getattr(latest, version_field)
+    if latest_score is None or latest.score_data_date is None or not latest_version:
+        return None
+
+    observations: list[tuple[date, float]] = []
+    seen_data_dates: set[date] = set()
+    current_version = str(latest_version)
+    for point in points:
+        value = getattr(point, score_field)
+        data_date = point.score_data_date
+        version = getattr(point, version_field)
+        if value is None or data_date is None or not version:
+            continue
+        if version != current_version or data_date in seen_data_dates:
+            continue
+        observations.append((data_date, float(value)))
+        seen_data_dates.add(data_date)
+        if len(observations) >= max(min_observations, window):
+            break
+
+    if len(observations) < min_observations:
+        return None
+
+    newest_date, newest_score = observations[0]
+    oldest_date, oldest_score = observations[-1]
+    delta = round(newest_score - oldest_score, 1)
+    if delta >= meaningful_delta:
+        direction, arrow, css_class = "up", "↑", "score-trend-up"
+    elif delta <= -meaningful_delta:
+        direction, arrow, css_class = "down", "↓", "score-trend-down"
+    else:
+        direction, arrow, css_class = "flat", "→", "score-trend-flat"
+
+    delta_label = f"+{delta:g}" if delta > 0 else f"{delta:g}"
+    return {
+        "direction": direction,
+        "arrow": arrow,
+        "css_class": css_class,
+        "delta": delta,
+        "delta_label": delta_label,
+        "observations": len(observations),
+        "start_score": oldest_score,
+        "end_score": newest_score,
+        "start_date": oldest_date,
+        "end_date": newest_date,
+        "rule_version": current_version,
+        "title": (
+            f"近 {len(observations)} 個有效資料日："
+            f"{oldest_score:g} → {newest_score:g}（{delta_label}）"
+        ),
+    }
 
 _VALUATION_RISK_ORDER: dict[str, int] = {"None": 0, "Elevated": 1, "High": 2, "Extreme": 3}
 
@@ -6119,13 +6262,30 @@ def _sector_rows(
     )
 
 
+def premarket_watchlist_moves(
+    report: DailyReport,
+    *,
+    gaps: bool = False,
+) -> list[PremarketMove]:
+    """Return only US watchlist rows for the US-only premarket workspace."""
+    if not report.premarket:
+        return []
+    us_symbols = {
+        item.ticker.symbol
+        for item in report.ticker_reports
+        if _market_bucket(item.ticker.market) == "us"
+    }
+    moves = report.premarket.gap_movers if gaps else report.premarket.watchlist_movers
+    return [move for move in moves if move.symbol in us_symbols]
+
+
 def premarket_triage(report: DailyReport) -> dict[str, list[dict[str, object]]]:
     if not report.premarket:
         return {"catalyst_backed": [], "unclear": []}
     by_symbol = _ticker_map(report)
     catalyst_backed: list[dict[str, object]] = []
     unclear: list[dict[str, object]] = []
-    for move in report.premarket.watchlist_movers:
+    for move in premarket_watchlist_moves(report):
         item = by_symbol.get(move.symbol)
         if item is None:
             continue
