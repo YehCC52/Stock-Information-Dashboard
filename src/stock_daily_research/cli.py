@@ -12,11 +12,28 @@ from .runner import run_daily
 from .storage import export_research_state_file, import_research_state_file, init_db
 
 
-def main() -> None:
+class ExpectedYFinanceGapFilter(logging.Filter):
+    """Hide Yahoo's false delisting wording for an unavailable earnings calendar."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.name.startswith("yfinance")
+            and "No earnings dates found" in record.getMessage()
+        )
+
+
+def configure_logging() -> None:
     logging.basicConfig(
         level=logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    logger = logging.getLogger("yfinance")
+    if not any(isinstance(item, ExpectedYFinanceGapFilter) for item in logger.filters):
+        logger.addFilter(ExpectedYFinanceGapFilter())
+
+
+def main() -> None:
+    configure_logging()
     parser = argparse.ArgumentParser(description="Generate a personal daily stock research report.")
     parser.add_argument("--config", default="watchlist.yaml", help="Path to watchlist YAML config.")
     parser.add_argument("--date", default=None, help="Report date in YYYY-MM-DD format. Defaults to today.")

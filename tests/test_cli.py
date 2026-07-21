@@ -1,13 +1,28 @@
+import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from stock_daily_research.cli import export_research_state_cli, import_research_state_cli, init_config
+from stock_daily_research.cli import ExpectedYFinanceGapFilter, export_research_state_cli, import_research_state_cli, init_config
 from stock_daily_research.models import DailyReport, PostEarningsReview, TickerConfig, TickerResearchState, TickerReport
 from stock_daily_research.storage import init_db, load_post_earnings_reviews, load_ticker_research_states, save_report
 
 
+
+def test_expected_yfinance_gap_filter_only_drops_missing_earnings() -> None:
+    filter_ = ExpectedYFinanceGapFilter()
+    missing = logging.LogRecord(
+        "yfinance", logging.ERROR, __file__, 1,
+        "SPCX: No earnings dates found, symbol may be delisted", (), None,
+    )
+    other = logging.LogRecord(
+        "yfinance", logging.ERROR, __file__, 1,
+        "SPCX: quote request timed out", (), None,
+    )
+
+    assert filter_.filter(missing) is False
+    assert filter_.filter(other) is True
 def test_init_config_copies_example(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "watchlist.example.yaml").write_text("tickers: []\n", encoding="utf-8")

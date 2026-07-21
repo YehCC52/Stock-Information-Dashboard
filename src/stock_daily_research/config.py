@@ -183,7 +183,7 @@ def _load_ticker(index: int, data: dict[str, Any]) -> TickerConfig:
         company_name=str(company_name),
         market=market,
         currency=str(data.get("currency") or MARKET_DEFAULTS[market]["currency"]).upper(),
-        has_fundamentals=bool(data.get("has_fundamentals", True)),
+        has_fundamentals=bool(data.get("has_fundamentals", market != "crypto")),
         aliases=[str(value) for value in data.get("aliases", [])],
         keywords=[str(value) for value in data.get("keywords", [])],
         trusted_news_domains=[str(value).lower() for value in data.get("trusted_news_domains", [])],

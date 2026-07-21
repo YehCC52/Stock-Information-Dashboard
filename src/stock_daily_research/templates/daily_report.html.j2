@@ -1443,6 +1443,15 @@
     }
     .valuation-view-note { color: var(--muted); font-size: 11px; }
     .valuation-table.is-compact .valuation-secondary { display: none; }
+    .valuation-table:not(.is-compact) .valuation-primary-only { display: none; }
+    .eps-outlook { min-width: 176px; white-space: nowrap; }
+    .eps-outlook-values { color: var(--text); }
+    .eps-outlook-signal { margin-left: 6px; font-size: 11px; font-weight: 700; }
+    .analyst-consensus-cell { min-width: 168px; white-space: nowrap; }
+    .analyst-consensus-upside { margin-left: 6px; font-size: 11px; font-weight: 700; }
+    .analyst-consensus-stale {
+      margin-left: 5px; color: var(--warning); font-size: 10px; font-weight: 700;
+    }
     .market-map-context { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
     .market-summary-action { color: var(--link); font-weight: 700; }    .control-label {
       display: inline-flex;
@@ -2159,6 +2168,13 @@
       letter-spacing: 0.08em;
       color: var(--muted);
       font-weight: 700;
+    }
+    .insight-meta { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .analyst-target-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    .analyst-target-list li { margin: 0; }
+    .analyst-target-list a { font-weight: 700; }
+    .analyst-target-source {
+      display: inline; margin-left: 5px; color: var(--muted); font-size: 11px;
     }
     .insight-row.action .insight-label { color: var(--info); }
     .insight-row.action .insight-text { color: var(--info); font-weight: 700; }
@@ -4523,6 +4539,10 @@
           <option value="market_cap_desc">市值由高至低</option>
           <option value="forward_pe_asc">預估 P/E 由低至高</option>
           <option value="forward_pe_desc">預估 P/E 由高至低</option>
+          <option value="eps_growth_desc">EPS 成長由高至低</option>
+          <option value="eps_growth_asc">EPS 成長由低至高</option>
+          <option value="target_upside_desc">共識空間由高至低</option>
+          <option value="target_upside_asc">共識空間由低至高</option>
           <option value="rsi_asc">RSI 由低至高</option>
           <option value="rsi_desc">RSI 由高至低</option>
           <option value="earnings_soon">財報日期由近至遠</option>
@@ -4537,6 +4557,8 @@
               <th>代碼</th>
               {% for key in valuation_keys %}
               <th class="num{% if key not in ('last_close', 'rsi_14', 'market_cap', 'forward_pe', 'fy1_eps_revision_30d') %} valuation-secondary{% endif %}">{{ key|html_metric_label }}</th>
+              {% if key == "forward_pe" %}<th class="num valuation-primary-only">EPS（TTM→FY1）</th>{% endif %}
+              {% if key == "forward_pe" %}<th class="num valuation-primary-only" title="優先顯示分析師中位目標價，無中位數時使用平均目標價">共識目標</th>{% endif %}
               {% if key == "last_close" %}<th class="num">日漲跌</th>{% endif %}
               {% if key == "market_cap" %}<th class="num valuation-secondary">距高點</th>{% endif %}
               {% endfor %}
@@ -4548,11 +4570,14 @@
             {% set delta = item|earnings_delta %}
             {% set chg = item|daily_change %}
             {% set fh = item|from_52w_high %}
-            <tr data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}">
+            {% set eps = item|eps_outlook %}
+            <tr data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{% if eps.growth is not none %}{{ eps.growth }}{% endif %}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}">
               <td class="symbol-cell"><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a></td>
               {% for key in valuation_keys %}
               {% set raw = item.valuation.metrics.get(key) if item.valuation else None %}
               <td class="num{% if key not in ('last_close', 'rsi_14', 'market_cap', 'forward_pe', 'fy1_eps_revision_30d') %} valuation-secondary{% endif %} {% if key in ('trailing_pe', 'forward_pe', 'ev_to_ebitda') %}pe-{{ raw|pe_class }}{% endif %}{% if key == 'rsi_14' %} rsi-{{ raw|rsi_class }}{% endif %}{% if key == 'gap_percent' %} change change-{{ raw|change_class }}{% endif %}{% if key in ('fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %} change change-{{ raw|eps_revision_class }}{% endif %}{% if key in ('eps_growth_pct', 'revenue_growth_pct') %} change change-{{ raw|change_class }}{% endif %}"{% if key == 'rsi_14' %} title="{{ raw|rsi_label }}"{% endif %}>{% if not item.valuation %}N/A{% elif key == 'volume_vs_20d' %}{{ raw|format_ratio }}{% elif key in ('gap_percent', 'fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %}{{ raw|format_pct }}{% elif key in ('atr_20_percent', 'eps_growth_pct', 'revenue_growth_pct') %}{{ raw|format_pct(sign=False) }}{% else %}{{ raw|metric_value }}{% endif %}</td>
+              {% if key == "forward_pe" %}<td class="num valuation-primary-only eps-outlook" title="{{ eps.title }}"><span class="eps-outlook-values">{{ eps.value_label }}</span>{% if eps.signal_label %}<span class="eps-outlook-signal change change-{{ eps.tone }}">{{ eps.signal_label }}</span>{% endif %}</td>{% endif %}
+              {% if key == "forward_pe" %}{% set consensus = item|analyst_consensus %}<td class="num valuation-primary-only analyst-consensus-cell" data-target-upside="{% if consensus.upside is not none %}{{ consensus.upside }}{% endif %}" title="{{ consensus.title }}">{% if consensus.available %}<span>{{ consensus.target_label }}</span>{% if consensus.upside_label %}<span class="analyst-consensus-upside change change-{{ consensus.tone }}">{{ consensus.upside_label }}</span>{% endif %}{% if consensus.stale %}<span class="analyst-consensus-stale">資料舊</span>{% endif %}{% else %}<span class="muted">N/A</span>{% endif %}</td>{% endif %}
               {% if key == "last_close" %}
               <td class="num change change-{{ chg|change_class }}">{{ chg|format_pct }}</td>
               {% endif %}
@@ -5049,12 +5074,34 @@
           </div>
           {% endif %}
 
-          {% if insights.quality or insights.watch %}
+          {% set analyst_view = item|analyst_consensus %}
+          {% set firm_targets = item|named_analyst_targets %}
+          {% if insights.quality or insights.watch or analyst_view.available or firm_targets %}
           <details class="card-secondary card-extras">
-            <summary>品質與觀察</summary>
+            <summary>{% if analyst_view.available or firm_targets %}品質、估值與觀察{% else %}品質與觀察{% endif %}</summary>
             <div class="insights">
               {% if insights.quality %}<div class="insight-row"><span class="insight-label">品質</span><span class="insight-text">{{ insights.quality|join(' | ')|zh_text }}</span></div>{% endif %}
               {% if insights.watch %}<div class="insight-row watch"><span class="insight-label">觀察</span><span class="insight-text">{{ insights.watch|join(' | ')|zh_text }}</span></div>{% endif %}
+              {% if analyst_view.available %}
+              <div class="insight-row">
+                <span class="insight-label">共識目標</span>
+                <span class="insight-text">
+                  {{ analyst_view.reference_kind }} {{ analyst_view.target_label }}
+                  {% if analyst_view.upside_label %}<strong class="change change-{{ analyst_view.tone }}">{{ analyst_view.upside_label }}</strong>{% endif %}
+                  <span class="insight-meta">Yahoo Finance 分析師共識{% if analyst_view.range_label %}｜區間 {{ analyst_view.range_label }}{% endif %}{% if analyst_view.opinion_count %}｜{{ analyst_view.opinion_count }} 位分析師{% endif %}｜擷取 {{ analyst_view.as_of_label }}{% if analyst_view.stale %}｜資料可能過舊{% endif %}</span>
+                </span>
+              </div>
+              {% endif %}
+              {% if firm_targets %}
+              <div class="insight-row">
+                <span class="insight-label">投行目標</span>
+                <ul class="analyst-target-list">
+                  {% for target in firm_targets %}
+                  <li><a href="{{ target.url }}" target="_blank" rel="noopener" title="{{ target.title }}">{{ target.firm }} {{ target.direction }}至 {{ target.target_label }}</a>{% if target.previous_label %}<span class="muted">（原 {{ target.previous_label }}）</span>{% endif %}<span class="analyst-target-source">{{ target.source }}｜{{ target.date_label }}</span></li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
             </div>
           </details>
           {% endif %}
@@ -6622,6 +6669,11 @@
         });
       }
 
+      function targetUpsideValue(row) {
+        var cell = row.querySelector(".analyst-consensus-cell");
+        return cell ? cell.dataset.targetUpside : "";
+      }
+
       function setupValuationSort() {
         var select = document.getElementById("valuation-sort");
         var tbody = document.getElementById("valuation-rows");
@@ -6637,6 +6689,10 @@
             }
             if (select.value === "forward_pe_asc") return sortNumberAsc(a.dataset.forwardPe, b.dataset.forwardPe, a.dataset.symbol, b.dataset.symbol);
             if (select.value === "forward_pe_desc") return sortNumberDesc(a.dataset.forwardPe, b.dataset.forwardPe, a.dataset.symbol, b.dataset.symbol);
+            if (select.value === "eps_growth_desc") return sortNumberDesc(a.dataset.epsGrowth, b.dataset.epsGrowth, a.dataset.symbol, b.dataset.symbol);
+            if (select.value === "eps_growth_asc") return sortNumberAsc(a.dataset.epsGrowth, b.dataset.epsGrowth, a.dataset.symbol, b.dataset.symbol);
+            if (select.value === "target_upside_desc") return sortNumberDesc(targetUpsideValue(a), targetUpsideValue(b), a.dataset.symbol, b.dataset.symbol);
+            if (select.value === "target_upside_asc") return sortNumberAsc(targetUpsideValue(a), targetUpsideValue(b), a.dataset.symbol, b.dataset.symbol);
             if (select.value === "rsi_asc") return sortNumberAsc(a.dataset.rsi, b.dataset.rsi, a.dataset.symbol, b.dataset.symbol);
             if (select.value === "rsi_desc") return sortNumberDesc(a.dataset.rsi, b.dataset.rsi, a.dataset.symbol, b.dataset.symbol);
             if (select.value === "earnings_soon") return sortNumberAsc(a.dataset.earningsDays, b.dataset.earningsDays, a.dataset.symbol, b.dataset.symbol);
