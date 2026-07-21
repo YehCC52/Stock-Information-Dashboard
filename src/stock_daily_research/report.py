@@ -47,6 +47,11 @@ METRIC_LABELS = {
     "forward_pe": "Forward P/E",
     "ttm_eps": "TTM EPS",
     "forward_eps": "Forward EPS",
+    "analyst_target_low": "Analyst Target Low",
+    "analyst_target_mean": "Analyst Target Mean",
+    "analyst_target_median": "Analyst Target Median",
+    "analyst_target_high": "Analyst Target High",
+    "analyst_opinion_count": "Analyst Opinion Count",
     "next_fy_eps": "Next FY EPS",
     "eps_growth_pct": "EPS Growth",
     "fy1_eps_revision_30d": "FY1 EPS Rev 30D",
@@ -89,7 +94,7 @@ HTML_METRIC_LABELS = {
     "trailing_pe": "過去12月 P/E",
     "forward_pe": "預估 P/E",
     "ttm_eps": "TTM EPS",
-    "forward_eps": "預估 EPS",
+    "forward_eps": "Forward EPS（NTM）",
     "next_fy_eps": "下一財年 EPS",
     "eps_growth_pct": "EPS 成長",
     "fy1_eps_revision_30d": "FY1 EPS 修正 30D",
@@ -231,6 +236,9 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["premarket_change"] = lambda item: premarket_change_pct(report, item.ticker.symbol)
     env.filters["position_view"] = position_view
     env.filters["eps_revision_class"] = eps_revision_class
+    env.filters["eps_outlook"] = eps_outlook
+    env.filters["analyst_consensus"] = lambda item: analyst_consensus(item, report.report_date)
+    env.filters["named_analyst_targets"] = lambda item: named_analyst_targets(item, report.report_date)
     env.filters["source_reliability"] = source_reliability
     env.filters["post_earnings_defaults"] = lambda item: post_earnings_defaults(report, item)
     env.filters["pre_earnings_card"] = lambda item: pre_earnings_card(report, item)
@@ -304,6 +312,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
             "trailing_pe",
             "forward_pe",
             "ttm_eps",
+            "forward_eps",
             "next_fy_eps",
             "eps_growth_pct",
             "fy1_eps_revision_30d",
@@ -1037,7 +1046,10 @@ _ZH_REPLACEMENTS: dict[str, str] = {
         "Nasdaq 100 futures": "Nasdaq 100 期貨",
         "SPY premarket": "SPY 盤前",
         "QQQ premarket": "QQQ 盤前",
-        "Mega-cap software": "大型軟體",
+        "Enterprise software / cloud / AI platforms": "企業軟體／雲端／AI 平台",
+        "Optical / photonics": "光通訊／光子元件",
+        "CPU": "CPU",
+        "EV / energy storage": "電動車／能源儲存",
         "Internet / ads": "網路 / 廣告",
         "Consumer hardware": "消費電子",
         "ETF / Index": "ETF / 指數",
@@ -5496,6 +5508,308 @@ def eps_revision_class(value: object) -> str:
     return "flat"
 
 
+def eps_outlook(item: TickerReport) -> dict[str, object]:
+    """Compact, non-misleading TTM-to-FY1 EPS view for the valuation table."""
+    metrics = item.valuation.metrics if item.valuation else {}
+    ttm_eps = _as_float(metrics.get("ttm_eps"))
+    forward_eps = _as_float(metrics.get("forward_eps"))
+    next_fy_eps = _as_float(metrics.get("next_fy_eps"))
+    reported_growth = _as_float(metrics.get("eps_growth_pct"))
+
+    if ttm_eps is not None and next_fy_eps is not None:
+        value_label = f"{ttm_eps:.2f} → {next_fy_eps:.2f}"
+    elif next_fy_eps is not None:
+        value_label = f"FY1 {next_fy_eps:.2f}"
+    elif ttm_eps is not None:
+        value_label = f"TTM {ttm_eps:.2f}"
+    else:
+        return {
+            "value_label": "N/A",
+            "signal_label": "",
+            "growth": None,
+            "tone": "",
+            "title": "EPS 資料不足",
+        }
+
+    growth = reported_growth
+    if growth is None and ttm_eps is not None and ttm_eps > 0 and next_fy_eps is not None:
+        growth = (next_fy_eps - ttm_eps) / ttm_eps * 100.0
+
+    if ttm_eps is not None and ttm_eps <= 0:
+        growth = None
+        if next_fy_eps is not None and next_fy_eps > 0:
+            signal_label, tone = "預估轉盈", "pos"
+        else:
+            signal_label, tone = "仍為虧損", "neg"
+    elif ttm_eps is not None and ttm_eps > 0 and next_fy_eps is not None and next_fy_eps <= 0:
+        growth = None
+        signal_label, tone = "預估轉虧", "neg"
+    elif growth is not None:
+        signal_label = f"預估 {format_pct(growth)}"
+        tone = eps_revision_class(growth)
+    else:
+        signal_label, tone = "", ""
+
+    title_parts = []
+    if ttm_eps is not None:
+        title_parts.append(f"TTM EPS {ttm_eps:.2f}")
+    if forward_eps is not None:
+        title_parts.append(f"Forward EPS {forward_eps:.2f}")
+    if next_fy_eps is not None:
+        title_parts.append(f"FY1 EPS {next_fy_eps:.2f}")
+    if signal_label:
+        title_parts.append(signal_label)
+    return {
+        "value_label": value_label,
+        "signal_label": signal_label,
+        "growth": round(growth, 2) if growth is not None else None,
+        "tone": tone,
+        "title": "｜".join(title_parts),
+    }
+
+
+_MAJOR_ANALYST_FIRMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("高盛", ("Goldman Sachs", "Goldman", "高盛")),
+    ("摩根士丹利", ("Morgan Stanley", "摩根士丹利", "大摩")),
+    ("摩根大通", ("JPMorgan", "J.P. Morgan", "JP Morgan", "摩根大通", "小摩")),
+    ("花旗", ("Citigroup", "Citi", "花旗")),
+    ("美國銀行", ("Bank of America", "BofA", "美銀", "美國銀行")),
+    ("瑞銀", ("UBS", "瑞銀")),
+    ("巴克萊", ("Barclays", "巴克萊")),
+    ("德意志銀行", ("Deutsche Bank", "德銀", "德意志銀行")),
+    ("富國銀行", ("Wells Fargo", "富國銀行")),
+    ("傑富瑞", ("Jefferies", "傑富瑞")),
+    ("伯恩斯坦", ("Bernstein", "伯恩斯坦")),
+    ("瑞穗", ("Mizuho", "瑞穗")),
+    ("KeyBanc", ("KeyBanc",)),
+    ("Wedbush", ("Wedbush",)),
+    ("Evercore ISI", ("Evercore ISI", "Evercore")),
+    ("Piper Sandler", ("Piper Sandler",)),
+    ("RBC Capital", ("RBC Capital",)),
+    ("TD Cowen", ("TD Cowen", "Cowen")),
+    ("Oppenheimer", ("Oppenheimer",)),
+    ("野村", ("Nomura", "野村")),
+    ("麥格理", ("Macquarie", "麥格理")),
+    ("里昂", ("CLSA", "里昂")),
+    ("滙豐", ("HSBC", "滙豐", "匯豐")),
+)
+
+_PRICE_TOKEN = r"(?:新台幣|美元|美金|US\$|NT\$|USD|TWD|\$)?\s*\d[\d,]*(?:\.\d+)?"
+_ENGLISH_TARGET_RE = re.compile(
+    rf"(?:price\s+target|target\s+price|\bPT\b).{{0,80}}?(?:to|at|of)\s*({_PRICE_TOKEN})",
+    re.IGNORECASE,
+)
+_CHINESE_TARGET_RE = re.compile(
+    rf"目標價.{{0,60}}?(?:上調至|調升至|升至|下調至|調降至|降至|維持在|維持|"
+    rf"給予|看至|上看|至|為|達)\s*({_PRICE_TOKEN})\s*(?:元|美元)?",
+)
+_ENGLISH_FROM_TO_RE = re.compile(
+    rf"from\s*({_PRICE_TOKEN})\s*to\s*({_PRICE_TOKEN})",
+    re.IGNORECASE,
+)
+_CHINESE_FROM_TO_RE = re.compile(
+    rf"由\s*({_PRICE_TOKEN})\s*(?:元|美元)?\s*(?:上調|調升|下調|調降)至\s*"
+    rf"({_PRICE_TOKEN})\s*(?:元|美元)?",
+)
+
+
+def _major_analyst_firm(title: str) -> str | None:
+    for display_name, aliases in _MAJOR_ANALYST_FIRMS:
+        for alias in aliases:
+            if alias.isascii():
+                if re.search(rf"(?<![A-Za-z0-9]){re.escape(alias)}(?![A-Za-z0-9])", title, re.IGNORECASE):
+                    return display_name
+            elif alias in title:
+                return display_name
+    return None
+
+
+def _target_number(token: str) -> float | None:
+    match = re.search(r"\d[\d,]*(?:\.\d+)?", token)
+    if not match:
+        return None
+    try:
+        value = float(match.group(0).replace(",", ""))
+    except ValueError:
+        return None
+    return value if isfinite(value) and value > 0 else None
+
+
+def _target_currency(text: str, default_currency: str) -> str:
+    lowered = text.lower()
+    if "nt$" in lowered or "twd" in lowered or "新台幣" in text:
+        return "TWD"
+    if "us$" in lowered or "usd" in lowered or "美元" in text or "美金" in text:
+        return "USD"
+    if "$" in text:
+        return "USD"
+    if "元" in text:
+        return "TWD"
+    return default_currency
+
+
+def _target_direction(title: str) -> str:
+    if re.search(r"\b(raise[sd]?|lift(?:ed|s)?|boost(?:ed|s)?|increase[sd]?)\b|上調|調升|升至", title, re.IGNORECASE):
+        return "上調"
+    if re.search(r"\b(cut|cuts|lower(?:ed|s)?|reduce[sd]?)\b|下調|調降|降至", title, re.IGNORECASE):
+        return "下調"
+    if re.search(r"\b(initiat(?:e[sd]?|ing)|set)\b|首評|首次|給予", title, re.IGNORECASE):
+        return "設定"
+    if re.search(r"\b(reiterate[sd]?|maintain(?:ed|s)?)\b|維持", title, re.IGNORECASE):
+        return "維持"
+    return "目標"
+
+
+def _extract_target_price(title: str, default_currency: str) -> tuple[float, str, float | None] | None:
+    previous: float | None = None
+    current: float | None = None
+    matched_text = ""
+
+    from_to = _ENGLISH_FROM_TO_RE.search(title) or _CHINESE_FROM_TO_RE.search(title)
+    if from_to:
+        previous = _target_number(from_to.group(1))
+        current = _target_number(from_to.group(2))
+        matched_text = from_to.group(0)
+
+    if current is None:
+        target = _ENGLISH_TARGET_RE.search(title) or _CHINESE_TARGET_RE.search(title)
+        if not target:
+            return None
+        current = _target_number(target.group(1))
+        matched_text = target.group(0)
+
+    if current is None:
+        return None
+    return current, _target_currency(matched_text, default_currency), previous
+
+
+def named_analyst_targets(
+    item: TickerReport,
+    anchor: date,
+    *,
+    max_age_days: int = 90,
+    limit: int = 3,
+) -> list[dict[str, object]]:
+    """Extract conservative, attributable major-firm targets from trusted headlines."""
+    rows: list[dict[str, object]] = []
+    seen: set[tuple[str, float, str]] = set()
+    for article in item.articles:
+        published_at = article.published_at
+        if not isinstance(published_at, datetime) or not article.url.startswith(("https://", "http://")):
+            continue
+        age_days = (anchor - published_at.date()).days
+        if age_days < -1 or age_days > max_age_days:
+            continue
+        if int(source_reliability(article)["score"]) < 1:
+            continue
+
+        title = article.title
+        if not re.search(r"price\s+target|target\s+price|\bPT\b|目標價", title, re.IGNORECASE):
+            continue
+        firm = _major_analyst_firm(title)
+        parsed = _extract_target_price(title, item.ticker.currency)
+        if not firm or not parsed:
+            continue
+        target, currency, previous = parsed
+        if currency != item.ticker.currency:
+            continue
+
+        signature = (firm, round(target, 4), currency)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        rows.append(
+            {
+                "firm": firm,
+                "target": target,
+                "target_label": f"{currency} {target:,.2f}",
+                "previous_target": previous,
+                "previous_label": f"{currency} {previous:,.2f}" if previous is not None else "",
+                "currency": currency,
+                "direction": _target_direction(title),
+                "published_at": published_at,
+                "date_label": published_at.date().isoformat(),
+                "source": article.source,
+                "url": article.url,
+                "title": title,
+            }
+        )
+
+    rows.sort(key=lambda row: row["published_at"], reverse=True)
+    return rows[:limit]
+
+
+def analyst_consensus(item: TickerReport, anchor: date) -> dict[str, object]:
+    """Decision-useful aggregate target view; never feeds trading scores."""
+    unavailable = {
+        "available": False,
+        "target": None,
+        "target_label": "N/A",
+        "reference_kind": "",
+        "upside": None,
+        "upside_label": "",
+        "tone": "",
+        "range_label": "",
+        "opinion_count": None,
+        "as_of_label": "",
+        "stale": False,
+        "title": "分析師共識資料不足",
+    }
+    if not item.valuation:
+        return unavailable
+
+    metrics = item.valuation.metrics
+    median_target = _as_float(metrics.get("analyst_target_median"))
+    mean_target = _as_float(metrics.get("analyst_target_mean"))
+    target = median_target if median_target is not None and median_target > 0 else mean_target
+    if target is None or target <= 0:
+        return unavailable
+
+    reference_kind = "中位" if median_target is not None and median_target > 0 else "平均"
+    current = _as_float(metrics.get("last_close"))
+    upside = (target / current - 1.0) * 100.0 if current is not None and current > 0 else None
+    low = _as_float(metrics.get("analyst_target_low"))
+    high = _as_float(metrics.get("analyst_target_high"))
+    range_label = ""
+    if low is not None and high is not None and 0 < low <= high:
+        range_label = f"{item.ticker.currency} {low:,.2f}–{high:,.2f}"
+
+    opinion_value = _as_float(metrics.get("analyst_opinion_count"))
+    opinion_count = int(round(opinion_value)) if opinion_value is not None and opinion_value > 0 else None
+    as_of = item.valuation.as_of_date
+    age_days = max(0, (anchor - as_of).days)
+    stale = age_days > 7
+    upside_label = format_pct(upside) if upside is not None else ""
+    title_parts = [
+        f"Yahoo Finance 分析師共識（{reference_kind}）",
+        f"目標價 {item.ticker.currency} {target:,.2f}",
+    ]
+    if upside_label:
+        title_parts.append(f"相對現價 {upside_label}")
+    if range_label:
+        title_parts.append(f"區間 {range_label}")
+    if opinion_count is not None:
+        title_parts.append(f"{opinion_count} 位分析師")
+    title_parts.append(f"擷取 {as_of.isoformat()}")
+    if stale:
+        title_parts.append("資料可能過舊")
+
+    return {
+        "available": True,
+        "target": target,
+        "target_label": f"{item.ticker.currency} {target:,.2f}",
+        "reference_kind": reference_kind,
+        "upside": round(upside, 2) if upside is not None else None,
+        "upside_label": upside_label,
+        "tone": change_class(upside, threshold=2.0),
+        "range_label": range_label,
+        "opinion_count": opinion_count,
+        "as_of_label": as_of.isoformat(),
+        "stale": stale,
+        "title": "｜".join(title_parts),
+    }
+
+
 def eps_power_summary(item: TickerReport) -> str:
     if not item.valuation:
         return ""
@@ -6018,16 +6332,18 @@ def macro_risk_meter(context: MarketContext | None) -> list[dict[str, str]]:
     return rows
 
 
-# Order matters: assignment is exclusive (first match wins), so the more
-# specific groups sit above the broader ones — Memory before Semis keeps MU in
-# Memory; Internet/ads before software keeps GOOGL out of the "cloud" bucket.
+# Order matters: assignment is exclusive (first match wins), so specific groups
+# sit above broader ones. CPU and optical/photonics precede Semis; Internet/ads
+# precedes enterprise software so GOOGL stays with ads.
 # ETF sits after Crypto so BTC's "ETF flows" keyword doesn't hijack it.
 SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Memory", ("memory", "dram", "nand", "hbm", "ssd", "wdc", "stx", "記憶體")),
-    ("Semis", ("semiconductor", "semi", "chip", "gpu", "soxx", "nvda", "amd", "avgo", "tsm", "asml", "arm", "半導體", "晶圓")),
+    ("CPU", ("cpu", "processor", "x86", "cpu architecture", "amd", "intc", "arm")),
+    ("Optical / photonics", ("optical networking", "optical", "photonics", "laser", "transceiver", "coherent", "cohr", "光通訊", "光子元件")),
+    ("Semis", ("semiconductor", "semi", "chip", "gpu", "soxx", "nvda", "avgo", "tsm", "asml", "半導體", "晶圓")),
     ("Internet / ads", ("advertising", "ads", "search", "social", "internet", "googl", "meta", "amzn")),
-    ("Mega-cap software", ("software", "cloud", "azure", "copilot", "msft", "crm", "adbe", "orcl")),
-    ("EV", ("electric vehicle", "autonomous", "tesla", "tsla", "rivn", "nio", "電動車")),
+    ("Enterprise software / cloud / AI platforms", ("enterprise software", "cloud", "azure", "copilot", "aip", "data analytics", "ai platform", "msft", "pltr", "palantir", "crm", "adbe", "orcl")),
+    ("EV / energy storage", ("electric vehicle", "autonomous", "tesla", "tsla", "energy storage", "rivn", "nio", "電動車", "能源儲存")),
     ("Consumer hardware", ("iphone", "consumer electronics", "wearables", "smartphone", "aapl")),
     ("Space", ("space launch", "rocket", "satellite", "spacex", "rklb")),
     ("Crypto", ("crypto", "bitcoin", "ethereum", "blockchain", "btc-usd", "eth-usd", "加密")),
@@ -6037,9 +6353,11 @@ SECTOR_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 SECTOR_GROUP_LABELS_ZH: dict[str, str] = {
     "Semis": "半導體",
-    "Mega-cap software": "大型軟體",
+    "CPU": "CPU",
+    "Optical / photonics": "光通訊／光子元件",
+    "Enterprise software / cloud / AI platforms": "企業軟體／雲端／AI 平台",
     "Memory": "記憶體",
-    "EV": "電動車",
+    "EV / energy storage": "電動車／能源儲存",
     "Internet / ads": "網路 / 廣告",
     "Consumer hardware": "消費電子",
     "Space": "太空",
@@ -6047,6 +6365,18 @@ SECTOR_GROUP_LABELS_ZH: dict[str, str] = {
     "ETF / Index": "ETF / 指數",
     "AI infra": "AI 基礎設施",
     "Other watchlist": "其他觀察",
+}
+
+SECTOR_GROUP_OVERRIDES_BY_MARKET: dict[str, dict[str, str]] = {
+    "us": {
+        "COHR": "Optical / photonics",
+        "AMD": "CPU",
+        "INTC": "CPU",
+        "ARM": "CPU",
+        "MSFT": "Enterprise software / cloud / AI platforms",
+        "PLTR": "Enterprise software / cloud / AI platforms",
+        "TSLA": "EV / energy storage",
+    },
 }
 
 # Taiwan-market sector chains — matched against watchlist keywords/aliases.
@@ -6213,8 +6543,12 @@ def _sector_rows(
     """
     sector_groups = SECTOR_GROUPS_BY_MARKET.get(market_key, SECTOR_GROUPS)
     grouped: dict[str, list[TickerReport]] = {label: [] for label, _ in sector_groups}
+    overrides = SECTOR_GROUP_OVERRIDES_BY_MARKET.get(market_key, {})
     other: list[TickerReport] = []
     for item in items:
+        if override := overrides.get(item.ticker.symbol):
+            grouped[override].append(item)
+            continue
         for label, terms in sector_groups:
             if _matches_sector_group(item, terms):
                 grouped[label].append(item)

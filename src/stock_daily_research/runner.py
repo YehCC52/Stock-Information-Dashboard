@@ -157,6 +157,7 @@ def run_daily(
                 if (
                     cached is not None
                     and cached.metrics.get("technical_history_version") == TECHNICAL_HISTORY_VERSION
+                    and "analyst_target_median" in cached.metrics
                     and isinstance(cached.metrics.get("chart_close_60"), list)
                     and len(cached.metrics["chart_close_60"]) >= 2
                 ):

@@ -9,6 +9,7 @@ from stock_daily_research.valuation import (
     compute_trend_structure_metrics,
     compute_rsi,
     fetch_technical_indicators,
+    fetch_yfinance_analyst_targets,
     fetch_yfinance_eps_metrics,
     format_metric_value,
     normalize_yfinance_metrics,
@@ -24,6 +25,11 @@ def test_normalize_yfinance_metrics_maps_known_fields() -> None:
             "forwardPE": 26.6,
             "trailingEps": 8.1,
             "forwardEps": 9.4,
+            "targetLowPrice": 160.0,
+            "targetMeanPrice": 215.0,
+            "targetMedianPrice": 220.0,
+            "targetHighPrice": 280.0,
+            "numberOfAnalystOpinions": 56,
             "pegRatio": 0.77,
             "priceToSalesTrailing12Months": 24.5,
             "priceToBook": 33.4,
@@ -35,6 +41,8 @@ def test_normalize_yfinance_metrics_maps_known_fields() -> None:
     assert metrics["market_cap"] == 1_500_000_000_000
     assert metrics["ttm_eps"] == 8.1
     assert metrics["forward_eps"] == 9.4
+    assert metrics["analyst_target_median"] == 220.0
+    assert metrics["analyst_opinion_count"] == 56
     assert metrics["peg_ratio"] == 0.77
     assert metrics["ev_to_ebitda"] == 36.0
 
@@ -44,6 +52,34 @@ def test_format_metric_value_compacts_large_numbers() -> None:
     assert format_metric_value(44.2123) == "44.21"
     assert format_metric_value(None) == "N/A"
     assert format_metric_value(float("nan")) == "N/A"
+
+
+def test_fetch_yfinance_analyst_targets_preserves_info_and_fills_missing_values() -> None:
+    class FakeTicker:
+        def get_analyst_price_targets(self):
+            return {
+                "current": 200.0,
+                "low": 170.0,
+                "high": 300.0,
+                "mean": 235.0,
+                "median": 230.0,
+            }
+
+    metrics = fetch_yfinance_analyst_targets(
+        FakeTicker(),
+        {
+            "analyst_target_mean": 240.0,
+            "analyst_opinion_count": 42,
+        },
+    )
+
+    assert metrics == {
+        "analyst_target_low": 170.0,
+        "analyst_target_mean": 240.0,
+        "analyst_target_median": 230.0,
+        "analyst_target_high": 300.0,
+        "analyst_opinion_count": 42.0,
+    }
 
 
 def test_normalize_yfinance_metrics_replaces_nan_with_none() -> None:
@@ -270,14 +306,14 @@ def test_fetch_yfinance_valuation_skips_estimate_fetch_for_crypto(monkeypatch) -
 
     class FakeYfTicker:
         def get_info(self):
-            return {
-                "regularMarketPrice": 60000.0,
-                "regularMarketPreviousClose": 59000.0,
-                "marketCap": 1_200_000_000_000,
-            }
+            raise AssertionError("crypto fundamentals endpoint should not be called")
 
     monkeypatch.setattr(valuation_mod.yf, "Ticker", lambda _symbol: FakeYfTicker())
-    monkeypatch.setattr(valuation_mod, "fetch_technical_indicators", lambda _t: {"rsi_14": 55.0})
+    monkeypatch.setattr(
+        valuation_mod,
+        "fetch_technical_indicators",
+        lambda _t: {"rsi_14": 55.0, "chart_close_60": [59000.0, 60000.0]},
+    )
 
     def boom(*_args, **_kwargs):
         raise AssertionError("analyst-estimate fetch should be skipped for crypto")
@@ -288,7 +324,7 @@ def test_fetch_yfinance_valuation_skips_estimate_fetch_for_crypto(monkeypatch) -
     snapshot = valuation_mod.fetch_yfinance_valuation(ticker)
 
     assert snapshot.metrics["last_close"] == 60000.0
-    assert snapshot.metrics["market_cap"] == 1_200_000_000_000
+    assert snapshot.metrics["market_cap"] is None
     # Estimate keys stay present (as None) so the metrics shape is consistent.
     assert snapshot.metrics["next_fy_eps"] is None
     assert snapshot.metrics["latest_eps_surprise_pct"] is None

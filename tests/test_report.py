@@ -22,6 +22,7 @@ from stock_daily_research.models import (
 )
 from stock_daily_research.report import (
     build_summary,
+    analyst_consensus,
     book_today_summary,
     capital_allocation_queue,
     card_state,
@@ -31,6 +32,8 @@ from stock_daily_research.report import (
     earnings_urgency,
     earnings_urgency_label,
     eps_power_summary,
+    eps_outlook,
+    named_analyst_targets,
     eps_revision_class,
     event_label,
     hero_items,
@@ -122,6 +125,9 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "盤前公布財報" in output
     assert "FOMC 利率決策" in output
     assert "估值快照" in output
+    assert "EPS（TTM→FY1）" in output
+    assert "4.20 → 5.10" in output
+    assert "預估 +21.40%" in output
     assert "TTM EPS" in output
     assert "FY1 EPS 修正 30D" in output
     assert "FY1 營收修正 30D" in output
@@ -145,6 +151,53 @@ def test_render_html_report_includes_visual_sections() -> None:
     assert "事件前暫停" in output
     assert "避免追高" in output
     assert "window.claude.complete" in output
+
+
+def test_render_html_report_shows_forward_eps_and_attributed_targets() -> None:
+    report = _sample_report()
+    item = report.ticker_reports[0]
+    assert item.valuation is not None
+    metrics = {
+        **item.valuation.metrics,
+        "forward_eps": 5.35,
+        "analyst_target_low": 95.0,
+        "analyst_target_mean": 128.0,
+        "analyst_target_median": 130.0,
+        "analyst_target_high": 165.0,
+        "analyst_opinion_count": 54,
+    }
+    analyst_article = NewsArticle(
+        ticker="NVDA",
+        title="Morgan Stanley raises Nvidia price target from $120 to $140",
+        source="Reuters",
+        domain="reuters.com",
+        published_at=datetime(2026, 4, 27, tzinfo=timezone.utc),
+        url="https://reuters.com/nvda-target",
+        summary="",
+        event_type="analyst",
+        importance_score=0.9,
+    )
+    report = replace(
+        report,
+        ticker_reports=[
+            replace(
+                item,
+                articles=[*item.articles, analyst_article],
+                valuation=replace(item.valuation, metrics=metrics),
+            )
+        ],
+    )
+
+    output = render_html_report(report)
+
+    assert "Forward EPS（NTM）" in output
+    assert "共識目標" in output
+    assert "USD 130.00" in output
+    assert "+25.00%" in output
+    assert "54 位分析師" in output
+    assert "品質、估值與觀察" in output
+    assert "摩根士丹利 上調至 USD 140.00" in output
+    assert 'href="https://reuters.com/nvda-target"' in output
 
 
 def test_write_report_outputs_markdown_and_html(tmp_path) -> None:
@@ -1553,6 +1606,147 @@ def test_eps_power_summary_labels_growth_and_revisions() -> None:
     assert "revisions up" in summary
 
 
+def test_eps_outlook_shows_growth_and_handles_negative_base() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(symbol="X", company_name="X"),
+        articles=[], x_signals=[], earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="X", as_of_date=date(2026, 4, 28), source="yfinance",
+            metrics={"ttm_eps": 5.0, "next_fy_eps": 6.0, "eps_growth_pct": 20.0},
+            retrieved_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ),
+    )
+
+    outlook = eps_outlook(item)
+    assert item.valuation is not None
+    turnaround = eps_outlook(replace(
+        item,
+        valuation=replace(
+            item.valuation,
+            metrics={"ttm_eps": -1.0, "next_fy_eps": 0.5, "eps_growth_pct": 150.0},
+        ),
+    ))
+
+    assert outlook["value_label"] == "5.00 → 6.00"
+    assert outlook["signal_label"] == "預估 +20.00%"
+    assert outlook["growth"] == 20.0
+    assert turnaround["signal_label"] == "預估轉盈"
+    assert turnaround["growth"] is None
+
+
+def test_analyst_consensus_prefers_median_and_marks_old_snapshots() -> None:
+    item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[],
+        x_signals=[],
+        earnings=None,
+        valuation=ValuationSnapshot(
+            ticker="NVDA",
+            as_of_date=date(2026, 4, 10),
+            source="yfinance",
+            metrics={
+                "last_close": 200.0,
+                "analyst_target_low": 170.0,
+                "analyst_target_mean": 235.0,
+                "analyst_target_median": 240.0,
+                "analyst_target_high": 300.0,
+                "analyst_opinion_count": 48,
+            },
+            retrieved_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+        ),
+    )
+
+    view = analyst_consensus(item, date(2026, 4, 28))
+
+    assert view["available"] is True
+    assert view["target"] == 240.0
+    assert view["reference_kind"] == "中位"
+    assert view["upside"] == 20.0
+    assert view["range_label"] == "USD 170.00–300.00"
+    assert view["opinion_count"] == 48
+    assert view["stale"] is True
+
+
+def test_named_analyst_targets_require_attribution_and_matching_currency() -> None:
+    anchor = date(2026, 4, 28)
+    articles = [
+        NewsArticle(
+            ticker="NVDA",
+            title="Morgan Stanley raises Nvidia price target from $220 to $250",
+            source="Reuters",
+            domain="reuters.com",
+            published_at=datetime(2026, 4, 27, tzinfo=timezone.utc),
+            url="https://reuters.com/nvda-target",
+            summary="",
+            event_type="analyst",
+            importance_score=0.9,
+        ),
+        NewsArticle(
+            ticker="NVDA",
+            title="Goldman Sachs raises Nvidia price target to $300",
+            source="Seeking Alpha",
+            domain="seekingalpha.com",
+            published_at=datetime(2026, 4, 27, tzinfo=timezone.utc),
+            url="https://seekingalpha.com/nvda-target",
+            summary="",
+            event_type="analyst",
+            importance_score=0.9,
+        ),
+        NewsArticle(
+            ticker="NVDA",
+            title="高盛將台積電目標價上調至新台幣 1,800 元",
+            source="Reuters",
+            domain="reuters.com",
+            published_at=datetime(2026, 4, 27, tzinfo=timezone.utc),
+            url="https://reuters.com/tw-target",
+            summary="",
+            event_type="analyst",
+            importance_score=0.9,
+        ),
+    ]
+    item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=articles,
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+
+    targets = named_analyst_targets(item, anchor)
+
+    assert len(targets) == 1
+    assert targets[0]["firm"] == "摩根士丹利"
+    assert targets[0]["target"] == 250.0
+    assert targets[0]["previous_target"] == 220.0
+    assert targets[0]["currency"] == "USD"
+
+
+def test_named_analyst_targets_parse_taiwan_dollar_headline() -> None:
+    article = NewsArticle(
+        ticker="2330.TW",
+        title="高盛將台積電目標價由 1,600 元上調至 1,800 元",
+        source="經濟日報",
+        domain="money.udn.com",
+        published_at=datetime(2026, 4, 27, tzinfo=timezone.utc),
+        url="https://money.udn.com/tsmc-target",
+        summary="",
+        event_type="analyst",
+        importance_score=0.9,
+    )
+    item = TickerReport(
+        ticker=TickerConfig(symbol="2330.TW", company_name="台積電", market="twse", currency="TWD"),
+        articles=[article],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+
+    targets = named_analyst_targets(item, date(2026, 4, 28))
+
+    assert targets[0]["target_label"] == "TWD 1,800.00"
+    assert targets[0]["previous_label"] == "TWD 1,600.00"
+
+
 def test_macro_risk_meter_buckets_pressure() -> None:
     ctx = MarketContext(
         rates=[
@@ -1825,6 +2019,48 @@ def test_sector_leadership_and_premarket_triage() -> None:
     assert "trusted" in triage["catalyst_backed"][0]["source_tier"] or "tier" in triage["catalyst_backed"][0]["source_tier"]
     assert triage["unclear"][0]["item"].ticker.symbol == "QUIET"
 
+
+def test_us_sector_map_uses_decision_oriented_groups() -> None:
+    cases = [
+        ("COHR", ["optical networking", "photonics"]),
+        ("AMD", ["GPU", "CPU", "AI chips"]),
+        ("INTC", ["foundry", "CPU", "semiconductor"]),
+        ("ARM", ["chip design", "CPU architecture"]),
+        ("MSFT", ["Azure", "Copilot"]),
+        ("PLTR", ["AIP", "data analytics", "artificial intelligence"]),
+        ("TSLA", ["electric vehicles", "energy storage"]),
+    ]
+    report = DailyReport(
+        report_date=date(2026, 7, 20),
+        generated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol=symbol, company_name=symbol, keywords=keywords),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+            for symbol, keywords in cases
+        ],
+    )
+
+    groups = sector_leadership(report)
+    assigned = {
+        tile["symbol"]: row["label_zh"]
+        for row in groups
+        for tile in row["tiles"]
+    }
+
+    assert assigned == {
+        "COHR": "光通訊／光子元件",
+        "AMD": "CPU",
+        "INTC": "CPU",
+        "ARM": "CPU",
+        "MSFT": "企業軟體／雲端／AI 平台",
+        "PLTR": "企業軟體／雲端／AI 平台",
+        "TSLA": "電動車／能源儲存",
+    }
 
 def test_source_reliability_buckets_official_and_tier1() -> None:
     class Article:

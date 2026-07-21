@@ -282,6 +282,7 @@ tickers:
     assert ticker.market == "crypto"
     assert ticker.currency == "USD"
     assert ticker.display_symbol == "BTC"
+    assert ticker.has_fundamentals is False
     assert ticker.has_earnings is False
     assert "coindesk.com" in ticker.default_news_domains
 

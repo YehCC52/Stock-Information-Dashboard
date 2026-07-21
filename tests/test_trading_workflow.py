@@ -202,7 +202,7 @@ def test_execution_plan_requires_all_hard_gates_and_sizes_by_risk_budget() -> No
     group_gate = next(gate for gate in plan["gates"] if gate["key"] == "group")
     assert group_gate["required"] is False
 
-    peer = _item("AMD")
+    peer = _item("AVGO")
     peer.valuation.metrics["return_20d"] = 20.0
     lagging = right_side_execution_plan(
         _report(

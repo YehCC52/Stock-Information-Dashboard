@@ -27,6 +27,11 @@ YFINANCE_FIELD_MAP = {
     "forward_pe": "forwardPE",
     "ttm_eps": "trailingEps",
     "forward_eps": "forwardEps",
+    "analyst_target_low": "targetLowPrice",
+    "analyst_target_mean": "targetMeanPrice",
+    "analyst_target_median": "targetMedianPrice",
+    "analyst_target_high": "targetHighPrice",
+    "analyst_opinion_count": "numberOfAnalystOpinions",
     "peg_ratio": "trailingPegRatio",
     "price_to_sales": "priceToSalesTrailing12Months",
     "price_to_book": "priceToBook",
@@ -40,10 +45,15 @@ YFINANCE_FIELD_MAP = {
 def fetch_yfinance_valuation(ticker: TickerConfig) -> ValuationSnapshot:
     retrieved_at = datetime.now(timezone.utc)
     yf_ticker = yf.Ticker(ticker.symbol)
+    has_fundamentals = ticker.has_fundamentals and ticker.market != "crypto"
     # Yahoo does not expose quoteSummary fundamentals for many ETFs. Avoid that
     # endpoint for assets configured without fundamentals; technical data remains available.
-    info = _safe_info(yf_ticker) if ticker.has_fundamentals else {}
+    info = _safe_info(yf_ticker) if has_fundamentals else {}
     metrics = normalize_yfinance_metrics(info)
+    if has_fundamentals:
+        metrics.update(fetch_yfinance_analyst_targets(yf_ticker, metrics))
+    else:
+        metrics.update(empty_analyst_target_metrics())
     if ticker.has_earnings:
         metrics.update(fetch_yfinance_eps_metrics(yf_ticker, metrics))
     else:
@@ -589,6 +599,56 @@ def empty_estimate_metrics() -> dict[str, float | None]:
         "latest_revenue_estimate": None,
         "latest_revenue_surprise_pct": None,
     }
+
+
+def empty_analyst_target_metrics() -> dict[str, float | None]:
+    """All analyst-consensus target fields set to None."""
+    return {
+        "analyst_target_low": None,
+        "analyst_target_mean": None,
+        "analyst_target_median": None,
+        "analyst_target_high": None,
+        "analyst_opinion_count": None,
+    }
+
+
+def fetch_yfinance_analyst_targets(
+    yf_ticker: Any,
+    base_metrics: dict[str, Any] | None = None,
+) -> dict[str, float | None]:
+    """Normalize Yahoo's aggregate analyst targets without requiring paid data.
+
+    Quote info usually contains these values already. The dedicated yfinance
+    endpoint is only used to fill gaps, keeping failures and unsupported
+    regional coverage quiet.
+    """
+    metrics = empty_analyst_target_metrics()
+    base = base_metrics or {}
+    for key in metrics:
+        metrics[key] = _clean_float(base.get(key))
+
+    target_keys = (
+        "analyst_target_low",
+        "analyst_target_mean",
+        "analyst_target_median",
+        "analyst_target_high",
+    )
+    if any(metrics[key] is None for key in target_keys):
+        try:
+            raw_targets = yf_ticker.get_analyst_price_targets()
+        except Exception:
+            raw_targets = None
+        if isinstance(raw_targets, dict):
+            for key, source_key in (
+                ("analyst_target_low", "low"),
+                ("analyst_target_mean", "mean"),
+                ("analyst_target_median", "median"),
+                ("analyst_target_high", "high"),
+            ):
+                if metrics[key] is None:
+                    metrics[key] = _clean_float(raw_targets.get(source_key))
+
+    return metrics
 
 
 def fetch_yfinance_eps_metrics(yf_ticker: Any, base_metrics: dict[str, Any] | None = None) -> dict[str, float | None]:
