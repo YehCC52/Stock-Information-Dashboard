@@ -1398,6 +1398,62 @@
       font-size: 10px;
       white-space: nowrap;
     }
+    .taiwan-margin-context {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(180px, 0.7fr) auto minmax(260px, 1.3fr) auto;
+      gap: 8px 16px;
+      align-items: center;
+      min-width: 0;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .taiwan-margin-context[hidden] { display: none; }
+    .taiwan-margin-heading {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+    .taiwan-margin-heading strong { color: var(--text); font-size: 12px; }
+    .taiwan-margin-status { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .taiwan-margin-context.tone-good .taiwan-margin-status { color: var(--good); }
+    .taiwan-margin-context.tone-warning .taiwan-margin-status { color: var(--warning); }
+    .taiwan-margin-context.tone-danger .taiwan-margin-status { color: var(--danger); }
+    .taiwan-margin-value {
+      color: var(--text);
+      font-size: 22px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .taiwan-margin-detail {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .taiwan-margin-metrics {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .taiwan-margin-source {
+      color: var(--muted);
+      font-size: 10px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    @media (max-width: 760px) {
+      .taiwan-margin-context { grid-template-columns: minmax(0, 1fr) auto; }
+      .taiwan-margin-detail, .taiwan-margin-source { grid-column: 1 / -1; }
+      .taiwan-margin-source { text-align: left; white-space: normal; }
+    }
+    @media (max-width: 480px) {
+      .taiwan-margin-context { grid-template-columns: 1fr; }
+      .taiwan-margin-value, .taiwan-margin-detail, .taiwan-margin-source { grid-column: 1; }
+    }
     .is-market-hidden, .is-market-empty { display: none !important; }
     .market-tabs {
       display: grid;
@@ -2254,6 +2310,73 @@
     .insight-row.technical.tech-down .insight-label, .insight-row.technical.tech-down .insight-text { color: var(--danger); }
     .insight-row.technical.tech-extended .insight-label, .insight-row.technical.tech-extended .insight-text,
     .insight-row.technical.tech-mixed .insight-label { color: var(--warning); }
+    details.moving-average-panel { display: block; padding: 4px 0; }
+    details.moving-average-panel > summary {
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr) 12px;
+      gap: 8px;
+      align-items: baseline;
+      list-style: none;
+      cursor: pointer;
+    }
+    details.moving-average-panel > summary::-webkit-details-marker { display: none; }
+    details.moving-average-panel > summary::after {
+      content: "+";
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+    }
+    details.moving-average-panel[open] > summary::after { content: "-"; }
+    .moving-average-panel .insight-label { color: var(--info); font-weight: 800; }
+    .moving-average-panel .insight-text { color: var(--text); font-weight: 700; }
+    .moving-average-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 14px;
+      margin: 7px 0 0;
+      border-top: 1px solid var(--border-soft);
+    }
+    .moving-average-cell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 2px 8px;
+      min-width: 0;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-soft);
+      font-variant-numeric: tabular-nums;
+    }
+    .moving-average-label {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .moving-average-value {
+      color: var(--text);
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+    .moving-average-distance {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .moving-average-cell.tone-up .moving-average-distance { color: var(--good); }
+    .moving-average-cell.tone-down .moving-average-distance { color: var(--danger); }
+    .moving-average-cell.tone-near .moving-average-distance { color: var(--warning); }
+    .moving-average-source {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 10px;
+      overflow-wrap: anywhere;
+    }
     details.insight-row.right-side-check { display: block; cursor: pointer; padding: 4px 0; }
     details.insight-row.right-side-check > summary {
       display: grid;
@@ -2296,7 +2419,12 @@
     .insight-row.right-side-check.check-mixed .insight-label { color: var(--warning); }
     @media (max-width: 480px) {
       .right-side-check-row { grid-template-columns: 1fr; gap: 1px; padding: 5px 0; }
-    }    .badge.score-badge { font-weight: 700; }
+      details.moving-average-panel > summary { grid-template-columns: 48px minmax(0, 1fr) 12px; }
+    }
+    @media (max-width: 360px) {
+      .moving-average-grid { grid-template-columns: 1fr; }
+    }
+    .badge.score-badge { font-weight: 700; }
     .badge.score-badge.score-up { background: var(--good-bg); color: var(--good); }
     .badge.score-badge.score-down { background: var(--danger-bg); color: var(--danger); }
     .badge.score-badge.score-mixed { background: var(--warning-bg); color: var(--warning); opacity: 0.75; }
@@ -3015,6 +3143,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      flex-wrap: wrap;
       margin-bottom: 9px;
     }
     .execution-plan-head strong { font-size: 13px; }
@@ -3026,7 +3155,10 @@
       border: 1px solid var(--border);
       border-radius: 999px;
       font-size: 12px;
-      white-space: nowrap;
+      max-width: 100%;
+      white-space: normal;
+      text-align: center;
+      overflow-wrap: anywhere;
     }
     .execution-status.ready { color: var(--good); border-color: var(--good); }
     .execution-status.watch { color: var(--warning); border-color: var(--warning); }
@@ -3044,6 +3176,35 @@
     }
     .execution-metric .label { display: block; color: var(--muted); font-size: 11px; }
     .execution-metric .value { display: block; margin-top: 2px; font-weight: 700; overflow-wrap: anywhere; }
+    .execution-waiting {
+      display: grid;
+      gap: 5px;
+      padding: 8px 0;
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .execution-waiting-title { color: var(--text); font-size: 12px; }
+    .execution-waiting-detail { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .execution-watch-references {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 3px;
+    }
+    .execution-watch-reference {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 3px 8px;
+      min-width: 0;
+      padding-top: 5px;
+      border-top: 1px dashed var(--border);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .execution-watch-reference .label { color: var(--muted); }
+    .execution-watch-reference .value { color: var(--text); font-weight: 700; text-align: right; }
+    .execution-watch-reference .distance { grid-column: 1 / -1; color: var(--muted); }
+    .execution-waiting-source { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
     .execution-gates { margin-top: 8px; }
     .execution-gates summary { color: var(--link); font-size: 12px; cursor: pointer; }
     .execution-gate-list { display: grid; gap: 5px; margin: 8px 0 0; padding: 0; list-style: none; }
@@ -3057,6 +3218,7 @@
     }
     .execution-gate-list .gate-mark { color: var(--danger); font-weight: 700; }
     .execution-gate-list .passed .gate-mark { color: var(--good); }
+    .execution-gate-list .optional .gate-mark { color: var(--muted); }
     .execution-gate-list .gate-name { color: var(--text); font-weight: 600; }
 
     .market-reading {
@@ -3217,6 +3379,7 @@
     }
     @media (max-width: 480px) {
       .journal-form { grid-template-columns: 1fr; }
+      .execution-watch-references { grid-template-columns: 1fr; }
       .journal-form label, .journal-form h3, .journal-form .form-actions, .journal-form .wide { grid-column: 1; }
       .journal-headline { align-items: flex-start; }
       .execution-gate-list li { grid-template-columns: 14px minmax(0, 1fr); }
@@ -3298,6 +3461,26 @@
         <div class="market-workspace-stat"><strong id="market-stat-attention">0</strong><span>&#x9700;&#x7559;&#x610F;</span></div>
         <div class="market-workspace-stat"><strong id="market-stat-news">0</strong><span>&#x4ECA;&#x65E5;&#x65B0;&#x805E;</span></div>
       </div>
+      {% if taiwan_margin.visible %}
+      <div id="taiwan-margin-context" class="taiwan-margin-context tone-{{ taiwan_margin.tone }}" data-market-context="taiwan" hidden title="{{ taiwan_margin.method }}；{{ taiwan_margin.disclaimer }}">
+        <div class="taiwan-margin-heading">
+          <strong>上市大盤融資維持率（估算）</strong>
+          <span class="taiwan-margin-status">{{ taiwan_margin.status }}</span>
+        </div>
+        <strong class="taiwan-margin-value">{{ taiwan_margin.ratio_label }}</strong>
+        <div class="taiwan-margin-detail">
+          {% if taiwan_margin.available %}
+          <span class="taiwan-margin-metrics">
+            {{ taiwan_margin.reference_label }} · {{ taiwan_margin.balance_label }}{% if taiwan_margin.balance_change_label %} · {{ taiwan_margin.balance_change_label }}{% endif %}
+          </span>
+          {% endif %}
+          <span>{{ taiwan_margin.detail }}</span>
+        </div>
+        <span class="taiwan-margin-source">
+          {{ taiwan_margin.source_label }}{% if taiwan_margin.available %} · {{ taiwan_margin.coverage_label }}{% endif %}
+        </span>
+      </div>
+      {% endif %}
     </section>
 
     <nav class="toc" aria-label="Sections">
@@ -4700,6 +4883,7 @@
         {% set price_regime = insights.price_regime %}
         {% set execution = item|execution_plan %}
         {% set structure_chart = item|price_structure_chart %}
+        {% set moving_averages = item|moving_average_snapshot %}
         {% set health = item|stock_health %}
         {% set health_score_trend = score_trend(item.ticker.symbol, 'health') %}
         {% set right_side_score_trend = score_trend(item.ticker.symbol, 'right_side') %}
@@ -4913,26 +5097,45 @@
           <div class="execution-plan plan-{{ execution.tone }}">
             <div class="execution-plan-head">
               <strong>&#x53F3;&#x5074;&#x4EA4;&#x6613;&#x8A08;&#x756B;</strong>
-              <span class="execution-status {{ execution.status }}">{% if execution.status == 'ready' %}&#x53EF;&#x57F7;&#x884C;{% elif execution.status == 'watch' %}&#x7B49;&#x5F85;&#x78BA;&#x8A8D;{% else %}&#x66AB;&#x505C;&#x4EA4;&#x6613;{% endif %}</span>
+              <span class="execution-status {{ execution.status }}">{{ execution.status_label|zh_text }}</span>
             </div>
+            {% if execution.has_price_plan %}
             <div class="execution-plan-grid">
-              <div class="execution-metric"><span class="label">&#x89F8;&#x767C;&#x50F9;</span><span class="value">{% if execution.entry_trigger is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.entry_trigger) }}{% else %}N/A{% endif %}</span></div>
-              <div class="execution-metric"><span class="label">&#x5931;&#x6548;&#x50F9;</span><span class="value">{% if execution.invalidation is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.invalidation) }}{% else %}N/A{% endif %}</span></div>
-              <div class="execution-metric"><span class="label">2R &#x6AA2;&#x67E5;&#x9EDE;</span><span class="value">{% if execution.target_2r is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.target_2r) }}{% else %}N/A{% endif %}</span></div>
-              <div class="execution-metric"><span class="label">&#x90E8;&#x4F4D;&#x4E0A;&#x9650;</span><span class="value">{% if execution.max_units is not none %}{{ "{:,}".format(execution.max_units) }} &#x55AE;&#x4F4D;{% elif execution.risk_pct is not none %}{{ execution.risk_pct|format_pct(sign=False) }} &#x98A8;&#x96AA;{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x89F8;&#x767C;&#x50F9;</span><span class="value">{% if execution.entry_trigger is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.entry_trigger) }}{% else %}待確認{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x5931;&#x6548;&#x50F9;</span><span class="value">{% if execution.invalidation is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.invalidation) }}{% else %}待確認{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">2R &#x6AA2;&#x67E5;&#x9EDE;</span><span class="value">{% if execution.target_2r is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.target_2r) }}{% else %}待確認{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x90E8;&#x4F4D;&#x4E0A;&#x9650;</span><span class="value">{% if execution.max_units is not none %}{{ "{:,}".format(execution.max_units) }} &#x55AE;&#x4F4D;{% elif execution.risk_pct is not none %}{{ execution.risk_pct|format_pct(sign=False) }} &#x98A8;&#x96AA;{% else %}待確認風險{% endif %}</span></div>
             </div>
             <div class="execution-plan-grid execution-plan-secondary">
               <div class="execution-metric"><span class="label">&#x5E33;&#x6236;&#x98A8;&#x96AA;&#x5BB9;&#x91CF;</span><span class="value">{% if execution.risk_available is not none %}{{ execution.currency }} {{ "{:,.0f}".format(execution.risk_available) }} &#x53EF;&#x7528;{% else %}&#x672A;&#x8A2D;&#x9810;&#x7B97;{% endif %}</span></div>
-              <div class="execution-metric"><span class="label">&#x8A02;&#x55AE;&#x6D41;&#x52D5;&#x6027;</span><span class="value">{% if execution.order_adv_pct is not none %}ADV {{ execution.order_adv_pct|format_pct(sign=False) }} &middot; {{ "%.2f"|format(execution.days_to_liquidate) }} &#x65E5;{% else %}N/A{% endif %}</span></div>
-              <div class="execution-metric"><span class="label">&#x8DF3;&#x7A7A;&#x58D3;&#x529B; / &#x55AE;&#x4F4D;</span><span class="value">{% if execution.stress_risk_per_unit is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.stress_risk_per_unit) }}{% else %}N/A{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x8A02;&#x55AE;&#x6D41;&#x52D5;&#x6027;</span><span class="value">{% if execution.order_adv_pct is not none %}ADV {{ execution.order_adv_pct|format_pct(sign=False) }} &middot; {{ "%.2f"|format(execution.days_to_liquidate) }} &#x65E5;{% elif execution.risk_budget is none %}待設定風險預算{% else %}尚未估算{% endif %}</span></div>
+              <div class="execution-metric"><span class="label">&#x8DF3;&#x7A7A;&#x58D3;&#x529B; / &#x55AE;&#x4F4D;</span><span class="value">{% if execution.stress_risk_per_unit is not none %}{{ execution.currency }} {{ "{:,.2f}".format(execution.stress_risk_per_unit) }}{% else %}待確認失效價{% endif %}</span></div>
               <div class="execution-metric"><span class="label">&#x8CC7;&#x6599;&#x4F86;&#x6E90;</span><span class="value">{{ execution.data_source }} &middot; {{ execution.data_as_of.isoformat() if execution.data_as_of else 'N/A' }}</span></div>
             </div>
+            {% else %}
+            <div class="execution-waiting">
+              <strong class="execution-waiting-title">{{ execution.waiting_title }}</strong>
+              <span class="execution-waiting-detail">{{ execution.waiting_detail }}</span>
+              {% if execution.watch_references %}
+              <div class="execution-watch-references" aria-label="轉強觀察參考">
+                {% for reference in execution.watch_references %}
+                <div class="execution-watch-reference">
+                  <span class="label">{{ reference.label }}</span>
+                  <span class="value">{{ execution.currency }} {{ "{:,.2f}".format(reference.value) }}</span>
+                  <span class="distance">距現價 {{ reference.distance_pct|format_pct }}</span>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+              <span class="execution-waiting-source">資料：{{ execution.data_source }} · {{ execution.data_as_of.isoformat() if execution.data_as_of else '日期不明' }}</span>
+            </div>
+            {% endif %}
             <details class="execution-gates">
               <summary>&#x6AA2;&#x67E5; {{ execution.gates|length }} &#x9805;&#x9032;&#x5834;&#x689D;&#x4EF6;{% if execution.failed_count %} &middot; {{ execution.failed_count }} &#x9805;&#x672A;&#x901A;&#x904E;{% endif %}</summary>
               <ul class="execution-gate-list">
                 {% for gate in execution.gates %}
-                <li class="{% if gate.passed %}passed{% endif %}">
-                  <span class="gate-mark">{% if gate.passed %}&#x2713;{% else %}&#x2715;{% endif %}</span>
+                <li class="{% if gate.passed %}passed{% elif not gate.required %}optional{% endif %}">
+                  <span class="gate-mark">{% if gate.passed %}&#x2713;{% elif gate.required %}&#x2715;{% else %}&mdash;{% endif %}</span>
                   <span class="gate-name">{% if gate.key == 'structure' %}&#x50F9;&#x683C;&#x7D50;&#x69CB;{% elif gate.key == 'market' %}&#x5E02;&#x5834;&#x8207;&#x76F8;&#x5C0D;&#x5F37;&#x5EA6;{% elif gate.key == 'group' %}&#x7522;&#x696D;&#x65CF;&#x7FA4;{% elif gate.key == 'portfolio' %}&#x7D44;&#x5408;&#x98A8;&#x96AA;{% elif gate.key == 'liquidity' %}&#x6D41;&#x52D5;&#x6027;{% elif gate.key == 'risk' %}&#x98A8;&#x96AA;&#x754C;&#x7DDA;{% elif gate.key == 'event' %}&#x4E8B;&#x4EF6;&#x98A8;&#x96AA;{% elif gate.key == 'quality' %}&#x8CC7;&#x6599;&#x54C1;&#x8CEA;{% else %}&#x9032;&#x5834;&#x7D00;&#x5F8B;{% endif %}</span>
                   <span class="gate-detail">{{ gate.detail|zh_text }}</span>
                 </li>
@@ -4990,7 +5193,7 @@
             <span><span class="label">影響</span><span class="value change" data-position-live-impact="{{ item.ticker.symbol }}">N/A</span></span>
           </div>
 
-          {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score or technical or right_side %}
+          {% if insights.action or insights.setup or insights.trend or insights.risk or insights.score or technical or right_side or moving_averages.visible %}
           <div class="insights">
             {% if insights.action %}<div class="insight-row action"><span class="insight-label">操作</span><span class="insight-text">{{ insights.action|zh_text }}</span></div>{% endif %}
             {% if insights.score %}
@@ -5023,11 +5226,31 @@
               </ul>
             </details>
             {% endif %}
+            {% if moving_averages.visible %}
+            <details class="moving-average-panel">
+              <summary>
+                <span class="insight-label">均線</span>
+                <span class="insight-text">{{ moving_averages.summary }} · {{ moving_averages.available_count }}/6</span>
+              </summary>
+              <div class="moving-average-grid">
+                {% for average in moving_averages.rows %}
+                <div class="moving-average-cell tone-{{ average.tone }}{% if average.is_annual %} annual-line{% endif %}">
+                  <span class="moving-average-label">{{ average.label }}{% if average.is_annual %} · 年線{% endif %}</span>
+                  <strong class="moving-average-value">{{ average.value|metric_value }}</strong>
+                  <span class="moving-average-distance">{{ average.relation }}{% if average.distance is not none %} · {{ average.distance|format_pct }}{% endif %}</span>
+                </div>
+                {% endfor %}
+              </div>
+              <div class="moving-average-source">
+                {{ moving_averages.source }}{% if moving_averages.as_of %} · {{ moving_averages.as_of_label }} {{ moving_averages.as_of }}{% endif %}{% if moving_averages.sessions %} · {{ moving_averages.sessions }} 個有效交易日{% endif %}{% if moving_averages.missing_count %} · {{ moving_averages.missing_count }} 條資料不足{% endif %}
+              </div>
+            </details>
+            {% endif %}
             {% if right_side %}
             <details class="insight-row right-side-check check-{{ right_side.tone }}">
               <summary>
                 <span class="insight-label">&#x53F3;&#x5074;&#x6AA2;&#x6838;</span>
-                <span class="insight-text">{{ right_side.ready_count }}/{{ right_side.check_count }} &middot; {{ right_side.status|zh_text }}</span>
+                <span class="insight-text">{{ right_side.pathway_status|zh_text }} &middot; {{ right_side.status|zh_text }}</span>
               </summary>
               <ul class="right-side-breakdown">
                 {% for check in right_side.checks %}
@@ -5056,7 +5279,7 @@
                 {% if technical.criteria %}<div class="decision-evidence-row"><strong>&#x7D50;&#x69CB;&#x4F9D;&#x64DA;</strong><span>{{ technical.criteria|join(' / ')|zh_text }}</span></div>{% endif %}
                 {% endif %}
                 {% if right_side %}
-                <div class="decision-evidence-row"><strong>&#x53F3;&#x5074;&#x6AA2;&#x6838;</strong><span>{{ right_side.ready_count }}/{{ right_side.check_count }} &middot; {{ right_side.status|zh_text }}</span></div>
+                <div class="decision-evidence-row"><strong>&#x53F3;&#x5074;&#x6AA2;&#x6838;</strong><span>{{ right_side.pathway_status|zh_text }} &middot; {{ right_side.status|zh_text }}</span></div>
                 <div class="decision-evidence-row">
                   <strong>&#x6AA2;&#x6838;&#x7D30;&#x9805;</strong>
                   <span>{% for check in right_side.checks %}{{ check.label|zh_text }}&#xFF1A;{{ check.status|zh_text }}{% if check.detail %} ({{ check.detail|zh_text }}){% endif %}{% if not loop.last %} / {% endif %}{% endfor %}</span>
@@ -6053,6 +6276,9 @@
         };
         var title = document.getElementById("market-workspace-title");
         if (title) title.textContent = marketNames[activeMarket];
+        Array.prototype.forEach.call(document.querySelectorAll("[data-market-context]"), function (context) {
+          context.hidden = context.dataset.marketContext !== activeMarket;
+        });
 
         var holdingCards = selectedCards.filter(function (card) { return card.dataset.positionStatus === "holding"; });
         var knownWeights = holdingCards.map(function (card) { return parseFloat(card.dataset.positionWeight); }).filter(function (value) { return !isNaN(value); });

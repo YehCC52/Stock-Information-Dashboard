@@ -513,6 +513,23 @@ class TickerHistoryPoint:
     signal_stop: float | None = None
     signal_risk_pct: float | None = None
 
+
+@dataclass(frozen=True)
+class TaiwanMarketOverview:
+    as_of_date: date
+    margin_maintenance_ratio_estimate: float
+    collateral_value_thousand_twd: float
+    financing_balance_thousand_twd: float
+    previous_financing_balance_thousand_twd: float | None
+    priced_margin_units: float
+    total_margin_units: float
+    price_coverage_pct: float
+    priced_security_count: int
+    margin_security_count: int
+    source: str
+    retrieved_at: datetime
+
+
 @dataclass(frozen=True)
 class TaiwanMarketSnapshot:
     ticker: str
@@ -555,6 +572,7 @@ class DailyReport:
     market_sentiment: MarketSentiment | None = None
     market_context: MarketContext | None = None
     premarket: PremarketSnapshot | None = None
+    taiwan_market_overview: TaiwanMarketOverview | None = None
     research_states: dict[str, TickerResearchState] = field(default_factory=dict)
     post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
     trade_journal: list[TradeJournalEntry] = field(default_factory=list)

@@ -1,14 +1,17 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from stock_daily_research.models import TickerConfig
 from stock_daily_research.taiwan_market import (
     TPEX_DIVIDEND_URL,
     TPEX_INSTITUTIONAL_URL,
     TPEX_MONTHLY_REVENUE_URL,
+    TWSE_DAILY_CLOSE_URL,
     TWSE_DIVIDEND_URL,
     TWSE_INSTITUTIONAL_URL,
+    TWSE_MARGIN_URL,
     TWSE_MONTHLY_REVENUE_URL,
     TaiwanMarketDataProvider,
+    _margin_maintenance_snapshot,
 )
 
 
@@ -17,7 +20,7 @@ def _u(*points: str) -> str:
 
 
 def test_provider_normalizes_official_taiwan_disclosures(monkeypatch) -> None:
-    provider = TaiwanMarketDataProvider()
+    provider = TaiwanMarketDataProvider(include_market_overview=False)
     code = _u("516c", "53f8", "4ee3", "865f")
     revenue_month = _u("8cc7", "6599", "5e74", "6708")
     revenue = _u("7576", "6708", "71df", "6536")
@@ -63,7 +66,7 @@ def test_provider_normalizes_official_taiwan_disclosures(monkeypatch) -> None:
 
 
 def test_provider_skips_non_taiwan_tickers_without_network(monkeypatch) -> None:
-    provider = TaiwanMarketDataProvider()
+    provider = TaiwanMarketDataProvider(include_market_overview=False)
     monkeypatch.setattr(provider, "_get_json", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected fetch")))
 
     result = provider.fetch(
@@ -75,7 +78,7 @@ def test_provider_skips_non_taiwan_tickers_without_network(monkeypatch) -> None:
     assert result.warnings == []
 
 def test_provider_normalizes_tpex_disclosures(monkeypatch) -> None:
-    provider = TaiwanMarketDataProvider()
+    provider = TaiwanMarketDataProvider(include_market_overview=False)
     code = _u("516c", "53f8", "4ee3", "865f")
     revenue_month = _u("8cc7", "6599", "5e74", "6708")
     revenue = _u("71df", "696d", "6536", "5165", "002d", "7576", "6708", "71df", "6536")
@@ -113,7 +116,7 @@ def test_provider_normalizes_tpex_disclosures(monkeypatch) -> None:
     assert snapshot.source == "TPEx OpenAPI"
 
 def test_provider_hides_stale_dividend_disclosures(monkeypatch) -> None:
-    provider = TaiwanMarketDataProvider()
+    provider = TaiwanMarketDataProvider(include_market_overview=False)
     code = _u("516c", "53f8", "4ee3", "865f")
     dividend_year = _u("80a1", "5229", "5e74", "5ea6")
     cash_dividend = _u("80a1", "6771", "914d", "767c", "5167", "5bb9", "002d", "76c8", "9918", "5206", "914d", "4e4b", "73fe", "91d1", "80a1", "5229", "0028", "5143", "002f", "80a1", "0029")
@@ -133,3 +136,95 @@ def test_provider_hides_stale_dividend_disclosures(monkeypatch) -> None:
     )
 
     assert result.snapshots == {}
+
+def _margin_payload(on: str = "20260728") -> dict[str, object]:
+    return {
+        "stat": "OK",
+        "date": on,
+        "tables": [
+            {
+                "fields": ["\u9805\u76ee", "\u524d\u65e5\u9918\u984d", "\u4eca\u65e5\u9918\u984d"],
+                "data": [
+                    ["\u878d\u8cc7(\u4ea4\u6613\u55ae\u4f4d)", "32", "31"],
+                    ["\u878d\u8cc7\u91d1\u984d(\u4edf\u5143)", "1,100", "1,000"],
+                ],
+            },
+            {
+                "fields": ["\u4ee3\u865f", "\u524d\u65e5\u9918\u984d", "\u4eca\u65e5\u9918\u984d"],
+                "data": [
+                    ["A", "12", "10"],
+                    ["B", "18", "20"],
+                    ["C", "2", "1"],
+                ],
+            },
+        ],
+    }
+
+
+def _close_payload(on: str = "20260728") -> dict[str, object]:
+    return {
+        "stat": "OK",
+        "date": on,
+        "tables": [
+            {
+                "fields": ["\u8b49\u5238\u4ee3\u865f", "\u6536\u76e4\u50f9"],
+                "data": [["A", "100"], ["B", "50"], ["C", "--"]],
+            }
+        ],
+    }
+
+
+def test_margin_maintenance_snapshot_uses_same_day_market_value() -> None:
+    retrieved_at = datetime(2026, 7, 29, 1, tzinfo=timezone.utc)
+
+    overview = _margin_maintenance_snapshot(
+        _margin_payload(),
+        _close_payload(),
+        retrieved_at,
+    )
+
+    assert overview is not None
+    assert overview.as_of_date == date(2026, 7, 28)
+    assert overview.margin_maintenance_ratio_estimate == 200.0
+    assert overview.collateral_value_thousand_twd == 2_000.0
+    assert overview.financing_balance_thousand_twd == 1_000.0
+    assert overview.previous_financing_balance_thousand_twd == 1_100.0
+    assert overview.price_coverage_pct == 96.77
+    assert overview.priced_security_count == 2
+    assert overview.margin_security_count == 3
+    assert overview.source == "TWSE MI_MARGN / MI_INDEX"
+
+
+def test_margin_maintenance_overview_scans_back_to_latest_trading_day(monkeypatch) -> None:
+    provider = TaiwanMarketDataProvider()
+    calls: list[tuple[str, str]] = []
+
+    def fake_get_json(url: str, params=None):
+        assert params is not None
+        requested_date = params["date"]
+        calls.append((url, requested_date))
+        if url == TWSE_MARGIN_URL:
+            if requested_date == "20260729":
+                return {"stat": "No data"}
+            assert requested_date == "20260728"
+            return _margin_payload(requested_date)
+        assert url == TWSE_DAILY_CLOSE_URL
+        return _close_payload(requested_date)
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+    warnings: list[str] = []
+
+    overview = provider._margin_maintenance_overview(
+        date(2026, 7, 29),
+        datetime(2026, 7, 29, 1, tzinfo=timezone.utc),
+        warnings,
+    )
+
+    assert overview is not None
+    assert overview.as_of_date == date(2026, 7, 28)
+    assert warnings == []
+    assert calls == [
+        (TWSE_MARGIN_URL, "20260729"),
+        (TWSE_MARGIN_URL, "20260728"),
+        (TWSE_DAILY_CLOSE_URL, "20260728"),
+    ]

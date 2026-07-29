@@ -14,6 +14,7 @@ from .models import (
     NewsArticle,
     PostEarningsReview,
     PositionConfig,
+    TaiwanMarketOverview,
     TickerHistoryPoint,
     TickerResearchState,
     TradeFill,
@@ -62,6 +63,21 @@ CREATE TABLE IF NOT EXISTS valuation_snapshots (
   metric_value TEXT,
   retrieved_at TEXT NOT NULL,
   UNIQUE(ticker, as_of_date, source, metric_name)
+);
+
+CREATE TABLE IF NOT EXISTS taiwan_market_overviews (
+  as_of_date TEXT PRIMARY KEY,
+  margin_maintenance_ratio_estimate REAL NOT NULL,
+  collateral_value_thousand_twd REAL NOT NULL,
+  financing_balance_thousand_twd REAL NOT NULL,
+  previous_financing_balance_thousand_twd REAL,
+  priced_margin_units REAL NOT NULL,
+  total_margin_units REAL NOT NULL,
+  price_coverage_pct REAL NOT NULL,
+  priced_security_count INTEGER NOT NULL,
+  margin_security_count INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS earnings_dates (
@@ -408,6 +424,8 @@ def save_report(conn: sqlite3.Connection, report: DailyReport) -> None:
             save_valuation(conn, ticker_report.valuation)
         if ticker_report.earnings:
             save_earnings(conn, ticker_report.earnings)
+    if report.taiwan_market_overview:
+        save_taiwan_market_overview(conn, report.taiwan_market_overview)
     for state in report.research_states.values():
         upsert_ticker_research_state(conn, state)
     for review in report.post_earnings_reviews.values():
@@ -491,6 +509,106 @@ def save_valuation(conn: sqlite3.Connection, valuation: ValuationSnapshot) -> No
                 valuation.retrieved_at.isoformat(),
             ),
         )
+
+
+def save_taiwan_market_overview(
+    conn: sqlite3.Connection,
+    overview: TaiwanMarketOverview,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO taiwan_market_overviews
+        (as_of_date, margin_maintenance_ratio_estimate,
+         collateral_value_thousand_twd, financing_balance_thousand_twd,
+         previous_financing_balance_thousand_twd, priced_margin_units,
+         total_margin_units, price_coverage_pct, priced_security_count,
+         margin_security_count, source, retrieved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(as_of_date) DO UPDATE SET
+          margin_maintenance_ratio_estimate = excluded.margin_maintenance_ratio_estimate,
+          collateral_value_thousand_twd = excluded.collateral_value_thousand_twd,
+          financing_balance_thousand_twd = excluded.financing_balance_thousand_twd,
+          previous_financing_balance_thousand_twd = excluded.previous_financing_balance_thousand_twd,
+          priced_margin_units = excluded.priced_margin_units,
+          total_margin_units = excluded.total_margin_units,
+          price_coverage_pct = excluded.price_coverage_pct,
+          priced_security_count = excluded.priced_security_count,
+          margin_security_count = excluded.margin_security_count,
+          source = excluded.source,
+          retrieved_at = excluded.retrieved_at
+        """,
+        (
+            overview.as_of_date.isoformat(),
+            overview.margin_maintenance_ratio_estimate,
+            overview.collateral_value_thousand_twd,
+            overview.financing_balance_thousand_twd,
+            overview.previous_financing_balance_thousand_twd,
+            overview.priced_margin_units,
+            overview.total_margin_units,
+            overview.price_coverage_pct,
+            overview.priced_security_count,
+            overview.margin_security_count,
+            overview.source,
+            overview.retrieved_at.isoformat(),
+        ),
+    )
+
+
+def load_fresh_taiwan_market_overview(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    max_age_hours: int = 4,
+) -> TaiwanMarketOverview | None:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    return _load_taiwan_market_overview(conn, before_or_on=before_or_on, cutoff=cutoff)
+
+
+def load_latest_taiwan_market_overview(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+) -> TaiwanMarketOverview | None:
+    return _load_taiwan_market_overview(conn, before_or_on=before_or_on)
+
+
+def _load_taiwan_market_overview(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    cutoff: str | None = None,
+) -> TaiwanMarketOverview | None:
+    sql = """
+        SELECT as_of_date, margin_maintenance_ratio_estimate,
+               collateral_value_thousand_twd, financing_balance_thousand_twd,
+               previous_financing_balance_thousand_twd, priced_margin_units,
+               total_margin_units, price_coverage_pct, priced_security_count,
+               margin_security_count, source, retrieved_at
+        FROM taiwan_market_overviews
+        WHERE as_of_date <= ?
+    """
+    params: list[object] = [before_or_on.isoformat()]
+    if cutoff is not None:
+        sql += " AND retrieved_at >= ?"
+        params.append(cutoff)
+    sql += " ORDER BY as_of_date DESC, retrieved_at DESC LIMIT 1"
+    row = conn.execute(sql, params).fetchone()
+    if row is None:
+        return None
+    return TaiwanMarketOverview(
+        as_of_date=date.fromisoformat(row[0]),
+        margin_maintenance_ratio_estimate=float(row[1]),
+        collateral_value_thousand_twd=float(row[2]),
+        financing_balance_thousand_twd=float(row[3]),
+        previous_financing_balance_thousand_twd=(float(row[4]) if row[4] is not None else None),
+        priced_margin_units=float(row[5]),
+        total_margin_units=float(row[6]),
+        price_coverage_pct=float(row[7]),
+        priced_security_count=int(row[8]),
+        margin_security_count=int(row[9]),
+        source=str(row[10]),
+        retrieved_at=datetime.fromisoformat(row[11]),
+    )
 
 
 def save_earnings(conn: sqlite3.Connection, earnings: EarningsDate) -> None:

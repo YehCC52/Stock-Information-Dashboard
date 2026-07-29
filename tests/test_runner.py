@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from stock_daily_research.models import DailyReport, InvestmentPlan, MarketContext, MarketSentiment, PositionConfig, PremarketSnapshot, ResearchDefaults, TickerConfig, TickerReport, TickerResearchState, ValuationSnapshot
-from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, _fetch_one_ticker, _has_usable_valuation, run_daily
+from stock_daily_research.runner import _apply_plan_defaults, _apply_position_overrides, _fetch_one_ticker, _has_usable_valuation, _right_side_history_status, run_daily
 from stock_daily_research.storage import init_db, save_report
 
 
@@ -21,6 +21,17 @@ tickers:
       - reuters.com
 """
 
+
+def test_right_side_history_status_requires_execution_ready() -> None:
+    ready_check = {"status": "Right-side ready"}
+
+    assert _right_side_history_status(ready_check, {"status": "ready"}) == "Right-side ready"
+    assert _right_side_history_status(ready_check, {"status": "blocked"}) == "Execution blocked"
+    assert _right_side_history_status(ready_check, {"status": "watch"}) == "Execution watch"
+    assert _right_side_history_status(
+        {"status": "Base building"},
+        {"status": "watch"},
+    ) == "Base building"
 
 def _sentiment() -> MarketSentiment:
     return MarketSentiment(
@@ -457,3 +468,90 @@ def test_fetch_one_ticker_skips_earnings_fetch_for_etf(monkeypatch) -> None:
     assert result.valuation is snapshot
     assert result.earnings is None
     assert result.warnings == []
+
+
+def test_run_daily_persists_and_reuses_taiwan_margin_overview(tmp_path: Path, monkeypatch) -> None:
+    from stock_daily_research.models import TaiwanMarketOverview
+    from stock_daily_research.storage import load_latest_taiwan_market_overview
+    from stock_daily_research.taiwan_market import TaiwanMarketFetchResult
+
+    config_path = tmp_path / "watchlist.yaml"
+    config_path.write_text(
+        """
+settings:
+  report_timezone: UTC
+tickers:
+  - symbol: 2330.TW
+    company_name: Taiwan Semiconductor Manufacturing
+    market: twse
+    currency: TWD
+""".strip(),
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "stock.sqlite3"
+    output_dir = tmp_path / "reports"
+    overview = TaiwanMarketOverview(
+        as_of_date=date(2026, 7, 28),
+        margin_maintenance_ratio_estimate=163.08,
+        collateral_value_thousand_twd=889_641_682.48,
+        financing_balance_thousand_twd=545_534_811.0,
+        previous_financing_balance_thousand_twd=568_663_408.0,
+        priced_margin_units=9_094_733.0,
+        total_margin_units=9_096_008.0,
+        price_coverage_pct=99.99,
+        priced_security_count=1_218,
+        margin_security_count=1_223,
+        source="TWSE MI_MARGN / MI_INDEX",
+        retrieved_at=datetime.now(timezone.utc).replace(microsecond=0),
+    )
+    overview_fetch_flags: list[bool] = []
+
+    def fake_fetch(self, tickers, report_date):
+        overview_fetch_flags.append(self.include_market_overview)
+        return TaiwanMarketFetchResult(
+            snapshots={},
+            overview=overview if self.include_market_overview else None,
+            warnings=[],
+        )
+
+    monkeypatch.setattr(
+        "stock_daily_research.runner.TaiwanMarketDataProvider.fetch",
+        fake_fetch,
+    )
+
+    first = run_daily(
+        config_path=config_path,
+        report_date=date(2026, 7, 29),
+        output_dir=output_dir,
+        db_path=db_path,
+        fetch_news=False,
+        fetch_valuation=False,
+        fetch_macro=False,
+        progress=False,
+    )
+    second = run_daily(
+        config_path=config_path,
+        report_date=date(2026, 7, 29),
+        output_dir=output_dir,
+        db_path=db_path,
+        fetch_news=False,
+        fetch_valuation=False,
+        fetch_macro=False,
+        progress=False,
+    )
+
+    with init_db(db_path) as conn:
+        cached = load_latest_taiwan_market_overview(
+            conn,
+            before_or_on=date(2026, 7, 29),
+        )
+
+    html = (output_dir / "2026" / "07" / "2026-07-29.html").read_text(
+        encoding="utf-8"
+    )
+    assert first.taiwan_market_overview == overview
+    assert second.taiwan_market_overview == overview
+    assert cached == overview
+    assert overview_fetch_flags == [True, False]
+    assert "163.1%" in html
+    assert "\u4e0a\u5e02\u5927\u76e4\u878d\u8cc7\u7dad\u6301\u7387" in html
