@@ -12,7 +12,9 @@ from .models import EarningsDate, TickerConfig, ValuationSnapshot
 # Explicit bound on yfinance price-history calls. yfinance defaults to 10s
 # internally; pin it here so the timeout is visible and tunable in one place.
 YF_HISTORY_TIMEOUT = 10
-TECHNICAL_HISTORY_VERSION = 2
+TECHNICAL_HISTORY_VERSION = 3
+TECHNICAL_HISTORY_PERIOD = "2y"
+MOVING_AVERAGE_PERIODS = (5, 10, 20, 60, 120, 200, 240)
 PRICE_REGIME_RESET_PCT = 50.0
 
 
@@ -77,13 +79,16 @@ def fetch_yfinance_valuation(ticker: TickerConfig) -> ValuationSnapshot:
     )
 
 
-def fetch_moving_averages(yf_ticker: Any, period: str = "1y") -> dict[str, float | None]:
+def fetch_moving_averages(
+    yf_ticker: Any,
+    period: str = TECHNICAL_HISTORY_PERIOD,
+) -> dict[str, float | None]:
     """Compute simple moving averages from recent close history.
 
-    Returns sma_5, sma_20, sma_60, sma_120 — `None` when insufficient history.
+    Returns the configured SMA periods, or `None` when history is insufficient.
     Failures are swallowed: a missing MA degrades the trend display, never the run.
     """
-    sma_keys = ("sma_5", "sma_20", "sma_60", "sma_120")
+    sma_keys = tuple(f"sma_{window}" for window in MOVING_AVERAGE_PERIODS)
     empty = {k: None for k in sma_keys}
     try:
         hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
@@ -94,19 +99,23 @@ def fetch_moving_averages(yf_ticker: Any, period: str = "1y") -> dict[str, float
     hist, _regime = _latest_technical_history_regime(hist)
     closes = _series_floats(hist["Close"])
     return {
-        "sma_5": _mean_last_n(closes, 5),
-        "sma_20": _mean_last_n(closes, 20),
-        "sma_60": _mean_last_n(closes, 60),
-        "sma_120": _mean_last_n(closes, 120),
+        f"sma_{window}": _mean_last_n(closes, window)
+        for window in MOVING_AVERAGE_PERIODS
     }
 
 
-def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, Any]:
+def fetch_technical_indicators(
+    yf_ticker: Any,
+    period: str = TECHNICAL_HISTORY_PERIOD,
+) -> dict[str, Any]:
     numeric_keys = (
         "sma_5",
+        "sma_10",
         "sma_20",
         "sma_60",
         "sma_120",
+        "sma_200",
+        "sma_240",
         "rsi_14",
         "return_5d",
         "return_20d",
@@ -145,6 +154,7 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
         "price_regime_change_date": None,
         "price_regime_change_pct": None,
         "price_history_sessions": 0,
+        "price_history_as_of_date": None,
     })
     try:
         hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
@@ -161,10 +171,10 @@ def fetch_technical_indicators(yf_ticker: Any, period: str = "1y") -> dict[str, 
     right_side_setup = compute_right_side_setup_metrics(hist)
     price_chart = compute_price_chart_metrics(hist)
     return {
-        "sma_5": _mean_last_n(closes, 5),
-        "sma_20": _mean_last_n(closes, 20),
-        "sma_60": _mean_last_n(closes, 60),
-        "sma_120": _mean_last_n(closes, 120),
+        **{
+            f"sma_{window}": _mean_last_n(closes, window)
+            for window in MOVING_AVERAGE_PERIODS
+        },
         "rsi_14": compute_rsi(closes, 14),
         "return_5d": _n_session_return(closes, 5),
         "return_20d": _n_session_return(closes, 20),
@@ -295,6 +305,23 @@ def _series_floats(series: Any) -> list[float]:
     return out
 
 
+def _history_index_date(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    try:
+        normalized = value.date()
+    except (AttributeError, TypeError, ValueError):
+        normalized = None
+    if isinstance(normalized, date):
+        return normalized.isoformat()
+    try:
+        return date.fromisoformat(str(value).split(" ", 1)[0]).isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
 def _latest_technical_history_regime(hist: Any) -> tuple[Any, dict[str, Any]]:
     """Keep technical calculations inside the latest comparable price regime.
 
@@ -308,6 +335,7 @@ def _latest_technical_history_regime(hist: Any) -> tuple[Any, dict[str, Any]]:
         "price_regime_change_date": None,
         "price_regime_change_pct": None,
         "price_history_sessions": 0,
+        "price_history_as_of_date": None,
     }
     if hist is None or hist.empty or "Close" not in hist.columns:
         return hist, metadata
@@ -351,14 +379,11 @@ def _latest_technical_history_regime(hist: Any) -> tuple[Any, dict[str, Any]]:
     if reset_position is not None and reset_change is not None:
         frame = frame.iloc[reset_position:]
         label = frame.index[0]
-        try:
-            change_date = label.date().isoformat()
-        except (AttributeError, TypeError, ValueError):
-            change_date = str(label).split(" ", 1)[0]
-        metadata["price_regime_change_date"] = change_date
+        metadata["price_regime_change_date"] = _history_index_date(label)
         metadata["price_regime_change_pct"] = round(reset_change, 2)
 
     metadata["price_history_sessions"] = len(frame)
+    metadata["price_history_as_of_date"] = _history_index_date(frame.index[-1])
     return frame, metadata
 
 

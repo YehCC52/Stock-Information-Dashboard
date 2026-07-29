@@ -10,6 +10,19 @@ Generated: {{ report.generated_at|twn_datetime }}
 {% endfor %}
 {% endif %}
 
+{% if taiwan_margin.visible %}
+## 台股融資風險
+
+- 上市大盤融資維持率（估算）：{{ taiwan_margin.ratio_label }} · {{ taiwan_margin.status }}
+{% if taiwan_margin.available %}
+- {{ taiwan_margin.reference_label }} · {{ taiwan_margin.balance_label }}{{ (" · " ~ taiwan_margin.balance_change_label) if taiwan_margin.balance_change_label else "" }}
+{% endif %}
+- {{ taiwan_margin.detail }}
+- 資料：{{ taiwan_margin.source_label }}{{ (" · " ~ taiwan_margin.coverage_label) if taiwan_margin.available else "" }}
+- 註：{{ taiwan_margin.disclaimer }}
+
+{% endif %}
+
 {% if report.premarket %}
 ## Overnight / Premarket
 

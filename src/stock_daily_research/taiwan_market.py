@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import requests
 
-from .models import TaiwanMarketSnapshot, TickerConfig
+from .models import TaiwanMarketOverview, TaiwanMarketSnapshot, TickerConfig
 
 
 TWSE_MONTHLY_REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
@@ -15,29 +15,45 @@ TWSE_INSTITUTIONAL_URL = "https://www.twse.com.tw/rwd/zh/fund/T86"
 TPEX_MONTHLY_REVENUE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O"
 TPEX_DIVIDEND_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap39_O"
 TPEX_INSTITUTIONAL_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
+TWSE_MARGIN_URL = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
+TWSE_DAILY_CLOSE_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
 _REQUEST_TIMEOUT_SECONDS = 12
+_MIN_MARGIN_PRICE_COVERAGE_PCT = 95.0
 
 
 @dataclass(frozen=True)
 class TaiwanMarketFetchResult:
     snapshots: dict[str, TaiwanMarketSnapshot]
+    overview: TaiwanMarketOverview | None
     warnings: list[str]
 
 
 class TaiwanMarketDataProvider:
     """Official TWSE and TPEx disclosures for Taiwan watchlist securities."""
 
-    def __init__(self, timeout_seconds: int = _REQUEST_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self,
+        timeout_seconds: int = _REQUEST_TIMEOUT_SECONDS,
+        *,
+        include_market_overview: bool = True,
+    ) -> None:
         self.timeout_seconds = timeout_seconds
+        self.include_market_overview = include_market_overview
 
     def fetch(self, tickers: list[TickerConfig], report_date: date) -> TaiwanMarketFetchResult:
         twse_tickers = [ticker for ticker in tickers if ticker.market == "twse"]
         tpex_tickers = [ticker for ticker in tickers if ticker.market == "tpex"]
         taiwan_tickers = [*twse_tickers, *tpex_tickers]
         if not taiwan_tickers:
-            return TaiwanMarketFetchResult(snapshots={}, warnings=[])
+            return TaiwanMarketFetchResult(snapshots={}, overview=None, warnings=[])
 
         warnings: list[str] = []
+        retrieved_at = datetime.now(timezone.utc)
+        overview = (
+            self._margin_maintenance_overview(report_date, retrieved_at, warnings)
+            if self.include_market_overview
+            else None
+        )
         revenue_by_symbol: dict[str, dict[str, object]] = {}
         dividend_by_symbol: dict[str, dict[str, object]] = {}
         flow_by_symbol: dict[str, dict[str, object]] = {}
@@ -50,7 +66,6 @@ class TaiwanMarketDataProvider:
             dividend_by_symbol.update(self._cash_dividends(TPEX_DIVIDEND_URL, "TPEx", warnings))
             flow_by_symbol.update(self._tpex_institutional_flow(warnings))
 
-        retrieved_at = datetime.now(timezone.utc)
         snapshots: dict[str, TaiwanMarketSnapshot] = {}
         for ticker in taiwan_tickers:
             code = ticker.display_symbol
@@ -85,7 +100,53 @@ class TaiwanMarketDataProvider:
                 source="TWSE OpenAPI / T86" if ticker.market == "twse" else "TPEx OpenAPI",
                 retrieved_at=retrieved_at,
             )
-        return TaiwanMarketFetchResult(snapshots=snapshots, warnings=warnings)
+        return TaiwanMarketFetchResult(snapshots=snapshots, overview=overview, warnings=warnings)
+
+    def _margin_maintenance_overview(
+        self,
+        report_date: date,
+        retrieved_at: datetime,
+        warnings: list[str],
+    ) -> TaiwanMarketOverview | None:
+        low_coverage_pct: float | None = None
+        for offset in range(10):
+            candidate = report_date - timedelta(days=offset)
+            if candidate.weekday() >= 5:
+                continue
+            try:
+                margin_payload = self._get_json(
+                    TWSE_MARGIN_URL,
+                    params={"date": candidate.strftime("%Y%m%d"), "selectType": "ALL", "response": "json"},
+                )
+            except requests.RequestException:
+                continue
+            if _payload_date(margin_payload) is None:
+                continue
+            try:
+                close_payload = self._get_json(
+                    TWSE_DAILY_CLOSE_URL,
+                    params={"date": candidate.strftime("%Y%m%d"), "type": "ALLBUT0999", "response": "json"},
+                )
+            except requests.RequestException:
+                continue
+            overview = _margin_maintenance_snapshot(margin_payload, close_payload, retrieved_at)
+            if overview is None:
+                continue
+            if overview.price_coverage_pct < _MIN_MARGIN_PRICE_COVERAGE_PCT:
+                low_coverage_pct = overview.price_coverage_pct
+                continue
+            return overview
+
+        if low_coverage_pct is not None:
+            warnings.append(
+                f"TWSE margin maintenance estimate unavailable: close-price coverage was {low_coverage_pct:.2f}%."
+            )
+        else:
+            warnings.append(
+                "TWSE margin maintenance estimate unavailable for recent trading days."
+            )
+        return None
+
     def _monthly_revenue(self, url: str, source: str, warnings: list[str]) -> dict[str, dict[str, object]]:
         try:
             payload = self._get_json(url)
@@ -196,6 +257,149 @@ class TaiwanMarketDataProvider:
                     time.sleep(1)
         assert last_error is not None
         raise last_error
+
+
+def _margin_maintenance_snapshot(
+    margin_payload: object,
+    close_payload: object,
+    retrieved_at: datetime,
+) -> TaiwanMarketOverview | None:
+    """Estimate listed-market financing maintenance from same-day TWSE data."""
+    margin_date = _payload_date(margin_payload)
+    close_date = _payload_date(close_payload)
+    if margin_date is None or close_date != margin_date:
+        return None
+
+    summary = _table_with_fields(
+        margin_payload,
+        ("\u9805\u76ee", "\u524d\u65e5\u9918\u984d", "\u4eca\u65e5\u9918\u984d"),
+    )
+    balances = _table_with_fields(
+        margin_payload,
+        ("\u4ee3\u865f", "\u524d\u65e5\u9918\u984d", "\u4eca\u65e5\u9918\u984d"),
+    )
+    closes = _table_with_fields(
+        close_payload,
+        ("\u8b49\u5238\u4ee3\u865f", "\u6536\u76e4\u50f9"),
+    )
+    if summary is None or balances is None or closes is None:
+        return None
+
+    summary_fields = [str(value) for value in summary["fields"]]
+    item_index = summary_fields.index("\u9805\u76ee")
+    previous_index = summary_fields.index("\u524d\u65e5\u9918\u984d")
+    current_index = summary_fields.index("\u4eca\u65e5\u9918\u984d")
+    financing_balance: float | None = None
+    previous_financing_balance: float | None = None
+    total_margin_units: float | None = None
+    for row in summary["data"]:
+        if not isinstance(row, list):
+            continue
+        label = _row_value(row, item_index).replace(" ", "")
+        if label.startswith("\u878d\u8cc7\u91d1\u984d"):
+            financing_balance = _number_value(_row_value(row, current_index))
+            previous_financing_balance = _number_value(_row_value(row, previous_index))
+        elif label.startswith("\u878d\u8cc7("):
+            total_margin_units = _number_value(_row_value(row, current_index))
+
+    if financing_balance is None or financing_balance <= 0:
+        return None
+
+    close_fields = [str(value) for value in closes["fields"]]
+    close_code_index = close_fields.index("\u8b49\u5238\u4ee3\u865f")
+    close_price_index = close_fields.index("\u6536\u76e4\u50f9")
+    prices: dict[str, float] = {}
+    for row in closes["data"]:
+        if not isinstance(row, list):
+            continue
+        code = _row_value(row, close_code_index)
+        price = _number_value(_row_value(row, close_price_index))
+        if code and price is not None and price > 0:
+            prices[code] = price
+
+    balance_fields = [str(value) for value in balances["fields"]]
+    balance_code_index = balance_fields.index("\u4ee3\u865f")
+    balance_index = balance_fields.index("\u4eca\u65e5\u9918\u984d")
+    collateral_value = 0.0
+    priced_margin_units = 0.0
+    detail_margin_units = 0.0
+    priced_security_count = 0
+    margin_security_count = 0
+    for row in balances["data"]:
+        if not isinstance(row, list):
+            continue
+        code = _row_value(row, balance_code_index)
+        units = _number_value(_row_value(row, balance_index))
+        if not code or units is None or units <= 0:
+            continue
+        margin_security_count += 1
+        detail_margin_units += units
+        price = prices.get(code)
+        if price is None:
+            continue
+        priced_security_count += 1
+        priced_margin_units += units
+        # One trading unit is normally 1,000 shares; TWD and thousand-TWD cancel.
+        collateral_value += price * units
+
+    coverage_denominator = total_margin_units or detail_margin_units
+    if collateral_value <= 0 or coverage_denominator <= 0:
+        return None
+    coverage = min(100.0, priced_margin_units / coverage_denominator * 100.0)
+    ratio = collateral_value / financing_balance * 100.0
+    return TaiwanMarketOverview(
+        as_of_date=margin_date,
+        margin_maintenance_ratio_estimate=round(ratio, 2),
+        collateral_value_thousand_twd=round(collateral_value, 2),
+        financing_balance_thousand_twd=round(financing_balance, 2),
+        previous_financing_balance_thousand_twd=(
+            round(previous_financing_balance, 2)
+            if previous_financing_balance is not None
+            else None
+        ),
+        priced_margin_units=round(priced_margin_units, 2),
+        total_margin_units=round(coverage_denominator, 2),
+        price_coverage_pct=round(coverage, 2),
+        priced_security_count=priced_security_count,
+        margin_security_count=margin_security_count,
+        source="TWSE MI_MARGN / MI_INDEX",
+        retrieved_at=retrieved_at,
+    )
+
+
+def _payload_date(payload: object) -> date | None:
+    if not isinstance(payload, dict) or payload.get("stat") != "OK":
+        return None
+    value = str(payload.get("date", "")).strip()
+    if len(value) != 8 or not value.isdigit():
+        return None
+    try:
+        return date(int(value[:4]), int(value[4:6]), int(value[6:]))
+    except ValueError:
+        return None
+
+
+def _table_with_fields(
+    payload: object,
+    required_fields: tuple[str, ...],
+) -> dict[str, list[object]] | None:
+    if not isinstance(payload, dict):
+        return None
+    tables = payload.get("tables")
+    if not isinstance(tables, list):
+        return None
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        fields = table.get("fields")
+        rows = table.get("data")
+        if not isinstance(fields, list) or not isinstance(rows, list):
+            continue
+        field_names = {str(field) for field in fields}
+        if all(field in field_names for field in required_fields):
+            return {"fields": fields, "data": rows}
+    return None
+
 
 def _summarize_institutional_history(
     daily_rows: list[dict[str, dict[str, object]]],

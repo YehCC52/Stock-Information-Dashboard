@@ -42,6 +42,7 @@ from stock_daily_research.report import (
     market_label,
     map_change_bin,
     morning_briefing_cards,
+    moving_average_snapshot,
     news_tier,
     pe_class,
     position_view,
@@ -1004,6 +1005,114 @@ def test_render_html_report_includes_technical_playbook() -> None:
     assert 'class="technical-breakdown"' in output
 
 
+def test_moving_average_snapshot_uses_market_specific_annual_line() -> None:
+    metrics = {
+        "last_close": 130.0,
+        "sma_5": 125.0,
+        "sma_10": 120.0,
+        "sma_20": 115.0,
+        "sma_60": 110.0,
+        "sma_120": 100.0,
+        "sma_200": 95.0,
+        "sma_240": 90.0,
+        "price_history_sessions": 500,
+        "price_history_as_of_date": "2026-07-27",
+    }
+    us_item = _score_item(metrics)
+    taiwan_item = replace(
+        us_item,
+        ticker=replace(
+            us_item.ticker,
+            symbol="2330.TW",
+            company_name="台積電",
+            market="twse",
+            currency="TWD",
+        ),
+    )
+
+    us_view = moving_average_snapshot(us_item)
+    taiwan_view = moving_average_snapshot(taiwan_item)
+
+    assert [row["label"] for row in us_view["rows"]] == [
+        "MA5", "MA10", "MA20", "MA60", "MA120", "MA200",
+    ]
+    assert [row["label"] for row in taiwan_view["rows"]] == [
+        "MA5", "MA10", "MA20", "MA60", "MA120", "MA240",
+    ]
+    assert us_view["summary"] == "完整多頭排列"
+    assert taiwan_view["summary"] == "完整多頭排列"
+    assert us_view["source"] == "Yahoo Finance 遠端日線"
+    assert us_view["as_of"] == "2026-07-27"
+    assert us_view["sessions"] == 500
+
+
+def test_moving_average_snapshot_marks_unavailable_long_average() -> None:
+    item = _score_item({
+        "last_close": 120.0,
+        "sma_5": 118.0,
+        "sma_10": 116.0,
+        "sma_20": 112.0,
+        "sma_60": 105.0,
+        "sma_120": 100.0,
+        "sma_200": None,
+        "price_history_sessions": 120,
+        "price_history_as_of_date": "2026-07-27",
+    })
+
+    view = moving_average_snapshot(item)
+
+    assert view["available_count"] == 5
+    assert view["missing_count"] == 1
+    assert view["summary"] == "站上多數可用均線"
+    assert view["rows"][-1]["label"] == "MA200"
+    assert view["rows"][-1]["value"] is None
+    assert view["rows"][-1]["relation"] == "資料不足"
+
+
+def test_render_html_report_includes_market_aware_moving_average_panels() -> None:
+    metrics = {
+        "last_close": 130.0,
+        "sma_5": 125.0,
+        "sma_10": 120.0,
+        "sma_20": 115.0,
+        "sma_60": 110.0,
+        "sma_120": 100.0,
+        "sma_200": 95.0,
+        "sma_240": 90.0,
+        "price_history_sessions": 500,
+        "price_history_as_of_date": "2026-07-27",
+    }
+    us_item = _score_item(metrics)
+    taiwan_item = replace(
+        _score_item(metrics),
+        ticker=TickerConfig(
+            symbol="2330.TW", company_name="台積電", market="twse", currency="TWD",
+        ),
+    )
+    report = DailyReport(
+        report_date=date(2026, 7, 28),
+        generated_at=datetime(2026, 7, 28, tzinfo=timezone.utc),
+        ticker_reports=[us_item, taiwan_item],
+    )
+
+    output = render_html_report(report)
+
+    assert output.count('class="moving-average-panel"') == 2
+    assert '<span class="moving-average-label">MA200 · 年線</span>' in output
+    assert '<span class="moving-average-label">MA240 · 年線</span>' in output
+    assert output.count("Yahoo Finance 遠端日線") == 2
+    grid_css = output.split(".moving-average-grid {", 1)[1].split("}", 1)[0]
+    value_css = output.split(".moving-average-value {", 1)[1].split("}", 1)[0]
+    distance_css = output.split(".moving-average-distance {", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in grid_css
+    assert "margin: 7px 0 0;" in grid_css
+    assert "white-space: nowrap;" in value_css
+    assert "overflow-wrap: normal;" in value_css
+    assert "word-break: normal;" in value_css
+    assert "white-space: nowrap;" in distance_css
+    assert "@media (max-width: 360px)" in output
+
+
 def _framework_item(
     closes: list[float],
     highs: list[float],
@@ -1221,16 +1330,21 @@ def test_price_regime_reset_suspends_signals_and_renders_rebuild_state() -> None
     assert 'data-price-regime-reset="1"' in output
     assert "8/21" in output
 
-def test_right_side_check_marks_a_tight_base_with_held_breakout_as_ready() -> None:
+def test_right_side_check_accepts_breakout_without_contraction() -> None:
     from stock_daily_research.report import right_side_check
 
     item = _score_item({
         "last_close": 103.5,
+        "sma_20": 102.0,
+        "sma_60": 98.0,
+        "sma_120": 90.0,
+        "volume_vs_20d": 1.6,
+        "prior_20d_high": 101.0,
         "prior_20d_low": 100.0,
         "atr_20": 1.5,
-        "atr_contraction_ratio": 0.65,
-        "bb_width_20_percentile": 15.0,
-        "volume_5d_vs_20d": 0.70,
+        "atr_contraction_ratio": 1.05,
+        "bb_width_20_percentile": 60.0,
+        "volume_5d_vs_20d": 1.20,
         "breakout_days_ago": 2.0,
         "breakout_pivot": 101.0,
         "breakout_hold_pct": 2.48,
@@ -1241,19 +1355,22 @@ def test_right_side_check_marks_a_tight_base_with_held_breakout_as_ready() -> No
 
     assert result is not None
     assert result["status"] == "Right-side ready"
-    assert result["ready_count"] == 3
+    assert result["active_pathway"] == "breakout"
+    assert result["pathway_status"] == "Breakout entry ready"
     checks = {check["label"]: check for check in result["checks"]}
-    assert checks["Volatility contraction"]["status"] == "Base tightening"
-    assert checks["Breakout validation"]["status"] == "Breakout holding"
-    assert checks["Risk box"]["status"] == "Risk controlled"
-    assert "2R checkpoint" in checks["Risk box"]["detail"]
+    assert checks["Breakout entry"]["status"] == "Breakout holding"
+    assert checks["Contraction watch"]["passed"] is False
 
 
-def test_right_side_check_rejects_a_failed_breakout_even_when_risk_is_small() -> None:
+def test_right_side_check_rejects_a_failed_breakout_even_when_trend_is_up() -> None:
     from stock_daily_research.report import right_side_check
 
     item = _score_item({
         "last_close": 99.0,
+        "sma_20": 98.0,
+        "sma_60": 95.0,
+        "sma_120": 90.0,
+        "prior_20d_high": 100.0,
         "prior_20d_low": 90.0,
         "atr_20": 2.0,
         "atr_contraction_ratio": 0.70,
@@ -1270,18 +1387,101 @@ def test_right_side_check_rejects_a_failed_breakout_even_when_risk_is_small() ->
     assert result is not None
     assert result["status"] == "Protect capital first"
     assert result["tone"] == "down"
-    breakout = next(check for check in result["checks"] if check["label"] == "Breakout validation")
+    breakout = next(
+        check for check in result["checks"] if check["label"] == "Breakout entry"
+    )
     assert breakout["status"] == "Breakout failed"
 
 
-def test_render_html_report_includes_right_side_check() -> None:
+def test_right_side_check_accepts_pullback_without_recent_breakout() -> None:
+    from stock_daily_research.report import right_side_check
+
     item = _score_item({
-        "last_close": 103.5,
-        "prior_20d_low": 100.0,
-        "atr_20": 1.5,
+        "last_close": 101.0,
+        "previous_close": 100.5,
+        "sma_20": 100.0,
+        "sma_60": 95.0,
+        "sma_120": 90.0,
+        "rsi_14": 55.0,
+        "volume_vs_20d": 0.8,
+        "atr_contraction_ratio": 1.0,
+        "bb_width_20_percentile": 55.0,
+        "volume_5d_vs_20d": 1.0,
+    })
+
+    result = right_side_check(item)
+
+    assert result is not None
+    assert result["status"] == "Right-side ready"
+    assert result["active_pathway"] == "pullback"
+    assert result["pathway_status"] == "Pullback entry ready"
+    checks = {check["label"]: check for check in result["checks"]}
+    assert checks["Pullback entry"]["status"] == "Pullback holding support"
+    assert checks["Breakout entry"]["passed"] is False
+    assert checks["Contraction watch"]["passed"] is False
+
+
+def test_right_side_check_keeps_contraction_as_waiting_state() -> None:
+    from stock_daily_research.report import right_side_check
+
+    item = _score_item({
+        "last_close": 105.0,
+        "sma_20": 100.0,
+        "sma_60": 95.0,
+        "sma_120": 90.0,
+        "rsi_14": 55.0,
+        "volume_vs_20d": 1.0,
         "atr_contraction_ratio": 0.65,
         "bb_width_20_percentile": 15.0,
         "volume_5d_vs_20d": 0.70,
+    })
+
+    result = right_side_check(item)
+
+    assert result is not None
+    assert result["status"] == "Base building"
+    assert result["active_pathway"] == "contraction"
+    assert result["actionable"] is False
+
+
+def test_right_side_check_requires_trend_support_for_contraction_watch() -> None:
+    from stock_daily_research.report import right_side_check
+
+    item = _score_item({
+        "last_close": 90.0,
+        "sma_20": 100.0,
+        "sma_60": 105.0,
+        "sma_120": 110.0,
+        "rsi_14": 35.0,
+        "volume_vs_20d": 0.7,
+        "atr_contraction_ratio": 0.65,
+        "bb_width_20_percentile": 15.0,
+        "volume_5d_vs_20d": 0.70,
+    })
+
+    result = right_side_check(item)
+
+    assert result is not None
+    assert result["status"] == "Protect capital first"
+    contraction = next(
+        check for check in result["checks"] if check["key"] == "contraction"
+    )
+    assert contraction["status"] == "Contraction lacks trend support"
+    assert contraction["passed"] is False
+
+def test_render_html_report_includes_right_side_path_and_optional_gates() -> None:
+    item = _score_item({
+        "last_close": 103.5,
+        "sma_20": 102.0,
+        "sma_60": 98.0,
+        "sma_120": 90.0,
+        "volume_vs_20d": 1.6,
+        "prior_20d_high": 101.0,
+        "prior_20d_low": 100.0,
+        "atr_20": 1.5,
+        "atr_contraction_ratio": 1.05,
+        "bb_width_20_percentile": 60.0,
+        "volume_5d_vs_20d": 1.20,
         "breakout_days_ago": 2.0,
         "breakout_pivot": 101.0,
         "breakout_hold_pct": 2.48,
@@ -1298,23 +1498,55 @@ def test_render_html_report_includes_right_side_check() -> None:
     assert 'class="insight-row right-side-check check-up"' in output
     assert 'class="right-side-breakdown"' in output
     assert 'class="right-side-check-row tone-up"' in output
+    assert "\u7a81\u7834\u8def\u5f91\u6210\u7acb" in output
+    assert 'class="optional"' in output
+    assert '<span class="gate-mark">&mdash;</span>' in output
 
-def test_right_side_score_breakout_confirmed() -> None:
+
+def test_right_side_score_high_quality_without_breakout_uses_trend_label() -> None:
     from stock_daily_research.report import right_side_score
 
     item = _score_item({
-        "last_close": 120.0,
-        "sma_20": 110.0, "sma_60": 100.0, "sma_120": 90.0,
-        "return_20d": 12.0, "volume_vs_20d": 1.8,
-        "fy1_eps_revision_30d": 3.0, "rsi_14": 60.0,
+        "last_close": 105.0,
+        "sma_20": 103.0,
+        "sma_60": 100.0,
+        "sma_120": 90.0,
+        "return_20d": 12.0,
+        "volume_vs_20d": 1.8,
+        "fy1_eps_revision_30d": 3.0,
+        "rsi_14": 60.0,
         "fifty_two_week_high": 130.0,
     })
+
     result = right_side_score(item, {"spy_20d": 2.0, "qqq_20d": 4.0})
+
     assert result is not None
     assert result["score"] >= 75
-    assert result["status"] == "Breakout confirmed"
+    assert result["status"] == "Trend setup strong"
     assert result["tone"] == "up"
 
+
+def test_right_side_score_reserves_breakout_label_for_confirmed_structure() -> None:
+    from stock_daily_research.report import right_side_score
+
+    item = _score_item({
+        "last_close": 105.0,
+        "sma_20": 103.0,
+        "sma_60": 100.0,
+        "sma_120": 90.0,
+        "prior_20d_high": 104.0,
+        "return_20d": 12.0,
+        "volume_vs_20d": 1.8,
+        "fy1_eps_revision_30d": 3.0,
+        "rsi_14": 60.0,
+        "fifty_two_week_high": 130.0,
+    })
+
+    result = right_side_score(item, {"spy_20d": 2.0, "qqq_20d": 4.0})
+
+    assert result is not None
+    assert result["status"] == "Breakout confirmed"
+    assert result["tone"] == "up"
 
 def test_right_side_score_extended_when_stretched() -> None:
     from stock_daily_research.report import right_side_score
@@ -1941,15 +2173,65 @@ def test_capital_allocation_queue_grades_trade_actions() -> None:
         generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
         ticker_reports=[
             item("ADD", {
-                "last_close": 110.0, "sma_20": 100.0, "sma_60": 95.0, "sma_120": 90.0,
-                "volume_vs_20d": 1.8, "fy1_eps_revision_30d": 3.0, "rsi_14": 60.0,
-                "forward_pe": 30.0, "fifty_two_week_high": 140.0,
+                "last_close": 102.0,
+                "previous_close": 101.0,
+                "sma_20": 100.0,
+                "sma_60": 95.0,
+                "sma_120": 90.0,
+                "return_20d": 10.0,
+                "return_60d": 15.0,
+                "return_120d": 20.0,
+                "volume_vs_20d": 1.8,
+                "fy1_eps_revision_30d": 3.0,
+                "rsi_14": 60.0,
+                "forward_pe": 30.0,
+                "fifty_two_week_high": 140.0,
+                "prior_20d_high": 101.0,
+                "prior_20d_low": 98.0,
+                "atr_20": 2.0,
+                "atr_contraction_ratio": 1.0,
+                "bb_width_20_percentile": 50.0,
+                "volume_5d_vs_20d": 1.1,
+                "breakout_days_ago": 1.0,
+                "breakout_pivot": 101.0,
+                "breakout_hold_pct": 0.99,
+                "breakout_volume_vs_20d": 1.8,
+            }),
+            item("WEAK", {
+                "last_close": 95.0,
+                "previous_close": 96.0,
+                "sma_20": 100.0,
+                "sma_60": 98.0,
+                "sma_120": 90.0,
+                "return_20d": 10.0,
+                "return_60d": 12.0,
+                "return_120d": 15.0,
+                "volume_vs_20d": 1.8,
+                "fy1_eps_revision_30d": 3.0,
+                "rsi_14": 55.0,
+                "forward_pe": 30.0,
+                "fifty_two_week_high": 140.0,
+                "prior_20d_high": 120.0,
+                "prior_20d_low": 80.0,
+                "atr_20": 5.0,
+                "atr_contraction_ratio": 1.0,
+                "bb_width_20_percentile": 50.0,
+                "volume_5d_vs_20d": 1.1,
             }),
             item("EVT", {"last_close": 100.0, "fy1_eps_revision_30d": 2.0, "rsi_14": 55.0}, earnings),
             item("CUT", {"last_close": 100.0, "fy1_eps_revision_30d": -2.0, "rsi_14": 55.0}),
         ],
+        market_context=MarketContext(benchmark_returns={
+            "spy_20d": 2.0,
+            "qqq_20d": 3.0,
+            "spy_60d": 5.0,
+            "qqq_60d": 6.0,
+            "spy_120d": 8.0,
+            "qqq_120d": 9.0,
+        }),
         research_states={
             "ADD": TickerResearchState(ticker="ADD", thesis_state="active"),
+            "WEAK": TickerResearchState(ticker="WEAK", thesis_state="active"),
             "EVT": TickerResearchState(ticker="EVT", thesis_state="active"),
             "CUT": TickerResearchState(ticker="CUT", thesis_state="weakening"),
         },
@@ -1957,8 +2239,8 @@ def test_capital_allocation_queue_grades_trade_actions() -> None:
 
     queue = capital_allocation_queue(report)
 
-    assert queue["A"][0]["item"].ticker.symbol == "ADD"
-    assert queue["C"][0]["item"].ticker.symbol == "EVT"
+    assert [row["item"].ticker.symbol for row in queue["A"]] == ["ADD"]
+    assert {row["item"].ticker.symbol for row in queue["C"]} == {"EVT", "WEAK"}
     assert queue["E"][0]["item"].ticker.symbol == "CUT"
 
 
@@ -3782,7 +4064,7 @@ def test_relative_strength_uses_taiwan_benchmark_instead_of_us_benchmarks() -> N
     assert profile["positive_horizons"] == 3
 
 
-def test_right_side_check_uses_explicit_risk_budget_without_guessing_account_size() -> None:
+def test_right_side_check_structure_is_independent_of_portfolio_budget() -> None:
     from stock_daily_research.models import PortfolioSettings
     from stock_daily_research.report import right_side_check
 
@@ -3802,6 +4084,11 @@ def test_right_side_check_uses_explicit_risk_budget_without_guessing_account_siz
             source="yfinance",
             metrics={
                 "last_close": 103.5,
+                "sma_20": 102.0,
+                "sma_60": 98.0,
+                "sma_120": 90.0,
+                "volume_vs_20d": 1.6,
+                "prior_20d_high": 101.0,
                 "prior_20d_low": 100.0,
                 "atr_20": 1.5,
                 "atr_contraction_ratio": 0.65,
@@ -3816,12 +4103,21 @@ def test_right_side_check_uses_explicit_risk_budget_without_guessing_account_siz
         ),
     )
 
-    result = right_side_check(item, portfolio=PortfolioSettings(risk_budget_by_currency={"USD": 100.0}))
+    without_budget = right_side_check(item)
+    with_budget = right_side_check(
+        item,
+        portfolio=PortfolioSettings(risk_budget_by_currency={"USD": 100.0}),
+    )
 
-    assert result is not None
-    risk = next(check for check in result["checks"] if check["label"] == "Risk box")
-    assert "Max size 33 units (USD 100 risk)" in risk["detail"]
-
+    assert without_budget is not None
+    assert with_budget is not None
+    assert with_budget["status"] == without_budget["status"] == "Right-side ready"
+    assert with_budget["checks"] == without_budget["checks"]
+    assert {check["label"] for check in with_budget["checks"]} == {
+        "Breakout entry",
+        "Pullback entry",
+        "Contraction watch",
+    }
 
 def test_right_side_check_withholds_signal_when_technical_data_is_missing() -> None:
     from stock_daily_research.report import right_side_check
@@ -4226,3 +4522,70 @@ def test_stock_health_diagnostic_does_not_overrate_negative_eps_growth() -> None
 
     assert fundamental["score"] < 100
     assert any("EPS" in evidence for evidence in fundamental["evidence"])
+
+def test_taiwan_margin_maintenance_is_market_scoped_and_decision_oriented() -> None:
+    from stock_daily_research.models import TaiwanMarketOverview
+    from stock_daily_research.report import taiwan_margin_maintenance_view
+
+    us_item = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+    tw_item = TickerReport(
+        ticker=TickerConfig(
+            symbol="2330.TW",
+            company_name="TSMC",
+            market="twse",
+            currency="TWD",
+        ),
+        articles=[],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+    overview = TaiwanMarketOverview(
+        as_of_date=date(2026, 7, 28),
+        margin_maintenance_ratio_estimate=163.08,
+        collateral_value_thousand_twd=889_641_682.48,
+        financing_balance_thousand_twd=545_534_811.0,
+        previous_financing_balance_thousand_twd=568_663_408.0,
+        priced_margin_units=9_094_733.0,
+        total_margin_units=9_096_008.0,
+        price_coverage_pct=99.99,
+        priced_security_count=1_218,
+        margin_security_count=1_223,
+        source="TWSE MI_MARGN / MI_INDEX",
+        retrieved_at=datetime(2026, 7, 29, 1, tzinfo=timezone.utc),
+    )
+    report = DailyReport(
+        report_date=date(2026, 7, 29),
+        generated_at=datetime(2026, 7, 29, 1, tzinfo=timezone.utc),
+        ticker_reports=[us_item, tw_item],
+        taiwan_market_overview=overview,
+    )
+
+    view = taiwan_margin_maintenance_view(report)
+    html = render_html_report(report)
+    markdown = render_markdown_report(report)
+
+    assert view["ratio_label"] == "163.1%"
+    assert view["status"] == "\u4e2d\u6027\u5340\u9593"
+    assert view["balance_label"] == "\u878d\u8cc7\u9918\u984d 5,455.3 \u5104\u5143"
+    assert view["balance_change_label"] == "\u8f03\u524d\u65e5 -4.07%"
+    assert view["coverage_label"] == "\u6536\u76e4\u50f9\u8986\u84cb 99.99%"
+    assert view["source_label"] == "\u8b49\u4ea4\u6240\u76e4\u5f8c\u8cc7\u6599 \u00b7 \u8cc7\u6599\u65e5 2026-07-28"
+    assert 'id="taiwan-margin-context"' in html
+    assert 'data-market-context="taiwan" hidden' in html
+    assert "\u4e0a\u5e02\u5927\u76e4\u878d\u8cc7\u7dad\u6301\u7387\uff08\u4f30\u7b97\uff09" in html
+    assert "context.hidden = context.dataset.marketContext !== activeMarket;" in html
+    assert "\u4e0a\u5e02\u5927\u76e4\u878d\u8cc7\u7dad\u6301\u7387\uff08\u4f30\u7b97\uff09\uff1a163.1% \u00b7 \u4e2d\u6027\u5340\u9593" in markdown
+    assert "\u4e0d\u7b49\u540c\u500b\u5225\u4fe1\u7528\u5e33\u6236\u7684\u6b63\u5f0f\u6574\u6236\u7dad\u6301\u7387" in markdown
+    assert "-4.07%\n- " in markdown
+    assert "99.99%\n- " in markdown
+
+    us_only = replace(report, ticker_reports=[us_item])
+    assert taiwan_margin_maintenance_view(us_only)["visible"] is False
+    assert 'id="taiwan-margin-context"' not in render_html_report(us_only)

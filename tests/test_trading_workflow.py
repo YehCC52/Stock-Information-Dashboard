@@ -195,6 +195,8 @@ def test_execution_plan_requires_all_hard_gates_and_sizes_by_risk_budget() -> No
 
     assert plan is not None
     assert plan["status"] == "ready"
+    assert plan["display_mode"] == "plan"
+    assert plan["has_price_plan"] is True
     assert plan["invalidation"] == pytest.approx(item.valuation.metrics["prior_20d_low"])
     assert plan["target_2r"] > plan["entry_reference"]
     assert plan["max_units"] == int(1_000 // plan["risk_per_unit"])
@@ -217,6 +219,148 @@ def test_execution_plan_requires_all_hard_gates_and_sizes_by_risk_budget() -> No
     assert lagging_group["passed"] is False
     assert lagging["status"] == "watch"
 
+
+def test_execution_plan_keeps_missing_setup_as_watch_not_blocked() -> None:
+    item = _item()
+    metrics = item.valuation.metrics
+    metrics.update({
+        "last_close": 90.0,
+        "previous_close": 95.0,
+        "sma_20": 100.0,
+        "sma_60": 105.0,
+        "sma_120": 110.0,
+        "prior_20d_high": 120.0,
+        "prior_20d_low": 70.0,
+        "atr_20": 10.0,
+        "atr_contraction_ratio": 1.2,
+        "bb_width_20_percentile": 60.0,
+        "volume_5d_vs_20d": 1.2,
+    })
+    for key in (
+        "breakout_days_ago",
+        "breakout_pivot",
+        "breakout_hold_pct",
+        "breakout_volume_vs_20d",
+    ):
+        metrics.pop(key, None)
+
+    plan = right_side_execution_plan(_report([item]), item)
+
+    assert plan is not None
+    assert plan["status"] == "watch"
+    assert plan["status_label"] == "Trend weak, stay out"
+    assert plan["display_mode"] == "waiting"
+    assert plan["has_price_plan"] is False
+    assert plan["waiting_title"] == "目前沒有可執行交易計畫"
+    assert "趨勢尚未轉強" in plan["waiting_detail"]
+    assert plan["watch_references"] == [
+        {"label": "站回 MA20", "value": 100.0, "distance_pct": 11.11},
+        {"label": "突破前 20 日高點", "value": 120.0, "distance_pct": 33.33},
+    ]
+    assert plan["entry_trigger"] is None
+    assert plan["invalidation"] is None
+    assert plan["target_2r"] is None
+    assert plan["risk_pct"] is None
+    structure = next(gate for gate in plan["gates"] if gate["key"] == "structure")
+    risk = next(gate for gate in plan["gates"] if gate["key"] == "risk")
+    assert structure["passed"] is False
+    assert risk["passed"] is False
+    assert risk["required"] is False
+    assert plan["failed_count"] == 1
+
+    html = render_html_report(_report([item]))
+    start = html.index('<div class="execution-plan')
+    end = html.index('<details class="card-secondary position-details">', start)
+    execution_html = html[start:end]
+    assert 'class="execution-waiting"' in execution_html
+    assert "目前沒有可執行交易計畫" in execution_html
+    assert "站回 MA20" in execution_html
+    assert '<div class="execution-plan-grid">' not in execution_html
+    assert "N/A" not in execution_html
+
+
+def test_execution_plan_can_use_pullback_path_and_blocks_only_real_risk() -> None:
+    market_context = MarketContext(
+        benchmark_returns={
+            "spy_20d": 2.0,
+            "qqq_20d": 3.0,
+            "spy_60d": 5.0,
+            "qqq_60d": 6.0,
+            "spy_120d": 8.0,
+            "qqq_120d": 9.0,
+        }
+    )
+    settings = AppSettings(
+        portfolio=PortfolioSettings(risk_budget_by_currency={"USD": 1_000.0})
+    )
+
+    item = _item()
+    metrics = item.valuation.metrics
+    metrics.update({
+        "sma_20": metrics["last_close"] - 1.0,
+        "sma_60": metrics["last_close"] - 5.0,
+        "sma_120": metrics["last_close"] - 9.0,
+        "rsi_14": 55.0,
+        "volume_vs_20d": 0.8,
+        "atr_contraction_ratio": 1.0,
+        "bb_width_20_percentile": 55.0,
+        "volume_5d_vs_20d": 1.0,
+        "prior_20d_low": metrics["last_close"] - 3.0,
+        "atr_20": 2.0,
+    })
+    for key in (
+        "breakout_days_ago",
+        "breakout_pivot",
+        "breakout_hold_pct",
+        "breakout_volume_vs_20d",
+    ):
+        metrics.pop(key, None)
+
+    ready = right_side_execution_plan(
+        _report([item], market_context=market_context, settings=settings),
+        item,
+    )
+
+    assert ready is not None
+    assert ready["status"] == "ready"
+    assert ready["status_label"] == "Review pullback pilot"
+    assert ready["setup_key"] == "pullback"
+    assert ready["entry_trigger"] == pytest.approx(metrics["last_close"])
+    assert ready["risk_pct"] < 8.0
+
+    wide_item = _item("AMD")
+    wide_metrics = wide_item.valuation.metrics
+    wide_metrics.update({
+        "sma_20": wide_metrics["last_close"] - 1.0,
+        "sma_60": wide_metrics["last_close"] - 5.0,
+        "sma_120": wide_metrics["last_close"] - 9.0,
+        "rsi_14": 55.0,
+        "volume_vs_20d": 0.8,
+        "atr_contraction_ratio": 1.0,
+        "bb_width_20_percentile": 55.0,
+        "volume_5d_vs_20d": 1.0,
+        "prior_20d_low": wide_metrics["last_close"] - 25.0,
+        "atr_20": 10.0,
+    })
+    for key in (
+        "breakout_days_ago",
+        "breakout_pivot",
+        "breakout_hold_pct",
+        "breakout_volume_vs_20d",
+    ):
+        wide_metrics.pop(key, None)
+
+    blocked = right_side_execution_plan(
+        _report([wide_item], market_context=market_context, settings=settings),
+        wide_item,
+    )
+
+    assert blocked is not None
+    assert blocked["status"] == "blocked"
+    assert blocked["status_label"] == "Setup ready, entry paused"
+    risk = next(gate for gate in blocked["gates"] if gate["key"] == "risk")
+    assert risk["required"] is True
+    assert risk["passed"] is False
 
 def test_trade_journal_summary_calculates_net_r_mfe_and_mae() -> None:
     item = _item(closes=[100.0, 102.0, 108.0, 110.0])

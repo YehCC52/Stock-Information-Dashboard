@@ -146,15 +146,65 @@ def test_fetch_technical_indicators_resets_after_price_regime_jump() -> None:
 
     metrics = fetch_technical_indicators(FakeTicker())
 
-    assert metrics["technical_history_version"] == 2
+    assert metrics["technical_history_version"] == 3
     assert metrics["price_regime_change_date"] == dates[30].date().isoformat()
     assert metrics["price_regime_change_pct"] < -90.0
     assert metrics["price_history_sessions"] == 8
+    assert metrics["price_history_as_of_date"] == dates[-1].date().isoformat()
     assert metrics["sma_20"] is None
     assert metrics["rsi_14"] is None
     assert metrics["prior_20d_high"] is None
     assert len(metrics["chart_close_60"]) == 8
     assert max(metrics["chart_close_60"]) < 20.0
+
+
+def test_fetch_technical_indicators_uses_two_year_history_for_all_moving_averages() -> None:
+    dates = pd.date_range("2025-07-01", periods=260, freq="B")
+    closes = [100.0 + index for index in range(260)]
+    hist = pd.DataFrame(
+        {
+            "Open": closes,
+            "High": [value + 1.0 for value in closes],
+            "Low": [value - 1.0 for value in closes],
+            "Close": closes,
+            "Volume": [1_000_000] * len(closes),
+        },
+        index=dates,
+    )
+    requested: dict[str, object] = {}
+
+    class FakeTicker:
+        def history(self, **kwargs):
+            requested.update(kwargs)
+            return hist
+
+    metrics = fetch_technical_indicators(FakeTicker())
+
+    assert requested["period"] == "2y"
+    assert requested["auto_adjust"] is True
+    assert metrics["technical_history_version"] == 3
+    assert metrics["price_history_sessions"] == 260
+    assert metrics["price_history_as_of_date"] == dates[-1].date().isoformat()
+    for period in (5, 10, 20, 60, 120, 200, 240):
+        expected = sum(closes[-period:]) / period
+        assert metrics[f"sma_{period}"] == expected
+
+
+def test_fetch_technical_indicators_keeps_long_averages_unavailable_when_history_is_short() -> None:
+    dates = pd.date_range("2026-01-02", periods=180, freq="B")
+    closes = [100.0 + index * 0.2 for index in range(180)]
+    hist = pd.DataFrame({"Close": closes}, index=dates)
+
+    class FakeTicker:
+        def history(self, **_kwargs):
+            return hist
+
+    metrics = fetch_technical_indicators(FakeTicker())
+
+    assert metrics["sma_120"] is not None
+    assert metrics["sma_200"] is None
+    assert metrics["sma_240"] is None
+
 
 def test_compute_move_quality_metrics_volume_gap_and_atr() -> None:
     rows = []

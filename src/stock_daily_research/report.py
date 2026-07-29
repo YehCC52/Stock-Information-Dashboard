@@ -33,9 +33,12 @@ METRIC_LABELS = {
     "fifty_two_week_low": "52W Low",
     "from_52w_high": "From High",
     "sma_5": "SMA 5D",
+    "sma_10": "SMA 10D",
     "sma_20": "SMA 20D",
     "sma_60": "SMA 60D",
     "sma_120": "SMA 120D",
+    "sma_200": "SMA 200D",
+    "sma_240": "SMA 240D",
     "volume_vs_20d": "Volume / 20D",
     "atr_20": "ATR 20D",
     "atr_20_percent": "ATR %",
@@ -81,9 +84,12 @@ HTML_METRIC_LABELS = {
     "fifty_two_week_low": "52週低",
     "from_52w_high": "距高點",
     "sma_5": "SMA 5D",
+    "sma_10": "SMA 10D",
     "sma_20": "SMA 20D",
     "sma_60": "SMA 60D",
     "sma_120": "SMA 120D",
+    "sma_200": "SMA 200D",
+    "sma_240": "SMA 240D",
     "volume_vs_20d": "成交量 / 20D",
     "atr_20": "ATR 20D",
     "atr_20_percent": "ATR %",
@@ -181,7 +187,11 @@ def _build_environment(template_dir: str | Path | None = None, *, autoescape_htm
 def render_markdown_report(report: DailyReport, template_dir: str | Path | None = None) -> str:
     env = _build_environment(template_dir)
     template = env.get_template("daily_report.md.j2")
-    return template.render(report=report, metric_labels=METRIC_LABELS)
+    return template.render(
+        report=report,
+        metric_labels=METRIC_LABELS,
+        taiwan_margin=taiwan_margin_maintenance_view(report),
+    )
 
 
 def render_html_report(report: DailyReport, template_dir: str | Path | None = None) -> str:
@@ -225,6 +235,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.filters["card_state"] = lambda item: card_state(item, report.report_date)
     env.filters["topic_tags"] = topic_tags
     env.filters["metric_raw"] = metric_raw
+    env.filters["moving_average_snapshot"] = moving_average_snapshot
     env.filters["has_risk_signal"] = lambda item: has_risk_signal(item, report.report_date)
     env.filters["valuation_risk"] = valuation_risk_label
     env.filters["top_news_count"] = top_news_count
@@ -269,6 +280,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         report=report,
         metric_labels=METRIC_LABELS,
         summary=build_summary(report),
+        taiwan_margin=taiwan_margin_maintenance_view(report),
         history=history_sections(report),
         research_payload=research_payload(report),
         earnings_soon=earnings_soon(report),
@@ -417,6 +429,87 @@ def format_tw_revenue(value: object) -> str:
     if abs(amount_twd) >= 10_000:
         return f"{amount_twd / 10_000:,.1f}{chr(0x842c)}{yuan}"
     return f"{amount_twd:,.0f}{yuan}"
+
+
+def taiwan_margin_maintenance_view(report: DailyReport) -> dict[str, object]:
+    """Decision-oriented view of the TWSE-wide maintenance-ratio estimate."""
+    has_taiwan = any(
+        item.ticker.market in {"twse", "tpex"}
+        for item in report.ticker_reports
+    )
+    if not has_taiwan:
+        return {"visible": False, "available": False}
+
+    overview = report.taiwan_market_overview
+    if overview is None:
+        return {
+            "visible": True,
+            "available": False,
+            "ratio_label": "—",
+            "status": "資料尚未取得",
+            "tone": "missing",
+            "detail": "重新產檔時會讀取證交所最近公布的上市市場資料。",
+            "source_label": "證交所官方盤後資料",
+            "method": "融資餘額交易單位 × 同日收盤價 ÷ 融資金額",
+            "disclaimer": "市場彙總估算，不等同個別信用帳戶的正式整戶維持率。",
+        }
+
+    ratio = overview.margin_maintenance_ratio_estimate
+    if ratio < 140:
+        tone = "danger"
+        status = "融資壓力升高"
+        action = "右側交易先等指數止跌與量價轉強，再考慮增加曝險。"
+    elif ratio < 150:
+        tone = "warning"
+        status = "安全墊偏薄"
+        action = "新增部位宜縮小風險預算，避免在弱勢時擴大槓桿。"
+    elif ratio < 170:
+        tone = "mixed"
+        status = "中性區間"
+        action = "尚未顯示明顯追繳壓力，仍需搭配指數趨勢與量價。"
+    else:
+        tone = "good"
+        status = "安全墊較高"
+        action = "融資安全墊較高，但不等同大盤趨勢已轉強。"
+
+    previous = overview.previous_financing_balance_thousand_twd
+    balance_change_pct = (
+        (overview.financing_balance_thousand_twd - previous) / previous * 100.0
+        if previous is not None and previous > 0
+        else None
+    )
+    reference_distance = ratio - 130.0
+    source_name = (
+        "證交所盤後資料"
+        if overview.source == "TWSE MI_MARGN / MI_INDEX"
+        else overview.source
+    )
+    return {
+        "visible": True,
+        "available": True,
+        "ratio": ratio,
+        "ratio_label": f"{ratio:.1f}%",
+        "status": status,
+        "tone": tone,
+        "detail": action,
+        "reference_label": f"相對 130% 帳戶參考線 {reference_distance:+.1f} 個百分點",
+        "balance_label": (
+            f"融資餘額 {overview.financing_balance_thousand_twd / 100_000:,.1f} 億元"
+        ),
+        "balance_change_label": (
+            f"較前日 {balance_change_pct:+.2f}%"
+            if balance_change_pct is not None
+            else ""
+        ),
+        "coverage_label": f"收盤價覆蓋 {overview.price_coverage_pct:.2f}%",
+        "source_label": f"{source_name} · 資料日 {overview.as_of_date.isoformat()}",
+        "method": (
+            "融資餘額交易單位 × 同日收盤價 ÷ 融資金額"
+            f"；來源端點：{overview.source}"
+        ),
+        "disclaimer": "市場彙總估算，不等同個別信用帳戶的正式整戶維持率。",
+    }
+
 
 def related_ticker_links(report: DailyReport) -> dict[str, list[dict[str, str]]]:
     """Return explicit cross-market ticker links that exist in this report."""
@@ -1003,6 +1096,35 @@ def level_label(value: object) -> str:
 # waste. Insertion order matters where entries overlap ("tickers" before
 # "ticker", "not-reviewed" before "reviewed").
 _ZH_REPLACEMENTS: dict[str, str] = {
+        "Pullback setup": "\u56de\u6a94\u689d\u4ef6\u6210\u5f62",
+        "Trend setup strong": "\u8da8\u52e2\u689d\u4ef6\u504f\u5f37",
+        "Constructive / watch": "\u7d50\u69cb\u6b63\u5411\uff0c\u6301\u7e8c\u89c0\u5bdf",
+        "Pullback validation": "\u56de\u6a94\u9a57\u8b49",
+        "Pullback holding support": "\u56de\u6a94\u5b88\u4f4f 20 \u65e5\u7dda",
+        "Waiting for 20D reclaim": "\u7b49\u5f85\u7ad9\u56de 20 \u65e5\u7dda",
+        "No constructive pullback": "\u5c1a\u7121\u5065\u5eb7\u56de\u6a94",
+        "Trend support lost": "\u8da8\u52e2\u652f\u6490\u5931\u5b88",
+        "Breakout against weak trend": "\u5f31\u52e2\u8da8\u52e2\u4e2d\u7684\u7a81\u7834\u4e0d\u63a1\u7528",
+        "Breakout entry ready": "\u7a81\u7834\u8def\u5f91\u6210\u7acb",
+        "Pullback entry ready": "\u56de\u6a94\u8def\u5f91\u6210\u7acb",
+        "Breakout entry": "\u7a81\u7834\u9032\u5834",
+        "Pullback entry": "\u56de\u6a94\u9032\u5834",
+        "Contraction watch": "\u6536\u6582\u89c0\u5bdf",
+        "Contraction lacks trend support": "\u5df2\u6536\u6582\uff0c\u4f46\u8da8\u52e2\u5c1a\u672a\u8f49\u5f37",
+        "No entry setup": "\u5c1a\u7121\u9032\u5834\u578b\u614b",
+        "Review breakout pilot": "\u53ef\u8a55\u4f30\u7a81\u7834\u8a66\u55ae",
+        "Review pullback pilot": "\u53ef\u8a55\u4f30\u56de\u6a94\u8a66\u55ae",
+        "Setup ready, entry paused": "\u578b\u614b\u6210\u7acb\uff0c\u66ab\u505c\u9032\u5834",
+        "Setup ready, wait for context": "\u578b\u614b\u6210\u7acb\uff0c\u7b49\u5f85\u74b0\u5883\u914d\u5408",
+        "Execution blocked": "\u57f7\u884c\u689d\u4ef6\u672a\u901a\u904e",
+        "Execution watch": "\u578b\u614b\u6210\u7acb\uff0c\u7b49\u5f85\u57f7\u884c\u689d\u4ef6",
+        "Trend weak, stay out": "\u8da8\u52e2\u8f49\u5f31\uff0c\u66ab\u4e0d\u9032\u5834",
+        "Wait for breakout trigger": "\u6536\u6582\u4e2d\uff0c\u7b49\u5f85\u7a81\u7834",
+        "Wait for entry setup": "\u7b49\u5f85\u9032\u5834\u578b\u614b\u6210\u7acb",
+        "Optional, not configured": "\u9078\u586b\uff0c\u5c1a\u672a\u8a2d\u5b9a",
+        "Breakout trend not aligned": "\u7a81\u7834\u8207\u591a\u982d\u5747\u7dda\u7d50\u69cb\u4e0d\u4e00\u81f4",
+        "Too extended for pullback": "\u50f9\u683c\u5df2\u5ef6\u4f38\uff0c\u4e0d\u5c6c\u65bc\u56de\u6a94\u9ede",
+        "Failed breakout needs reset": "\u7a81\u7834\u5931\u6557\uff0c\u9700\u5148\u91cd\u65b0\u6574\u7406",
         "FOMC Rate Decision": "FOMC 利率決策",
         "Rate decision / statement expected at 2:00 PM ET; press conference normally 2:30 PM ET.": "預計美東時間下午 2:00 公布利率決策與聲明，記者會通常於 2:30 舉行。",
         "Review guidance, valuation, and recent news before the print.": "公布前先檢查財測、估值與近期新聞。",
@@ -1451,8 +1573,11 @@ def format_relative_strength(rs: dict[str, float]) -> list[str]:
 # Right-side trading status labels — used by both the badge and the insights row.
 RIGHT_SIDE_STATUSES = (
     "Breakout confirmed",
-    "Pullback buy zone",
+    "Pullback setup",
+    "Trend setup strong",
+    "Constructive / watch",
     "Extended, do not chase",
+    "Trend weakening",
     "Mixed / neutral",
     "Thesis weakening",
     "Avoid",
@@ -1492,9 +1617,9 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
 
     Combines trend (SMA stack) + relative strength + volume confirmation +
     earnings momentum + RSI cool-down + valuation overhang + distance from
-    52-week high into a single score, then maps to one of:
-      Avoid (<25) / Thesis weakening / Extended, do not chase /
-      Breakout confirmed (>=75) / Pullback buy zone / Mixed / neutral.
+    52-week high into a single score. The numeric score describes setup
+    quality; breakout and pullback labels are reserved for matching price
+    structures instead of being inferred from score thresholds alone.
 
     Returns None when there's no valuation snapshot (nothing to score).
     """
@@ -1601,6 +1726,8 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
     near_52w_high = from_high is not None and from_high >= -2
     trend_up = sma_count >= 3 and above_count == 3
     rsi_overbought = rsi is not None and rsi >= 70
+    technical = technical_playbook(item)
+    technical_status = str(technical["status"]) if technical else ""
 
     if score < 25:
         status = "Avoid"
@@ -1608,15 +1735,27 @@ def right_side_score(item: TickerReport, benchmarks: dict[str, float] | None = N
     elif score < 40 and earnings_negative:
         status = "Thesis weakening"
         tone = "down"
-    elif trend_up and near_52w_high and rsi_overbought:
+    elif technical_status == "Trend weakening":
+        status = "Trend weakening"
+        tone = "down"
+    elif (
+        technical_status == "Extended, do not chase"
+        or (trend_up and near_52w_high and rsi_overbought)
+    ):
         status = "Extended, do not chase"
         tone = "extended"
-    elif score >= 75:
+    elif technical_status == "Breakout confirmed":
         status = "Breakout confirmed"
         tone = "up"
-    elif 55 <= score < 75:
-        status = "Pullback buy zone"
+    elif technical_status == "Pullback watch":
+        status = "Pullback setup"
         tone = "up"
+    elif score >= 75:
+        status = "Trend setup strong"
+        tone = "up"
+    elif score >= 55:
+        status = "Constructive / watch"
+        tone = "mixed"
     else:
         status = "Mixed / neutral"
         tone = "mixed"
@@ -2764,22 +2903,6 @@ def trading_framework_analysis(item: TickerReport) -> dict[str, object] | None:
         "summary": f"{trend['label']} \u00b7 {wyckoff['phase']} \u00b7 {vpa['status']}",
     }
 
-def _market_alignment_check(item: TickerReport, benchmarks: dict[str, float]) -> dict[str, object] | None:
-    profile = relative_strength_profile(item, benchmarks)
-    available = int(profile.get("available_horizons", 0))
-    if not available:
-        return None
-    positive = int(profile["positive_horizons"])
-    average = float(profile["average_spread"])
-    label = str(profile["benchmark_label"])
-    detail = f"{label} | {positive}/{available} horizons | {average:+.1f}pp average"
-    required = 2 if available >= 2 else 1
-    if positive >= required and average > 0:
-        return {"label": "Market alignment", "status": "Market and RS aligned", "tone": "up", "passed": True, "detail": detail}
-    if average <= -3:
-        return {"label": "Market alignment", "status": "Relative strength lagging", "tone": "down", "passed": False, "detail": detail}
-    return {"label": "Market alignment", "status": "Market trend weak", "tone": "mixed", "passed": False, "detail": detail}
-
 
 def right_side_check(
     item: TickerReport,
@@ -2787,7 +2910,12 @@ def right_side_check(
     benchmarks: dict[str, float] | None = None,
     portfolio: PortfolioSettings | None = None,
 ) -> dict[str, object] | None:
-    """Return a mechanical right-side checklist with visible entry-risk math."""
+    """Classify alternative right-side entry paths from inspectable price rules.
+
+    Breakout and pullback are actionable alternatives. Contraction is a setup
+    state that still needs a trigger. Market, portfolio, event, and risk gates
+    are evaluated once in ``right_side_execution_plan``.
+    """
     if not item.valuation:
         return None
     metrics = item.valuation.metrics
@@ -2795,10 +2923,19 @@ def right_side_check(
         return None
     last = _as_float(metrics.get("last_close"))
     technical_keys = (
-        "atr_contraction_ratio", "bb_width_20_percentile", "volume_5d_vs_20d",
-        "breakout_days_ago", "prior_20d_low", "atr_20",
+        "atr_contraction_ratio",
+        "bb_width_20_percentile",
+        "volume_5d_vs_20d",
+        "breakout_days_ago",
+        "sma_20",
+        "sma_60",
+        "sma_120",
     )
-    if last is None or last <= 0 or not any(_as_float(metrics.get(key)) is not None for key in technical_keys):
+    if (
+        last is None
+        or last <= 0
+        or not any(_as_float(metrics.get(key)) is not None for key in technical_keys)
+    ):
         return None
 
     atr_ratio = _as_float(metrics.get("atr_contraction_ratio"))
@@ -2816,12 +2953,51 @@ def right_side_check(
         contraction_signals.append(volume_ratio <= 0.8)
         contraction_detail.append(f"5D volume {volume_ratio:.2f}x")
     if len(contraction_signals) >= 2 and sum(contraction_signals) >= 2:
-        contraction = {"label": "Volatility contraction", "status": "Base tightening", "tone": "up", "passed": True}
+        contraction = {
+            "key": "contraction",
+            "label": "Contraction watch",
+            "status": "Base tightening",
+            "tone": "up",
+            "passed": True,
+            "actionable": False,
+        }
     elif len(contraction_signals) >= 2:
-        contraction = {"label": "Volatility contraction", "status": "Base still loose", "tone": "mixed", "passed": False}
+        contraction = {
+            "key": "contraction",
+            "label": "Contraction watch",
+            "status": "Base still loose",
+            "tone": "mixed",
+            "passed": False,
+            "actionable": False,
+        }
     else:
-        contraction = {"label": "Volatility contraction", "status": "Base data incomplete", "tone": "mixed", "passed": False}
+        contraction = {
+            "key": "contraction",
+            "label": "Contraction watch",
+            "status": "Base data incomplete",
+            "tone": "mixed",
+            "passed": False,
+            "actionable": False,
+        }
     contraction["detail"] = " | ".join(contraction_detail) or "N/A"
+
+    technical = technical_playbook(item)
+    technical_status = str(technical["status"]) if technical else ""
+    if technical_status == "Trend weakening" and contraction["passed"]:
+        contraction.update({
+            "status": "Contraction lacks trend support",
+            "tone": "mixed",
+            "passed": False,
+        })
+    sma20 = _as_float(metrics.get("sma_20"))
+    sma60 = _as_float(metrics.get("sma_60"))
+    sma120 = _as_float(metrics.get("sma_120"))
+    trend_aligned = bool(
+        sma20 is not None
+        and sma60 is not None
+        and sma120 is not None
+        and last > sma20 > sma60 > sma120
+    )
 
     breakout_days = _as_float(metrics.get("breakout_days_ago"))
     breakout_pivot = _as_float(metrics.get("breakout_pivot"))
@@ -2829,72 +3005,155 @@ def right_side_check(
     breakout_volume = _as_float(metrics.get("breakout_volume_vs_20d"))
     if breakout_days is None or breakout_pivot is None or breakout_hold is None:
         breakout = {
-            "label": "Breakout validation", "status": "No recent breakout", "tone": "mixed", "passed": False,
+            "key": "breakout",
+            "label": "Breakout entry",
+            "status": "No recent breakout",
+            "tone": "mixed",
+            "passed": False,
+            "actionable": True,
             "detail": "N/A",
         }
     else:
-        detail = f"Pivot {_trade_price(breakout_pivot)} | {int(breakout_days)}d | {breakout_hold:+.1f}%"
-        if breakout_volume is not None:
-            detail += f" | Volume {breakout_volume:.1f}x"
-        if breakout_hold < 0:
-            breakout = {"label": "Breakout validation", "status": "Breakout failed", "tone": "down", "passed": False, "detail": detail}
-        elif breakout_volume is None or breakout_volume < 1.2:
-            breakout = {"label": "Breakout validation", "status": "Breakout needs volume", "tone": "mixed", "passed": False, "detail": detail}
-        else:
-            breakout = {"label": "Breakout validation", "status": "Breakout holding", "tone": "up", "passed": True, "detail": detail}
-
-    planned_stop = _as_float(item.ticker.position.stop_loss) if item.ticker.position else None
-    prior_low = _as_float(metrics.get("prior_20d_low"))
-    atr_20 = _as_float(metrics.get("atr_20"))
-    stop_candidates = [
-        candidate
-        for candidate in (planned_stop, prior_low, last - 2.0 * atr_20 if atr_20 is not None else None)
-        if candidate is not None and 0 < candidate < last
-    ]
-    if not stop_candidates:
-        risk = {
-            "label": "Risk box", "status": "Risk box unavailable", "tone": "mixed", "passed": False,
-            "detail": "N/A",
-        }
-    else:
-        stop = max(stop_candidates)
-        per_unit_risk = last - stop
-        risk_pct = per_unit_risk / last * 100.0
-        checkpoint = last + 2.0 * per_unit_risk
-        detail = (
-            f"Entry {_trade_price(last)} | Invalidation {_trade_price(stop)} | "
-            f"{risk_pct:.1f}% | 2R checkpoint {_trade_price(checkpoint)}"
+        breakout_detail = (
+            f"Pivot {_trade_price(breakout_pivot)} | {int(breakout_days)}d | "
+            f"{breakout_hold:+.1f}%"
         )
-        budget = None
-        if portfolio:
-            budget = portfolio.risk_budget_by_currency.get(item.ticker.currency.upper())
-        if budget is not None and per_unit_risk > 0:
-            units = int(budget // per_unit_risk)
-            detail += f" | Max size {units} units ({item.ticker.currency} {budget:,.0f} risk)"
-        if risk_pct <= 5.0:
-            risk = {"label": "Risk box", "status": "Risk controlled", "tone": "up", "passed": True, "detail": detail}
-        elif risk_pct <= 8.0:
-            risk = {"label": "Risk box", "status": "Risk needs smaller size", "tone": "mixed", "passed": False, "detail": detail}
+        if breakout_volume is not None:
+            breakout_detail += f" | Volume {breakout_volume:.1f}x"
+        if breakout_hold < 0:
+            breakout_status, breakout_tone, breakout_passed = (
+                "Breakout failed",
+                "down",
+                False,
+            )
+        elif breakout_volume is None or breakout_volume < 1.2:
+            breakout_status, breakout_tone, breakout_passed = (
+                "Breakout needs volume",
+                "mixed",
+                False,
+            )
+        elif not trend_aligned:
+            breakout_status = (
+                "Breakout against weak trend"
+                if technical_status == "Trend weakening"
+                else "Breakout trend not aligned"
+            )
+            breakout_tone, breakout_passed = "mixed", False
         else:
-            risk = {"label": "Risk box", "status": "Risk too wide", "tone": "down", "passed": False, "detail": detail}
+            breakout_status, breakout_tone, breakout_passed = (
+                "Breakout holding",
+                "up",
+                True,
+            )
+        breakout = {
+            "key": "breakout",
+            "label": "Breakout entry",
+            "status": breakout_status,
+            "tone": breakout_tone,
+            "passed": breakout_passed,
+            "actionable": True,
+            "detail": breakout_detail,
+        }
 
-    checks = [contraction, breakout, risk]
-    market_check = _market_alignment_check(item, benchmarks or {})
-    if market_check:
-        checks.append(market_check)
-    ready_count = sum(1 for check in checks if check["passed"])
-    if breakout["tone"] == "down" or risk["tone"] == "down":
-        status, tone = "Protect capital first", "down"
-    elif ready_count == len(checks):
-        status, tone = "Right-side ready", "up"
-    elif contraction["passed"] and risk["passed"]:
-        status, tone = "Base building", "mixed"
+    distance20 = (
+        (last - sma20) / sma20 * 100.0
+        if sma20 not in (None, 0)
+        else None
+    )
+    rsi = _as_float(metrics.get("rsi_14"))
+    pullback_volume = _as_float(metrics.get("volume_vs_20d"))
+    pullback_detail: list[str] = []
+    if distance20 is not None:
+        pullback_detail.append(f"20D distance {distance20:+.1f}%")
+    if rsi is not None:
+        pullback_detail.append(f"RSI {rsi:.0f}")
+    if pullback_volume is not None:
+        pullback_detail.append(f"Volume {pullback_volume:.1f}x")
+
+    if technical_status == "Pullback watch" and sma20 is not None and last >= sma20:
+        pullback_status, pullback_tone, pullback_passed = (
+            "Pullback holding support",
+            "up",
+            True,
+        )
+    elif technical_status == "Pullback watch":
+        pullback_status, pullback_tone, pullback_passed = (
+            "Waiting for 20D reclaim",
+            "mixed",
+            False,
+        )
+    elif technical_status == "Trend weakening":
+        pullback_status, pullback_tone, pullback_passed = (
+            "Trend support lost",
+            "down",
+            False,
+        )
+    elif technical_status == "Extended, do not chase":
+        pullback_status, pullback_tone, pullback_passed = (
+            "Too extended for pullback",
+            "mixed",
+            False,
+        )
+    elif technical_status == "Trend healthy":
+        pullback_status, pullback_tone, pullback_passed = (
+            "Wait for pullback",
+            "mixed",
+            False,
+        )
     else:
+        pullback_status, pullback_tone, pullback_passed = (
+            "No constructive pullback",
+            "mixed",
+            False,
+        )
+    if breakout["tone"] == "down" and pullback_passed:
+        pullback_status, pullback_tone, pullback_passed = (
+            "Failed breakout needs reset",
+            "down",
+            False,
+        )
+    pullback = {
+        "key": "pullback",
+        "label": "Pullback entry",
+        "status": pullback_status,
+        "tone": pullback_tone,
+        "passed": pullback_passed,
+        "actionable": True,
+        "detail": " | ".join(pullback_detail) or "N/A",
+    }
+
+    checks = [breakout, pullback, contraction]
+    ready_paths = [
+        check for check in checks if check["actionable"] and check["passed"]
+    ]
+    if ready_paths:
+        active = ready_paths[0]
+        status, tone = "Right-side ready", "up"
+        pathway_status = (
+            "Breakout entry ready"
+            if active["key"] == "breakout"
+            else "Pullback entry ready"
+        )
+    elif technical_status == "Trend weakening" or breakout["tone"] == "down":
+        active = None
+        status, tone = "Protect capital first", "down"
+        pathway_status = "No entry setup"
+    elif contraction["passed"]:
+        active = contraction
+        status, tone = "Base building", "mixed"
+        pathway_status = "Contraction watch"
+    else:
+        active = None
         status, tone = "Wait for confirmation", "mixed"
+        pathway_status = "No entry setup"
+
     return {
         "status": status,
         "tone": tone,
-        "ready_count": ready_count,
+        "active_pathway": str(active["key"]) if active else "none",
+        "pathway_status": pathway_status,
+        "actionable": bool(ready_paths),
+        "ready_count": sum(1 for check in checks if check["passed"]),
         "check_count": len(checks),
         "checks": checks,
     }
@@ -3186,7 +3445,7 @@ def _market_bucket(market: str) -> str:
 
 
 def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[str, object] | None:
-    """Turn the right-side checklist into a price, risk, and gate plan."""
+    """Turn an actionable price path into a price, risk, and gate plan."""
     if not item.valuation:
         return None
     metrics = item.valuation.metrics
@@ -3196,10 +3455,23 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
     if last is None or last <= 0:
         return None
 
+    portfolio = report.settings.portfolio if report.settings else None
+    benchmarks = report.market_context.benchmark_returns if report.market_context else {}
+    checklist = right_side_check(item, benchmarks=benchmarks, portfolio=portfolio)
+    setup_key = str(checklist.get("active_pathway", "none")) if checklist else "none"
+    structure_passed = bool(checklist and checklist.get("actionable"))
+
     state = research_state_for(report, item.ticker.symbol)
     pivot = _metric_float(item, "breakout_pivot")
     prior_high = _metric_float(item, "prior_20d_high")
-    trigger = pivot or prior_high
+    sma20 = _metric_float(item, "sma_20")
+    sma60 = _metric_float(item, "sma_60")
+    if setup_key == "pullback":
+        trigger = max(last, sma20) if sma20 is not None else last
+    elif setup_key in {"breakout", "contraction"}:
+        trigger = pivot or prior_high
+    else:
+        trigger = None
     entry_reference = max(last, trigger) if trigger is not None else last
 
     planned_levels = _plausible_levels(
@@ -3211,21 +3483,33 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
         planned_stop = max(planned_levels)
     atr = _metric_float(item, "atr_20")
     prior_low = _metric_float(item, "prior_20d_low")
+    dynamic_stops = [
+        planned_stop,
+        prior_low,
+        last - 2.0 * atr if atr is not None else None,
+    ]
+    if setup_key == "breakout" and pivot is not None:
+        dynamic_stops.append(
+            pivot - 0.5 * atr if atr is not None else pivot * 0.99
+        )
+    elif setup_key == "pullback" and sma20 is not None:
+        dynamic_stops.append(
+            sma20 - atr if atr is not None else sma20 * 0.97
+        )
     stop_candidates = [
         value
-        for value in (
-            planned_stop,
-            prior_low,
-            last - 2.0 * atr if atr is not None else None,
-        )
+        for value in dynamic_stops
         if value is not None and 0 < value < entry_reference
     ]
     stop = max(stop_candidates) if stop_candidates else None
     per_unit_risk = entry_reference - stop if stop is not None else None
-    risk_pct = per_unit_risk / entry_reference * 100.0 if per_unit_risk and entry_reference else None
+    risk_pct = (
+        per_unit_risk / entry_reference * 100.0
+        if per_unit_risk and entry_reference
+        else None
+    )
     target_2r = entry_reference + 2.0 * per_unit_risk if per_unit_risk else None
 
-    portfolio = report.settings.portfolio if report.settings else None
     currency = item.ticker.currency.upper()
     risk_budget = portfolio.risk_budget_by_currency.get(currency) if portfolio else None
     account_risk = portfolio_risk_overview(report)
@@ -3234,21 +3518,28 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
         for row in account_risk["currencies"]
         if row["currency"] == currency
     )
-    risk_available = max(0.0, risk_budget - risk_used) if risk_budget is not None else None
-    max_units = (
-        int(risk_available // per_unit_risk)
-        if risk_available is not None and per_unit_risk
+    risk_available = (
+        max(0.0, risk_budget - risk_used)
+        if risk_budget is not None
         else None
     )
-    portfolio_passed = risk_available is None or (
-        per_unit_risk is not None and risk_available >= per_unit_risk
+    max_units = (
+        int(risk_available // per_unit_risk)
+        if structure_passed and risk_available is not None and per_unit_risk
+        else None
+    )
+    portfolio_required = structure_passed and risk_budget is not None
+    portfolio_passed = bool(
+        risk_available is not None
+        and per_unit_risk is not None
+        and risk_available >= per_unit_risk
     )
     portfolio_gate = {
         "key": "portfolio",
         "label": "Portfolio heat",
         "passed": portfolio_passed,
-        "required": risk_budget is not None,
-        "tone": "up" if portfolio_passed else "down",
+        "required": portfolio_required,
+        "tone": "up" if portfolio_passed else ("down" if portfolio_required else "mixed"),
         "detail": (
             f"{currency} \u5df2\u4f7f\u7528 {risk_used:,.0f} / \u9810\u7b97 {risk_budget:,.0f}\uff1b\u53ef\u7528 {risk_available:,.0f}"
             if risk_budget is not None and risk_available is not None
@@ -3266,25 +3557,33 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
         "key": "quality",
         "label": "Data quality",
         "passed": quality_passed,
-        "required": True,
-        "tone": "up" if quality_passed else "down",
+        "required": structure_passed,
+        "tone": "up" if quality_passed else ("down" if structure_passed else "mixed"),
         "detail": f"{dq['score']}/100",
     }
 
     earnings_days = earnings_delta(item, report.report_date)
     event_passed = earnings_days is None or earnings_days > 3 or earnings_days < 0
-    event_detail = "\u4e09\u65e5\u5167\u7121\u8ca1\u5831" if event_passed else f"{earnings_days} \u65e5\u5f8c\u8ca1\u5831"
+    event_detail = (
+        "\u4e09\u65e5\u5167\u7121\u8ca1\u5831"
+        if event_passed
+        else f"{earnings_days} \u65e5\u5f8c\u8ca1\u5831"
+    )
     event_gate = {
         "key": "event",
         "label": "Event risk",
         "passed": event_passed,
-        "required": True,
-        "tone": "up" if event_passed else "down",
+        "required": structure_passed,
+        "tone": "up" if event_passed else ("down" if structure_passed else "mixed"),
         "detail": event_detail,
     }
 
     avg_dollar_volume = _metric_float(item, "avg_dollar_volume_20d")
-    order_notional = entry_reference * max_units if max_units is not None and max_units > 0 else None
+    order_notional = (
+        entry_reference * max_units
+        if max_units is not None and max_units > 0
+        else None
+    )
     order_adv_pct = (
         order_notional / avg_dollar_volume * 100.0
         if order_notional is not None and avg_dollar_volume
@@ -3300,8 +3599,12 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
         if order_adv_pct is not None
         else None
     )
-    liquidity_required = max_units is not None and max_units > 0
-    liquidity_passed = bool(order_adv_pct is not None and order_adv_pct <= 1.0)
+    liquidity_required = bool(
+        structure_passed and max_units is not None and max_units > 0
+    )
+    liquidity_passed = bool(
+        order_adv_pct is not None and order_adv_pct <= 1.0
+    )
     liquidity_gate = {
         "key": "liquidity",
         "label": "Liquidity",
@@ -3315,40 +3618,52 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
         ),
     }
 
-    risk_passed = per_unit_risk is not None and risk_pct is not None and risk_pct <= 8.0
+    risk_passed = bool(
+        per_unit_risk is not None
+        and risk_pct is not None
+        and risk_pct <= 8.0
+    )
     risk_gate = {
         "key": "risk",
         "label": "Defined risk",
         "passed": risk_passed,
-        "required": True,
-        "tone": "up" if risk_passed else "down",
-        "detail": f"\u8ddd\u5931\u6548\u50f9 {risk_pct:.1f}%" if risk_pct is not None else "\u7121\u6709\u6548\u5931\u6548\u50f9",
+        "required": structure_passed,
+        "tone": "up" if risk_passed else ("down" if structure_passed else "mixed"),
+        "detail": (
+            f"\u8ddd\u5931\u6548\u50f9 {risk_pct:.1f}%"
+            if risk_pct is not None
+            else "\u7121\u6709\u6548\u5931\u6548\u50f9"
+        ),
     }
 
     chase_pct = (last - trigger) / trigger * 100.0 if trigger else None
-    chase_passed = chase_pct is None or chase_pct <= 5.0
+    chase_passed = chase_pct is not None and chase_pct <= 5.0
     chase_gate = {
         "key": "chase",
         "label": "Entry discipline",
         "passed": chase_passed,
-        "required": True,
-        "tone": "up" if chase_passed else "down",
-        "detail": f"\u8ddd\u89f8\u767c\u50f9 {chase_pct:+.1f}%" if chase_pct is not None else "\u89f8\u767c\u50f9\u7121\u8cc7\u6599",
+        "required": structure_passed,
+        "tone": "up" if chase_passed else ("down" if structure_passed else "mixed"),
+        "detail": (
+            f"\u8ddd\u89f8\u767c\u50f9 {chase_pct:+.1f}%"
+            if chase_pct is not None
+            else "\u89f8\u767c\u50f9\u7121\u8cc7\u6599"
+        ),
     }
 
-    benchmarks = report.market_context.benchmark_returns if report.market_context else {}
     profile = relative_strength_profile(item, benchmarks)
-    market_available = bool(profile)
+    market_available = int(profile.get("available_horizons", 0) or 0) > 0
     market_passed = bool(
         market_available
         and float(profile.get("average_spread", 0.0)) > 0
-        and int(profile.get("positive_horizons", 0)) >= min(2, int(profile.get("available_horizons", 0)))
+        and int(profile.get("positive_horizons", 0))
+        >= min(2, int(profile.get("available_horizons", 0)))
     )
     market_gate = {
         "key": "market",
         "label": "Market and RS",
         "passed": market_passed,
-        "required": market_available,
+        "required": structure_passed and market_available,
         "tone": "up" if market_passed else "mixed",
         "detail": (
             f"{profile.get('positive_horizons', 0)}/{profile.get('available_horizons', 0)} \u500b\u9031\u671f\u5f37\u65bc\u57fa\u6e96\uff0c"
@@ -3358,43 +3673,144 @@ def right_side_execution_plan(report: DailyReport, item: TickerReport) -> dict[s
         ),
     }
 
-    group_gate = _sector_alignment_gate(report, item)
-    checklist = right_side_check(item, benchmarks=benchmarks, portfolio=portfolio)
-    structure_passed = bool(checklist and checklist.get("status") == "Right-side ready")
+    group_gate = dict(_sector_alignment_gate(report, item))
+    group_gate["required"] = bool(
+        structure_passed and group_gate.get("required")
+    )
     structure_gate = {
         "key": "structure",
         "label": "Price structure",
         "passed": structure_passed,
         "required": True,
         "tone": str(checklist.get("tone", "mixed")) if checklist else "mixed",
-        "detail": str(checklist.get("status", "\u50f9\u683c\u7d50\u69cb\u8cc7\u6599\u4e0d\u8db3")) if checklist else "\u50f9\u683c\u7d50\u69cb\u8cc7\u6599\u4e0d\u8db3",
+        "detail": (
+            str(checklist.get("pathway_status", "No entry setup"))
+            if checklist
+            else "\u50f9\u683c\u7d50\u69cb\u8cc7\u6599\u4e0d\u8db3"
+        ),
     }
 
-    gates = [structure_gate, market_gate, group_gate, portfolio_gate, liquidity_gate, risk_gate, event_gate, quality_gate, chase_gate]
-    failed_required = [gate for gate in gates if gate["required"] and not gate["passed"]]
-    hard_blockers = {"quality", "event", "portfolio", "liquidity", "risk", "chase"}
-    if any(gate["key"] in hard_blockers for gate in failed_required):
-        status, tone = "blocked", "down"
-    elif not failed_required:
-        status, tone = "ready", "up"
+    gates = [
+        structure_gate,
+        market_gate,
+        group_gate,
+        risk_gate,
+        event_gate,
+        quality_gate,
+        chase_gate,
+        portfolio_gate,
+        liquidity_gate,
+    ]
+    failed_required = [
+        gate for gate in gates if gate["required"] and not gate["passed"]
+    ]
+    hard_blockers = {
+        "quality",
+        "event",
+        "portfolio",
+        "liquidity",
+        "risk",
+        "chase",
+    }
+    if structure_passed:
+        if any(gate["key"] in hard_blockers for gate in failed_required):
+            status, tone = "blocked", "down"
+            status_label = "Setup ready, entry paused"
+        elif failed_required:
+            status, tone = "watch", "mixed"
+            status_label = "Setup ready, wait for context"
+        else:
+            status, tone = "ready", "up"
+            status_label = (
+                "Review breakout pilot"
+                if setup_key == "breakout"
+                else "Review pullback pilot"
+            )
     else:
-        status, tone = "watch", "mixed"
+        status = "watch"
+        tone = "down" if checklist and checklist.get("tone") == "down" else "mixed"
+        if checklist and checklist.get("tone") == "down":
+            status_label = "Trend weak, stay out"
+        elif setup_key == "contraction":
+            status_label = "Wait for breakout trigger"
+        else:
+            status_label = "Wait for entry setup"
+
+    has_planned_path = setup_key in {"breakout", "pullback", "contraction"}
+    has_price_plan = has_planned_path and trigger is not None
+    display_invalidation = stop if has_planned_path else None
+    display_risk_per_unit = per_unit_risk if has_planned_path else None
+    display_risk_pct = risk_pct if has_planned_path else None
+    display_target_2r = target_2r if has_planned_path else None
+
+    watch_references: list[dict[str, object]] = []
+    if not has_price_plan:
+        reference_candidates: list[tuple[str, float | None]] = [
+            ("站回 MA20" if sma20 is not None and last < sma20 else "守住 MA20", sma20),
+            (
+                "突破前 20 日高點"
+                if prior_high is not None and last < prior_high
+                else "前 20 日高點",
+                prior_high,
+            ),
+            ("站回 MA60" if sma60 is not None and last < sma60 else "守住 MA60", sma60),
+        ]
+        for label, value in reference_candidates:
+            if value is None or value <= 0:
+                continue
+            if any(
+                abs(float(reference["value"]) - value) <= max(0.01, value * 0.001)
+                for reference in watch_references
+            ):
+                continue
+            watch_references.append({
+                "label": label,
+                "value": value,
+                "distance_pct": round((value - last) / last * 100.0, 2),
+            })
+            if len(watch_references) == 2:
+                break
+
+    if has_price_plan:
+        waiting_title = ""
+        waiting_detail = ""
+    elif checklist and checklist.get("tone") == "down":
+        waiting_title = "目前沒有可執行交易計畫"
+        waiting_detail = (
+            "趨勢尚未轉強；待重新形成突破或健康回檔後，"
+            "再計算觸發價、失效價與 2R。"
+        )
+    else:
+        waiting_title = "目前沒有可執行交易計畫"
+        waiting_detail = (
+            "尚未形成突破或健康回檔型態；型態成立後，"
+            "再計算觸發價、失效價與 2R。"
+        )
 
     return {
         "status": status,
+        "status_label": status_label,
         "tone": tone,
+        "setup_key": setup_key,
+        "display_mode": (
+            "plan" if structure_passed else ("conditional" if has_price_plan else "waiting")
+        ),
+        "has_price_plan": has_price_plan,
+        "waiting_title": waiting_title,
+        "waiting_detail": waiting_detail,
+        "watch_references": watch_references,
         "entry_trigger": trigger,
         "entry_reference": entry_reference,
-        "invalidation": stop,
-        "risk_per_unit": per_unit_risk,
-        "risk_pct": risk_pct,
-        "target_2r": target_2r,
+        "invalidation": display_invalidation,
+        "risk_per_unit": display_risk_per_unit,
+        "risk_pct": display_risk_pct,
+        "target_2r": display_target_2r,
         "risk_budget": risk_budget,
         "risk_used": round(risk_used, 2),
         "risk_available": round(risk_available, 2) if risk_available is not None else None,
         "stress_risk_per_unit": (
             per_unit_risk + max(atr or 0.0, entry_reference * 0.03)
-            if per_unit_risk is not None
+            if has_planned_path and per_unit_risk is not None
             else None
         ),
         "order_notional": order_notional,
@@ -5214,6 +5630,18 @@ def capital_allocation_queue(report: DailyReport) -> dict[str, list[dict[str, ob
         rsi = rsi_value(item)
         delta = earnings_delta(item, report.report_date)
         thesis = state.thesis_state or "unmarked"
+        execution = (
+            right_side_execution_plan(report, item)
+            if thesis == "active"
+            else None
+        )
+        execution_ready = bool(execution and execution.get("status") == "ready")
+        constructive = status in {
+            "Breakout confirmed",
+            "Pullback setup",
+            "Trend setup strong",
+            "Constructive / watch",
+        }
         reasons: list[str] = []
 
         if thesis != "unmarked":
@@ -5224,6 +5652,8 @@ def capital_allocation_queue(report: DailyReport) -> dict[str, list[dict[str, ob
             reasons.append(f"EPS rev {format_pct(eps_revision)}")
         if rsi is not None:
             reasons.append(f"RSI {rsi:.0f}")
+        if execution:
+            reasons.append(str(execution.get("status_label", "")))
         if delta is not None and 0 <= delta <= 1:
             reasons.append("event window")
 
@@ -5237,9 +5667,9 @@ def capital_allocation_queue(report: DailyReport) -> dict[str, list[dict[str, ob
             grade, action = "C", "Review only before event"
         elif overhot:
             grade, action = "D", "No chase"
-        elif thesis == "active" and score_value > 70 and eps_up:
+        elif thesis == "active" and execution_ready and score_value > 70 and eps_up:
             grade, action = "A", "Priority add candidate"
-        elif thesis == "active" and score_value >= 60:
+        elif thesis == "active" and constructive and score_value >= 60:
             grade, action = "B", "Wait for pullback"
         else:
             grade, action = "C", "Watch / no fresh capital"
@@ -7781,6 +8211,102 @@ def metric_raw(item: TickerReport, key: str) -> str:
     if not isinstance(value, (int, float)) or not isfinite(float(value)):
         return ""
     return str(float(value))
+
+
+def moving_average_snapshot(item: TickerReport) -> dict[str, object]:
+    """Build a market-aware, display-only moving-average view."""
+    annual_period = 240 if item.ticker.market in {"twse", "tpex", "taiwan"} else 200
+    periods = (5, 10, 20, 60, 120, annual_period)
+    valuation = item.valuation
+    metrics = valuation.metrics if valuation else {}
+    last_close = _as_float(metrics.get("last_close"))
+
+    rows: list[dict[str, object]] = []
+    for period in periods:
+        value = _as_float(metrics.get(f"sma_{period}"))
+        distance = None
+        if last_close is not None and value not in (None, 0):
+            distance = round((last_close - value) / value * 100.0, 2)
+        if value is None or distance is None:
+            tone = "missing"
+            relation = "資料不足"
+        elif abs(distance) <= 0.5:
+            tone = "near"
+            relation = "貼近"
+        elif distance > 0:
+            tone = "up"
+            relation = "股價在上"
+        else:
+            tone = "down"
+            relation = "股價在下"
+        rows.append({
+            "period": period,
+            "label": f"MA{period}",
+            "value": value,
+            "distance": distance,
+            "tone": tone,
+            "relation": relation,
+            "is_annual": period == annual_period,
+        })
+
+    available_rows = [row for row in rows if row["value"] is not None]
+    available_count = len(available_rows)
+    above_count = sum(
+        1 for row in available_rows
+        if isinstance(row["distance"], (int, float)) and row["distance"] > 0
+    )
+    below_count = sum(
+        1 for row in available_rows
+        if isinstance(row["distance"], (int, float)) and row["distance"] < 0
+    )
+
+    summary = "均線資料不足"
+    if last_close is None:
+        summary = "缺少最新收盤價"
+    elif available_count == len(rows):
+        ordered = [last_close, *[float(row["value"]) for row in rows]]
+        if all(left > right for left, right in zip(ordered, ordered[1:])):
+            summary = "完整多頭排列"
+        elif all(left < right for left, right in zip(ordered, ordered[1:])):
+            summary = "完整空頭排列"
+        elif above_count == available_count:
+            summary = "站上全部均線"
+        elif below_count == available_count:
+            summary = "位於全部均線下方"
+        elif above_count * 3 >= available_count * 2:
+            summary = "站上多數均線"
+        elif below_count * 3 >= available_count * 2:
+            summary = "位於多數均線下方"
+        else:
+            summary = "均線交錯"
+    elif available_count:
+        if above_count * 3 >= available_count * 2:
+            summary = "站上多數可用均線"
+        elif below_count * 3 >= available_count * 2:
+            summary = "位於多數可用均線下方"
+        else:
+            summary = "部分均線資料不足"
+
+    sessions_value = _as_float(metrics.get("price_history_sessions"))
+    sessions = int(sessions_value) if sessions_value is not None and sessions_value > 0 else 0
+    history_as_of = metrics.get("price_history_as_of_date")
+    has_history_date = isinstance(history_as_of, str) and bool(history_as_of.strip())
+    if not has_history_date and valuation:
+        history_as_of = valuation.as_of_date.isoformat()
+    source = valuation.source if valuation else ""
+    source_label = "Yahoo Finance 遠端日線" if "yfinance" in source.lower() else source
+    return {
+        "visible": bool(valuation and (available_count or sessions)),
+        "rows": rows,
+        "summary": summary,
+        "annual_period": annual_period,
+        "available_count": available_count,
+        "missing_count": len(rows) - available_count,
+        "sessions": sessions,
+        "as_of": history_as_of,
+        "as_of_label": "最新日線" if has_history_date else "快照日期",
+        "source": source_label,
+    }
 
 
 def rsi_value(item: TickerReport) -> float | None:

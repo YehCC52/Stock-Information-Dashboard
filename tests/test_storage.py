@@ -8,6 +8,7 @@ from stock_daily_research.models import (
     NewsArticle,
     PostEarningsReview,
     PositionConfig,
+    TaiwanMarketOverview,
     TickerConfig,
     TickerHistoryPoint,
     TickerResearchState,
@@ -18,7 +19,9 @@ from stock_daily_research.storage import (
     export_research_state_payload,
     import_research_state_payload,
     init_db,
+    load_fresh_taiwan_market_overview,
     load_fresh_valuation_snapshot,
+    load_latest_taiwan_market_overview,
     load_latest_valuation_snapshot,
     load_next_earnings_date,
     load_ticker_history,
@@ -26,6 +29,7 @@ from stock_daily_research.storage import (
     load_post_earnings_reviews,
     save_report,
     save_report_run,
+    save_taiwan_market_overview,
 )
 
 
@@ -768,4 +772,64 @@ def test_load_fresh_valuation_snapshot_requires_last_close(tmp_path) -> None:
         )
         conn.commit()
         result = load_fresh_valuation_snapshot(conn, "NVDA", max_age_hours=4)
+    assert result is None
+
+
+def _taiwan_market_overview(retrieved_at: datetime) -> TaiwanMarketOverview:
+    return TaiwanMarketOverview(
+        as_of_date=date(2026, 7, 28),
+        margin_maintenance_ratio_estimate=163.08,
+        collateral_value_thousand_twd=889_641_682.48,
+        financing_balance_thousand_twd=545_534_811.0,
+        previous_financing_balance_thousand_twd=568_663_408.0,
+        priced_margin_units=9_094_733.0,
+        total_margin_units=9_096_008.0,
+        price_coverage_pct=99.99,
+        priced_security_count=1_218,
+        margin_security_count=1_223,
+        source="TWSE MI_MARGN / MI_INDEX",
+        retrieved_at=retrieved_at,
+    )
+
+
+def test_taiwan_market_overview_round_trip_and_date_boundary(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    overview = _taiwan_market_overview(
+        datetime.now(timezone.utc).replace(microsecond=0)
+    )
+
+    with init_db(db_path) as conn:
+        save_taiwan_market_overview(conn, overview)
+        fresh = load_fresh_taiwan_market_overview(
+            conn,
+            before_or_on=date(2026, 7, 29),
+        )
+        latest = load_latest_taiwan_market_overview(
+            conn,
+            before_or_on=date(2026, 7, 28),
+        )
+        too_early = load_latest_taiwan_market_overview(
+            conn,
+            before_or_on=date(2026, 7, 27),
+        )
+
+    assert fresh == overview
+    assert latest == overview
+    assert too_early is None
+
+
+def test_fresh_taiwan_market_overview_rejects_stale_cache(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    stale = _taiwan_market_overview(
+        datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=5)
+    )
+
+    with init_db(db_path) as conn:
+        save_taiwan_market_overview(conn, stale)
+        result = load_fresh_taiwan_market_overview(
+            conn,
+            before_or_on=date(2026, 7, 29),
+            max_age_hours=4,
+        )
+
     assert result is None
