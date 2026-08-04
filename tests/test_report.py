@@ -47,6 +47,7 @@ from stock_daily_research.report import (
     pe_class,
     position_view,
     ticker_delta,
+    attention_score_breakdown,
     _valuation_risk_direction,
     post_earnings_items,
     pre_earnings_card,
@@ -3493,6 +3494,122 @@ def test_valuation_risk_direction_same() -> None:
     assert _valuation_risk_direction("Elevated", "Elevated") == "same"
     assert _valuation_risk_direction(None, "High") == "same"
     assert _valuation_risk_direction("Unknown", "High") == "same"
+
+
+def _attention_report(
+    current: TickerHistoryPoint,
+    *,
+    is_holding: bool = False,
+) -> DailyReport:
+    item = TickerReport(
+        ticker=TickerConfig(
+            symbol="NVDA",
+            company_name="NVIDIA",
+            position=PositionConfig(status="holding" if is_holding else "watchlist"),
+        ),
+        articles=[], x_signals=[], valuation=None, earnings=None,
+    )
+    return DailyReport(
+        report_date=current.report_date,
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[item],
+        ticker_history={"NVDA": [current]},
+    )
+
+
+def test_attention_score_breakdown_matches_persisted_formula() -> None:
+    current = TickerHistoryPoint(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker="NVDA",
+        thesis_state="weakening",
+        review_status="not-reviewed",
+        news_count=4,
+        top_news_count=1,
+        valuation_risk="High",
+        rsi=None,
+        daily_change_pct=None,
+        premarket_change_pct=None,
+        earnings_days=0,
+        warning_count=0,
+        attention_score=41.0,
+        news_burst_score=2.0,
+    )
+    report = _attention_report(current, is_holding=True)
+
+    result = attention_score_breakdown(report, "NVDA")
+
+    assert result is not None
+    assert [(c.label, c.value, c.kind) for c in result] == [
+        ("新聞量", 6.0, "news"),
+        ("重要新聞", 6.0, "news"),
+        ("持股中", 4.0, "holding"),
+        ("財報當天", 8.0, "earnings"),
+        ("估值風險", 4.0, "risk"),
+        ("論點鬆動", 5.0, "risk"),
+        ("新聞爆量", 8.0, "burst"),
+    ]
+    assert sum(c.value for c in result) == current.attention_score
+
+
+def test_attention_score_breakdown_includes_stale_review_component() -> None:
+    current = TickerHistoryPoint(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker="NVDA",
+        thesis_state="active",
+        review_status="not-reviewed",
+        news_count=0,
+        top_news_count=0,
+        valuation_risk="None",
+        rsi=None,
+        daily_change_pct=None,
+        premarket_change_pct=None,
+        earnings_days=None,
+        warning_count=0,
+        attention_score=3.0,
+        news_burst_score=0.0,
+        last_reviewed_at=None,
+    )
+    report = _attention_report(current)
+
+    result = attention_score_breakdown(report, "NVDA")
+
+    assert result is not None
+    assert [(c.label, c.value, c.kind) for c in result] == [("太久沒複查", 3.0, "stale")]
+
+
+def test_attention_score_breakdown_returns_none_without_history() -> None:
+    report = DailyReport(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker_reports=[],
+        ticker_history={},
+    )
+    assert attention_score_breakdown(report, "NVDA") is None
+
+
+def test_attention_score_breakdown_returns_none_when_all_components_zero() -> None:
+    current = TickerHistoryPoint(
+        report_date=date(2026, 4, 28),
+        generated_at=datetime(2026, 4, 28, tzinfo=timezone.utc),
+        ticker="NVDA",
+        thesis_state="watching",
+        review_status="not-reviewed",
+        news_count=0,
+        top_news_count=0,
+        valuation_risk="None",
+        rsi=None,
+        daily_change_pct=None,
+        premarket_change_pct=None,
+        earnings_days=None,
+        warning_count=0,
+        attention_score=0.0,
+        news_burst_score=0.0,
+    )
+    report = _attention_report(current)
+
+    assert attention_score_breakdown(report, "NVDA") is None
 
 
 def _plan_report(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from math import isfinite
 from pathlib import Path
 from statistics import median
@@ -270,6 +270,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
     env.globals["ticker_delta"] = lambda symbol: ticker_delta(report, symbol)
     env.globals["score_trend"] = lambda symbol, kind="health": score_trend(report, symbol, kind)
     env.globals["ticker_sparkline"] = lambda symbol: ticker_sparkline(report, symbol)
+    env.globals["attention_breakdown"] = lambda symbol: attention_score_breakdown(report, symbol)
     plan_triggers_by_symbol: dict[str, list[dict[str, object]]] = {}
     for trigger in plan_triggers(report):
         plan_triggers_by_symbol.setdefault(str(trigger["ticker"]), []).append(trigger)
@@ -5203,6 +5204,78 @@ def ticker_delta(report: DailyReport, symbol: str) -> TickerDelta | None:
         ),
         valuation_risk_direction=_valuation_risk_direction(prev.valuation_risk, curr.valuation_risk),
     )
+
+
+@dataclass(frozen=True)
+class AttentionScoreComponent:
+    label: str
+    value: float
+    kind: str  # drives the CSS color bucket in the template
+
+
+_ATTENTION_STALE_REVIEW_DAYS = 14
+
+
+def _attention_review_is_stale(last_reviewed_at: datetime | None) -> bool:
+    if last_reviewed_at is None:
+        return True
+    reviewed = last_reviewed_at if last_reviewed_at.tzinfo else last_reviewed_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - reviewed.astimezone(timezone.utc)).days >= _ATTENTION_STALE_REVIEW_DAYS
+
+
+def attention_score_breakdown(report: DailyReport, symbol: str) -> list[AttentionScoreComponent] | None:
+    """Re-derive today's persisted attention score as its additive contributors.
+
+    Mirrors storage._attention_score's formula exactly, reading the same inputs
+    back out of today's already-persisted TickerHistoryPoint so the breakdown
+    can never drift from the number actually shown on the card.
+    """
+    current = _current_history_point(report, symbol)
+    if current is None:
+        return None
+    item = _ticker_map(report).get(symbol)
+    is_holding = bool(item and item.ticker.position.status == "holding")
+
+    components: list[AttentionScoreComponent] = []
+
+    news_value = round(current.news_count * 1.5, 1)
+    if news_value:
+        components.append(AttentionScoreComponent("新聞量", news_value, "news"))
+
+    top_news_value = round(current.top_news_count * 6.0, 1)
+    if top_news_value:
+        components.append(AttentionScoreComponent("重要新聞", top_news_value, "news"))
+
+    if is_holding:
+        components.append(AttentionScoreComponent("持股中", 4.0, "holding"))
+
+    earnings_days = current.earnings_days
+    if earnings_days is not None:
+        if earnings_days == 0:
+            components.append(AttentionScoreComponent("財報當天", 8.0, "earnings"))
+        elif earnings_days == 1:
+            components.append(AttentionScoreComponent("財報明天", 5.0, "earnings"))
+        elif 0 < earnings_days <= 7:
+            components.append(AttentionScoreComponent("財報一週內", 2.0, "earnings"))
+        elif -7 <= earnings_days < 0:
+            components.append(AttentionScoreComponent("財報剛公布", 4.0, "earnings"))
+
+    valuation_bonus = {"Elevated": 2.0, "High": 4.0, "Extreme": 6.0}.get(current.valuation_risk, 0.0)
+    if valuation_bonus:
+        components.append(AttentionScoreComponent("估值風險", valuation_bonus, "risk"))
+
+    if current.thesis_state in {"weakening", "broken"}:
+        components.append(AttentionScoreComponent("論點鬆動", 5.0, "risk"))
+
+    if current.news_burst_score > 0:
+        burst_value = round(min(current.news_burst_score * 4.0, 12.0), 1)
+        if burst_value:
+            components.append(AttentionScoreComponent("新聞爆量", burst_value, "burst"))
+
+    if current.thesis_state in {"building", "active"} and _attention_review_is_stale(current.last_reviewed_at):
+        components.append(AttentionScoreComponent("太久沒複查", 3.0, "stale"))
+
+    return components or None
 
 
 def _checklist_review_status(checklist: list[str]) -> str:

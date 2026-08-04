@@ -68,8 +68,8 @@
 
 - 已完成：FOMC rate decision。
 - 已完成：Nonfarm Payrolls / Employment Situation。
-- 下一步：CPI。
-- 下一步：PPI。
+- 已完成：CPI（透過 BLS selected releases 即時抓取，`macro.py` `CORE_BLS_RELEASES`）。
+- 已完成：PPI（同上路徑；深度 fallback（BLS 兩個來源都掛掉時）目前只涵蓋 NFP + CPI，尚未補 PPI 的離線備援時程）。
 - 下一步：PCE。
 - 下一步：ISM Manufacturing / Services。
 - 下一步：Initial Jobless Claims。
