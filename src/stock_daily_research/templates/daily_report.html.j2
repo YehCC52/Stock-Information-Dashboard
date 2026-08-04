@@ -1248,6 +1248,7 @@
     }
     .macro-card.rates { border-color: var(--warning); background: var(--warning-bg); }
     .macro-card.jobs { border-color: var(--info); background: var(--info-bg); }
+    .macro-card.inflation { border-color: var(--danger); background: var(--danger-bg); }
     .macro-card .name { display: block; font-weight: 800; }
     .macro-card .time { display: block; margin-top: 2px; font-size: 13px; }
     .macro-card .note { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
@@ -1532,6 +1533,23 @@
     .rsi-extreme { background: var(--danger-bg); }
     .delta-up   { color: var(--good, #16a34a); font-size: 0.75rem; margin-left: 3px; }
     .delta-down { color: var(--danger, #dc2626); font-size: 0.75rem; margin-left: 3px; }
+
+    .attn-breakdown {
+      display: flex;
+      width: 100%;
+      height: 5px;
+      margin-top: 4px;
+      border-radius: 3px;
+      overflow: hidden;
+      background: var(--border-soft);
+    }
+    .attn-seg { display: block; height: 100%; }
+    .attn-seg.attn-news    { background: var(--info); }
+    .attn-seg.attn-burst   { background: var(--accent); }
+    .attn-seg.attn-earnings{ background: var(--warning); }
+    .attn-seg.attn-risk    { background: var(--danger); }
+    .attn-seg.attn-holding { background: var(--good); }
+    .attn-seg.attn-stale   { background: var(--muted); }
 
     .morning-actions { border: 1px solid var(--border); border-left: 4px solid var(--danger); }
     .morning-actions-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -4956,6 +4974,13 @@
             <div class="metric">
               <span class="metric-label">關注分數</span>
               <span class="metric-value">{% if history_current %}{{ history_current.attention_score }}{% else %}N/A{% endif %}{% if tdelta.attention_score_delta is not none and tdelta.attention_score_delta != 0 %}<span class="{{ 'delta-up' if tdelta.attention_score_delta > 0 else 'delta-down' }}">{{ '+' if tdelta.attention_score_delta > 0 else '' }}{{ tdelta.attention_score_delta }}</span>{% endif %}{{ ticker_sparkline(item.ticker.symbol)|safe }}</span>
+              {% set attn_parts = attention_breakdown(item.ticker.symbol) %}
+              {% if attn_parts %}
+              {% set attn_total = attn_parts|sum(attribute='value') %}
+              <div class="attn-breakdown" title="{% for p in attn_parts %}{{ p.label }} +{{ p.value }}{% if not loop.last %}／{% endif %}{% endfor %}">
+                {% for p in attn_parts %}<span class="attn-seg attn-{{ p.kind }}" style="width: {{ (p.value / attn_total * 100)|round(1) }}%"></span>{% endfor %}
+              </div>
+              {% endif %}
             </div>
             {% if tdelta.valuation_risk_direction != 'same' %}
             <div class="metric">
