@@ -23,6 +23,7 @@ from .news import GoogleNewsRssProvider
 from .notify import build_daily_summary, build_telegram_notifier
 from .premarket import fetch_overnight_premarket
 from .taiwan_market import TaiwanMarketDataProvider
+from .taifex import TaifexInstitutionalProvider
 from .report import (
     derive_portfolio_weights,
     holding_currencies,
@@ -41,7 +42,11 @@ from .storage import (
     load_next_earnings_date,
     load_post_earnings_reviews,
     load_report_dates,
+    load_fresh_taiwan_futures_positions,
+    load_fresh_taiwan_institutional_market,
     load_fresh_taiwan_market_overview,
+    load_latest_taiwan_futures_positions,
+    load_latest_taiwan_institutional_market,
     load_latest_taiwan_market_overview,
     load_ticker_history,
     load_ticker_research_states,
@@ -113,12 +118,17 @@ def run_daily(
     if not fetch_macro:
         global_warnings.append("Macro calendar fetching skipped by --no-macro.")
     if not fetch_taiwan_data:
-        global_warnings.append("Taiwan revenue, institutional-flow, and market-margin data fetching skipped by --no-taiwan-data.")
+        global_warnings.append(
+            "Taiwan revenue, institutional-flow, futures-position, and "
+            "market-margin data fetching skipped by --no-taiwan-data."
+        )
 
     market_sentiment = None
     market_context = None
     premarket = None
     taiwan_market_overview = None
+    taiwan_institutional_market = []
+    taiwan_futures_positions = []
     if fetch_valuation:
         try:
             market_sentiment = fetch_market_sentiment()
@@ -196,39 +206,126 @@ def run_daily(
         )
         if fetch_taiwan_data:
             has_taiwan_tickers = any(ticker.market in {"twse", "tpex"} for ticker in tickers)
-            fresh_taiwan_overview = (
-                load_fresh_taiwan_market_overview(
+            if has_taiwan_tickers:
+                fresh_taiwan_overview = load_fresh_taiwan_market_overview(
                     conn,
                     before_or_on=actual_report_date,
                     max_age_hours=VALUATION_CACHE_TTL_HOURS,
                 )
-                if has_taiwan_tickers
-                else None
-            )
-            taiwan_market_overview = fresh_taiwan_overview
-            try:
-                taiwan_result = TaiwanMarketDataProvider(
-                    include_market_overview=fresh_taiwan_overview is None
-                ).fetch(tickers, actual_report_date)
-                global_warnings.extend(taiwan_result.warnings)
-                taiwan_market_overview = taiwan_result.overview or fresh_taiwan_overview
-                ticker_reports = [
-                    replace(item, taiwan_market=taiwan_result.snapshots.get(item.ticker.symbol))
-                    for item in ticker_reports
-                ]
-            except Exception as exc:
-                logger.warning("Taiwan market data fetch failed", exc_info=True)
-                global_warnings.append(f"Taiwan market data fetch failed: {exc}")
-            if has_taiwan_tickers and taiwan_market_overview is None:
-                fallback_overview = load_latest_taiwan_market_overview(
+                fresh_taiwan_institutional = load_fresh_taiwan_institutional_market(
                     conn,
                     before_or_on=actual_report_date,
+                    max_age_hours=VALUATION_CACHE_TTL_HOURS,
                 )
-                if fallback_overview is not None:
-                    taiwan_market_overview = fallback_overview
-                    global_warnings.append(
-                        "Taiwan margin maintenance fallback used from "
-                        f"{fallback_overview.as_of_date.isoformat()}."
+                fresh_taiwan_futures = load_fresh_taiwan_futures_positions(
+                    conn,
+                    before_or_on=actual_report_date,
+                    max_age_hours=VALUATION_CACHE_TTL_HOURS,
+                    session_limit=5,
+                )
+                taiwan_market_overview = fresh_taiwan_overview
+                taiwan_institutional_market = fresh_taiwan_institutional
+                taiwan_futures_positions = fresh_taiwan_futures
+
+                try:
+                    taiwan_result = TaiwanMarketDataProvider(
+                        include_market_overview=fresh_taiwan_overview is None,
+                        include_institutional_market=(
+                            len({item.market for item in fresh_taiwan_institutional}) < 2
+                        ),
+                    ).fetch(tickers, actual_report_date)
+                    global_warnings.extend(taiwan_result.warnings)
+                    taiwan_market_overview = (
+                        taiwan_result.overview or fresh_taiwan_overview
+                    )
+                    institutional_by_market = {
+                        item.market: item for item in fresh_taiwan_institutional
+                    }
+                    institutional_by_market.update({
+                        item.market: item
+                        for item in taiwan_result.institutional_market
+                    })
+                    taiwan_institutional_market = list(
+                        institutional_by_market.values()
+                    )
+                    ticker_reports = [
+                        replace(
+                            item,
+                            taiwan_market=taiwan_result.snapshots.get(
+                                item.ticker.symbol
+                            ),
+                        )
+                        for item in ticker_reports
+                    ]
+                except Exception as exc:
+                    logger.warning("Taiwan market data fetch failed", exc_info=True)
+                    global_warnings.append(f"Taiwan market data fetch failed: {exc}")
+
+                if taiwan_market_overview is None:
+                    fallback_overview = load_latest_taiwan_market_overview(
+                        conn,
+                        before_or_on=actual_report_date,
+                    )
+                    if fallback_overview is not None:
+                        taiwan_market_overview = fallback_overview
+                        global_warnings.append(
+                            "Taiwan margin maintenance fallback used from "
+                            f"{fallback_overview.as_of_date.isoformat()}."
+                        )
+
+                if len({item.market for item in taiwan_institutional_market}) < 2:
+                    fallback_market = load_latest_taiwan_institutional_market(
+                        conn,
+                        before_or_on=actual_report_date,
+                    )
+                    institutional_by_market = {
+                        item.market: item for item in fallback_market
+                    }
+                    institutional_by_market.update({
+                        item.market: item
+                        for item in taiwan_institutional_market
+                    })
+                    taiwan_institutional_market = list(
+                        institutional_by_market.values()
+                    )
+
+                future_dates = {
+                    item.as_of_date
+                    for item in fresh_taiwan_futures
+                    if item.institution == "foreign"
+                }
+                if len(future_dates) < 5:
+                    try:
+                        taifex_result = TaifexInstitutionalProvider().fetch(
+                            actual_report_date,
+                            history_sessions=5,
+                        )
+                        global_warnings.extend(taifex_result.warnings)
+                        positions_by_key = {
+                            (item.as_of_date, item.contract_code, item.institution): item
+                            for item in fresh_taiwan_futures
+                        }
+                        positions_by_key.update({
+                            (item.as_of_date, item.contract_code, item.institution): item
+                            for item in taifex_result.positions
+                        })
+                        taiwan_futures_positions = list(
+                            positions_by_key.values()
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "TAIFEX institutional-position fetch failed",
+                            exc_info=True,
+                        )
+                        global_warnings.append(
+                            f"TAIFEX institutional-position fetch failed: {exc}"
+                        )
+
+                if not taiwan_futures_positions:
+                    taiwan_futures_positions = load_latest_taiwan_futures_positions(
+                        conn,
+                        before_or_on=actual_report_date,
+                        session_limit=5,
                     )
 
         economic_events = []
@@ -260,6 +357,8 @@ def run_daily(
             market_context=market_context,
             premarket=premarket,
             taiwan_market_overview=taiwan_market_overview,
+            taiwan_institutional_market=taiwan_institutional_market,
+            taiwan_futures_positions=taiwan_futures_positions,
             research_states=research_states,
             post_earnings_reviews=post_earnings_reviews,
             trade_journal=trade_journal,
@@ -329,6 +428,8 @@ def run_daily(
         market_context=market_context,
         premarket=premarket,
         taiwan_market_overview=taiwan_market_overview,
+        taiwan_institutional_market=taiwan_institutional_market,
+        taiwan_futures_positions=taiwan_futures_positions,
         research_states=research_states,
         post_earnings_reviews=post_earnings_reviews,
         trade_journal=trade_journal,

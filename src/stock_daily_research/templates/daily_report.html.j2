@@ -1345,6 +1345,19 @@
     tbody tr:hover td { background: var(--info-bg); }
     tbody tr:last-child td { border-bottom: none; }
     .symbol-cell a { color: var(--text); font-weight: 800; }
+    .valuation-symbol-cell { min-width: 150px; max-width: 220px; }
+    .valuation-symbol-cell a { display: grid; gap: 2px; min-width: 0; }
+    .valuation-company {
+      display: block;
+      max-width: 220px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .valuation-controls, .ticker-controls, .export-controls {
       display: flex;
       flex-wrap: wrap;
@@ -1446,14 +1459,128 @@
       text-align: right;
       white-space: nowrap;
     }
+    .taiwan-chip-context {
+      grid-column: 1 / -1;
+      min-width: 0;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .taiwan-chip-context[hidden] { display: none; }
+    .taiwan-chip-heading {
+      display: grid;
+      grid-template-columns: minmax(180px, auto) minmax(0, 1fr);
+      gap: 8px 16px;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .taiwan-chip-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      align-items: baseline;
+      min-width: 0;
+    }
+    .taiwan-chip-title strong { color: var(--text); font-size: 12px; }
+    .taiwan-chip-date { color: var(--muted); font-size: 10px; }
+    .taiwan-chip-reading {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+    .taiwan-chip-reading.tone-good { color: var(--good); }
+    .taiwan-chip-reading.tone-danger { color: var(--danger); }
+    .taiwan-chip-reading.tone-mixed { color: var(--warning); }
+    .taiwan-chip-metrics {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(100px, 1fr));
+      gap: 6px;
+    }
+    .taiwan-chip-metric {
+      min-width: 0;
+      min-height: 50px;
+      padding: 5px 8px;
+      border-left: 1px solid var(--border-soft);
+    }
+    .taiwan-chip-metric .label {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.25;
+    }
+    .taiwan-chip-metric .value {
+      display: block;
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .taiwan-chip-metric .detail {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .taiwan-chip-details { margin-top: 7px; }
+    .taiwan-chip-details > summary {
+      color: var(--link);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .taiwan-chip-rankings {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 7px;
+    }
+    .taiwan-chip-ranking h4 {
+      margin: 0 0 3px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .taiwan-chip-row {
+      display: grid;
+      grid-template-columns: minmax(100px, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 11px;
+    }
+    .taiwan-chip-row a { min-width: 0; color: var(--text); }
+    .taiwan-chip-row .company { color: var(--muted); }
+    .taiwan-chip-row .amount { text-align: right; font-variant-numeric: tabular-nums; }
+    .taiwan-chip-row .sub { display: block; color: var(--muted); font-size: 9px; }
+    .taiwan-chip-source {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 9px;
+      overflow-wrap: anywhere;
+    }
     @media (max-width: 760px) {
       .taiwan-margin-context { grid-template-columns: minmax(0, 1fr) auto; }
       .taiwan-margin-detail, .taiwan-margin-source { grid-column: 1 / -1; }
       .taiwan-margin-source { text-align: left; white-space: normal; }
+      .taiwan-chip-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .valuation-symbol-cell { min-width: 132px; max-width: 168px; }
+      .valuation-company { max-width: 168px; }
     }
     @media (max-width: 480px) {
       .taiwan-margin-context { grid-template-columns: 1fr; }
       .taiwan-margin-value, .taiwan-margin-detail, .taiwan-margin-source { grid-column: 1; }
+      .taiwan-chip-heading { grid-template-columns: 1fr; }
+      .taiwan-chip-reading { text-align: left; }
+      .taiwan-chip-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .taiwan-chip-rankings { grid-template-columns: 1fr; }
+      .taiwan-chip-row { grid-template-columns: minmax(0, 1fr) auto; }
     }
     .is-market-hidden, .is-market-empty { display: none !important; }
     .market-tabs {
@@ -3499,6 +3626,84 @@
         </span>
       </div>
       {% endif %}
+      {% if taiwan_chips.visible %}
+      <div id="taiwan-chip-context" class="taiwan-chip-context" data-market-context="taiwan" hidden>
+        <div class="taiwan-chip-heading">
+          <div class="taiwan-chip-title">
+            <strong>&#x53F0;&#x80A1;&#x7C4C;&#x78BC;&#x6982;&#x6CC1;</strong>
+            {% if taiwan_chips.spot_available %}
+            <span class="taiwan-chip-date">{{ taiwan_chips.spot_scope_label }} &#x73FE;&#x8CA8; {{ taiwan_chips.spot_date_label }}</span>
+            {% endif %}
+            {% if taiwan_chips.futures_available %}
+            <span class="taiwan-chip-date">&#x671F;&#x8CA8; {{ taiwan_chips.futures.as_of_label }}</span>
+            {% endif %}
+          </div>
+          <span class="taiwan-chip-reading tone-{{ taiwan_chips.reading_tone }}">{{ taiwan_chips.reading }}</span>
+        </div>
+        {% if taiwan_chips.available %}
+        <div class="taiwan-chip-metrics">
+          {% for metric in taiwan_chips.spot_metrics %}
+          <div class="taiwan-chip-metric">
+            <span class="label">{{ metric.label }}</span>
+            <span class="value change change-{{ metric.tone }}">{{ metric.value_label }}</span>
+          </div>
+          {% endfor %}
+          {% if taiwan_chips.futures_available %}
+          <div class="taiwan-chip-metric">
+            <span class="label">&#x5916;&#x8CC7;&#x81FA;&#x6307;&#x671F;&#x6DE8;&#x672A;&#x5E73;&#x5009;</span>
+            <span class="value">{{ taiwan_chips.futures.net_open_interest_label }}</span>
+            <span class="detail">&#x7A7A;&#x65B9;&#x672A;&#x5E73;&#x5009; {{ taiwan_chips.futures.short_open_interest_label }}</span>
+          </div>
+          <div class="taiwan-chip-metric">
+            <span class="label">&#x90E8;&#x4F4D;&#x65E5;&#x8B8A;&#x5316;</span>
+            <span class="value change change-{{ taiwan_chips.futures.day_change_tone }}">{{ taiwan_chips.futures.day_change_label }}</span>
+          </div>
+          <div class="taiwan-chip-metric">
+            <span class="label">{{ taiwan_chips.futures.session_count }} &#x65E5;&#x90E8;&#x4F4D;&#x8DA8;&#x52E2;</span>
+            <span class="value change change-{{ taiwan_chips.futures.trend_tone }}">{{ taiwan_chips.futures.trend_label }}</span>
+          </div>
+          <div class="taiwan-chip-metric">
+            <span class="label">&#x7576;&#x65E5;&#x4EA4;&#x6613;&#x6DE8;&#x984D;</span>
+            <span class="value change change-{{ taiwan_chips.futures.trading_tone }}">{{ taiwan_chips.futures.trading_net_label }}</span>
+            <span class="detail">&#x6295;&#x4FE1;&#x6DE8;&#x672A;&#x5E73;&#x5009; {{ taiwan_chips.futures.trust_net_label }}</span>
+          </div>
+          {% endif %}
+        </div>
+        {% if taiwan_chips.ranking_count %}
+        <details class="taiwan-chip-details">
+          <summary>&#x89C0;&#x5BDF;&#x80A1;&#x6CD5;&#x4EBA;&#x8CB7;&#x8CE3;&#x8D85;&#x6392;&#x884C;&#xFF08;{{ taiwan_chips.ranking_count }} &#x6A94;&#xFF09;</summary>
+          <div class="taiwan-chip-rankings">
+            <div class="taiwan-chip-ranking">
+              <h4>&#x4E09;&#x5927;&#x6CD5;&#x4EBA;&#x8CB7;&#x8D85;</h4>
+              {% for row in taiwan_chips.buy_rows %}
+              <div class="taiwan-chip-row">
+                <a href="#{{ row.symbol|ticker_anchor }}">{{ row.display_symbol }} <span class="company">{{ row.company_name }}</span></a>
+                <span class="amount change change-{{ row.tone }}">{{ row.total_label }}<span class="sub">{{ row.multi_day_label }}{% if row.multi_day_label and row.volume_share_label %} &#xB7; {% endif %}{{ row.volume_share_label }}</span></span>
+              </div>
+              {% else %}
+              <div class="empty-inline">&#x89C0;&#x5BDF;&#x80A1;&#x7121;&#x8CB7;&#x8D85;&#x6A19;&#x7684;</div>
+              {% endfor %}
+            </div>
+            <div class="taiwan-chip-ranking">
+              <h4>&#x4E09;&#x5927;&#x6CD5;&#x4EBA;&#x8CE3;&#x8D85;</h4>
+              {% for row in taiwan_chips.sell_rows %}
+              <div class="taiwan-chip-row">
+                <a href="#{{ row.symbol|ticker_anchor }}">{{ row.display_symbol }} <span class="company">{{ row.company_name }}</span></a>
+                <span class="amount change change-{{ row.tone }}">{{ row.total_label }}<span class="sub">{{ row.multi_day_label }}{% if row.multi_day_label and row.volume_share_label %} &#xB7; {% endif %}{{ row.volume_share_label }}</span></span>
+              </div>
+              {% else %}
+              <div class="empty-inline">&#x89C0;&#x5BDF;&#x80A1;&#x7121;&#x8CE3;&#x8D85;&#x6A19;&#x7684;</div>
+              {% endfor %}
+            </div>
+          </div>
+        </details>
+        {% endif %}
+        <span class="taiwan-chip-source">{{ taiwan_chips.source_label }} &#xB7; {{ taiwan_chips.disclaimer }}</span>
+        {% else %}
+        <span class="taiwan-chip-source">&#x5C1A;&#x672A;&#x53D6;&#x5F97;&#x6700;&#x8FD1;&#x76E4;&#x5F8C;&#x7C4C;&#x78BC;&#x8CC7;&#x6599;&#x3002;</span>
+        {% endif %}
+      </div>
+      {% endif %}
     </section>
 
     <nav class="toc" aria-label="Sections">
@@ -4755,7 +4960,7 @@
         <table id="valuation-table" class="valuation-table is-compact">
           <thead>
             <tr>
-              <th>代碼</th>
+              <th>代碼／公司</th>
               {% for key in valuation_keys %}
               <th class="num{% if key not in ('last_close', 'rsi_14', 'market_cap', 'forward_pe', 'fy1_eps_revision_30d') %} valuation-secondary{% endif %}">{{ key|html_metric_label }}</th>
               {% if key == "forward_pe" %}<th class="num valuation-primary-only">EPS（TTM→FY1）</th>{% endif %}
@@ -4773,7 +4978,12 @@
             {% set fh = item|from_52w_high %}
             {% set eps = item|eps_outlook %}
             <tr data-symbol="{{ item.ticker.symbol }}" data-company="{{ item.ticker.company_name|lower }}" data-market="{{ item.ticker.market }}" data-market-cap="{{ item|metric_raw('market_cap') }}" data-forward-pe="{{ item|metric_raw('forward_pe') }}" data-eps-growth="{% if eps.growth is not none %}{{ eps.growth }}{% endif %}" data-rsi="{{ item|metric_raw('rsi_14') }}" data-earnings-days="{% if delta is not none %}{{ delta }}{% endif %}">
-              <td class="symbol-cell"><a href="#{{ item.ticker.symbol|ticker_anchor }}">{{ item.ticker.symbol }}</a></td>
+              <td class="symbol-cell valuation-symbol-cell">
+                <a href="#{{ item.ticker.symbol|ticker_anchor }}">
+                  <span>{{ item.ticker.display_symbol }}</span>
+                  <span class="valuation-company" title="{{ item.ticker.company_name }}">{{ item.ticker.company_name }}</span>
+                </a>
+              </td>
               {% for key in valuation_keys %}
               {% set raw = item.valuation.metrics.get(key) if item.valuation else None %}
               <td class="num{% if key not in ('last_close', 'rsi_14', 'market_cap', 'forward_pe', 'fy1_eps_revision_30d') %} valuation-secondary{% endif %} {% if key in ('trailing_pe', 'forward_pe', 'ev_to_ebitda') %}pe-{{ raw|pe_class }}{% endif %}{% if key == 'rsi_14' %} rsi-{{ raw|rsi_class }}{% endif %}{% if key == 'gap_percent' %} change change-{{ raw|change_class }}{% endif %}{% if key in ('fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %} change change-{{ raw|eps_revision_class }}{% endif %}{% if key in ('eps_growth_pct', 'revenue_growth_pct') %} change change-{{ raw|change_class }}{% endif %}"{% if key == 'rsi_14' %} title="{{ raw|rsi_label }}"{% endif %}>{% if not item.valuation %}N/A{% elif key == 'volume_vs_20d' %}{{ raw|format_ratio }}{% elif key in ('gap_percent', 'fy1_eps_revision_30d', 'fy1_revenue_revision_30d', 'next_q_revenue_revision_30d') %}{{ raw|format_pct }}{% elif key in ('atr_20_percent', 'eps_growth_pct', 'revenue_growth_pct') %}{{ raw|format_pct(sign=False) }}{% else %}{{ raw|metric_value }}{% endif %}</td>
@@ -5105,11 +5315,17 @@
               {% if tw.dealer_net_shares is not none %}
               <div class="tw-market-cell"><span class="label">&#x81EA;&#x71DF;&#x5546;&#x8CB7;&#x8CE3;&#x8D85;</span><span class="value change change-{{ tw.dealer_net_shares|change_class }}">{{ tw.dealer_net_shares|format_tw_shares }}</span></div>
               {% endif %}
+              {% if tw.institutional_net_shares is not none %}
+              <div class="tw-market-cell"><span class="label">&#x4E09;&#x5927;&#x6CD5;&#x4EBA;&#x5408;&#x8A08;</span><span class="value change change-{{ tw.institutional_net_shares|change_class }}">{{ tw.institutional_net_shares|format_tw_shares }}</span></div>
+              {% endif %}
               {% if tw.foreign_net_shares_5d is not none %}
               <div class="tw-market-cell"><span class="label">&#x5916;&#x8CC7; {{ tw.institutional_flow_days }}D &#x7D2F;&#x8A08;</span><span class="value change change-{{ tw.foreign_net_shares_5d|change_class }}">{{ tw.foreign_net_shares_5d|format_tw_shares }}</span></div>
               {% endif %}
               {% if tw.investment_trust_net_shares_5d is not none %}
               <div class="tw-market-cell"><span class="label">&#x6295;&#x4FE1; {{ tw.institutional_flow_days }}D &#x7D2F;&#x8A08;</span><span class="value change change-{{ tw.investment_trust_net_shares_5d|change_class }}">{{ tw.investment_trust_net_shares_5d|format_tw_shares }}</span></div>
+              {% endif %}
+              {% if tw.institutional_net_shares_5d is not none %}
+              <div class="tw-market-cell"><span class="label">&#x4E09;&#x5927;&#x6CD5;&#x4EBA; {{ tw.institutional_flow_days }}D</span><span class="value change change-{{ tw.institutional_net_shares_5d|change_class }}">{{ tw.institutional_net_shares_5d|format_tw_shares }}</span></div>
               {% endif %}
               {% if tw.institutional_net_buy_days_5d is not none and tw.institutional_flow_days %}
               <div class="tw-market-cell"><span class="label">&#x6CD5;&#x4EBA;&#x6DE8;&#x8CB7;&#x5929;&#x6578;</span><span class="value">{{ tw.institutional_net_buy_days_5d }} / {{ tw.institutional_flow_days }}D</span></div>

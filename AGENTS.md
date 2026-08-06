@@ -14,9 +14,9 @@ Prefer decision clarity over feature count. Do not add a new top-level section u
 
 ## Current Status
 
-Updated: 2026-07-29
+Updated: 2026-08-06
 
-- Test suite: 345 tests passing.
+- Test suite: 350 tests passing.
 - Report output: `reports/YYYY/MM/YYYY-MM-DD.html` plus Markdown and brief text.
 - Markets: `us`, `twse`, `tpex`, and `crypto`; UI groups TWSE/TPEX under Taiwan.
 - Data policy: free sources by default; no paid API dependency.

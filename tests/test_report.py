@@ -308,6 +308,38 @@ def test_render_html_report_sorts_valuation_table_alphabetically() -> None:
     assert order == ["aapl", "amzn", "msft", "nvda"]
 
 
+def test_valuation_table_shows_company_name_for_taiwan_stock() -> None:
+    company_name = "台灣積體電路製造股份有限公司"
+    report = DailyReport(
+        report_date=date(2026, 8, 6),
+        generated_at=datetime(2026, 8, 6, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(
+                    symbol="2330.TW",
+                    company_name=company_name,
+                    market="twse",
+                    currency="TWD",
+                ),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+        ],
+    )
+
+    output = render_html_report(report)
+    valuation = output[output.index('id="valuation"'):output.index("</tbody>", output.index('id="valuation"'))]
+
+    assert "<th>代碼／公司</th>" in valuation
+    assert 'class="symbol-cell valuation-symbol-cell"' in valuation
+    assert "<span>2330</span>" in valuation
+    assert f'<span class="valuation-company" title="{company_name}">{company_name}</span>' in valuation
+    assert 'data-market="twse"' in valuation
+    assert ".valuation-company {" in output
+
+
 def test_render_html_report_links_table_to_ticker_cards() -> None:
     output = render_html_report(_sample_report())
 
@@ -4706,3 +4738,134 @@ def test_taiwan_margin_maintenance_is_market_scoped_and_decision_oriented() -> N
     us_only = replace(report, ticker_reports=[us_item])
     assert taiwan_margin_maintenance_view(us_only)["visible"] is False
     assert 'id="taiwan-margin-context"' not in render_html_report(us_only)
+
+
+def test_taiwan_chip_view_combines_spot_futures_and_taiwan_rankings() -> None:
+    from stock_daily_research.models import (
+        TaiwanFuturesPosition,
+        TaiwanInstitutionalMarketSnapshot,
+        TaiwanMarketSnapshot,
+    )
+    from stock_daily_research.report import taiwan_chip_view
+
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    valuation = ValuationSnapshot(
+        ticker="2330.TW",
+        as_of_date=date(2026, 8, 5),
+        source="test",
+        metrics={"avg_volume_20d": 20_000_000.0},
+        retrieved_at=retrieved_at,
+    )
+    taiwan = TickerReport(
+        ticker=TickerConfig(
+            symbol="2330.TW",
+            company_name="TSMC",
+            market="twse",
+            currency="TWD",
+        ),
+        articles=[],
+        x_signals=[],
+        valuation=valuation,
+        earnings=None,
+        taiwan_market=TaiwanMarketSnapshot(
+            ticker="2330.TW",
+            institutional_net_shares=3_000_000.0,
+            institutional_net_shares_5d=8_000_000.0,
+            institutional_flow_days=5,
+            institutional_as_of=date(2026, 8, 5),
+        ),
+    )
+    us = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+    spot = [
+        TaiwanInstitutionalMarketSnapshot(
+            as_of_date=date(2026, 8, 5),
+            market="twse",
+            foreign_net_twd=10_000_000_000.0,
+            investment_trust_net_twd=2_000_000_000.0,
+            dealer_net_twd=-1_000_000_000.0,
+            total_net_twd=11_000_000_000.0,
+            source="TWSE BFI82U",
+            retrieved_at=retrieved_at,
+        ),
+        TaiwanInstitutionalMarketSnapshot(
+            as_of_date=date(2026, 8, 5),
+            market="tpex",
+            foreign_net_twd=-1_000_000_000.0,
+            investment_trust_net_twd=100_000_000.0,
+            dealer_net_twd=50_000_000.0,
+            total_net_twd=-850_000_000.0,
+            source="TPEx 3insti_summary",
+            retrieved_at=retrieved_at,
+        ),
+    ]
+    futures = [
+        TaiwanFuturesPosition(
+            as_of_date=as_of,
+            contract_code="TX",
+            institution=institution,
+            trading_long=10_000,
+            trading_short=11_000,
+            trading_net=-1_000,
+            open_interest_long=10_000,
+            open_interest_short=open_short,
+            open_interest_net=10_000 - open_short,
+            source="TAIFEX",
+            retrieved_at=retrieved_at,
+        )
+        for as_of, institution, open_short in (
+            (date(2026, 8, 5), "foreign", 90_000),
+            (date(2026, 8, 5), "investment_trust", 5_000),
+            (date(2026, 8, 4), "foreign", 95_000),
+        )
+    ]
+    report = DailyReport(
+        report_date=date(2026, 8, 6),
+        generated_at=retrieved_at,
+        ticker_reports=[us, taiwan],
+        taiwan_institutional_market=spot,
+        taiwan_futures_positions=futures,
+    )
+
+    view = taiwan_chip_view(report)
+
+    assert view["visible"] is True
+    assert view["spot_scope_label"] == "\u4e0a\u5e02\uff0b\u4e0a\u6ac3"
+    assert view["spot_metrics"][0]["value_label"] == "+90.0 \u5104\u5143"
+    assert view["futures"]["net_open_interest_label"] == "-80,000 \u53e3"
+    assert view["futures"]["day_change_label"] == "\u8f03\u524d\u65e5 \u6de8\u7a7a\u56de\u88dc 5,000 \u53e3"
+    assert view["reading_tone"] == "good"
+    assert [row["symbol"] for row in view["buy_rows"]] == ["2330.TW"]
+    assert "NVDA" not in {row["symbol"] for row in view["buy_rows"] + view["sell_rows"]}
+
+    html = render_html_report(report)
+    markdown = render_markdown_report(report)
+    assert 'id="taiwan-chip-context"' in html
+    assert 'data-market-context="taiwan" hidden' in html
+    assert "+90.0 \u5104\u5143" in html
+    assert "## \u53f0\u80a1\u7c4c\u78bc\u6982\u6cc1" in markdown
+
+
+def test_taiwan_chip_view_is_absent_for_us_only_report() -> None:
+    from stock_daily_research.report import taiwan_chip_view
+
+    report = DailyReport(
+        report_date=date(2026, 8, 6),
+        generated_at=datetime(2026, 8, 6, tzinfo=timezone.utc),
+        ticker_reports=[
+            TickerReport(
+                ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+                articles=[],
+                x_signals=[],
+                valuation=None,
+                earnings=None,
+            )
+        ],
+    )
+
+    assert taiwan_chip_view(report) == {"visible": False, "available": False}

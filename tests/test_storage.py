@@ -8,6 +8,8 @@ from stock_daily_research.models import (
     NewsArticle,
     PostEarningsReview,
     PositionConfig,
+    TaiwanFuturesPosition,
+    TaiwanInstitutionalMarketSnapshot,
     TaiwanMarketOverview,
     TickerConfig,
     TickerHistoryPoint,
@@ -19,9 +21,13 @@ from stock_daily_research.storage import (
     export_research_state_payload,
     import_research_state_payload,
     init_db,
+    load_fresh_taiwan_futures_positions,
+    load_fresh_taiwan_institutional_market,
     load_fresh_taiwan_market_overview,
     load_fresh_valuation_snapshot,
     load_latest_taiwan_market_overview,
+    load_latest_taiwan_futures_positions,
+    load_latest_taiwan_institutional_market,
     load_latest_valuation_snapshot,
     load_next_earnings_date,
     load_ticker_history,
@@ -833,3 +839,87 @@ def test_fresh_taiwan_market_overview_rejects_stale_cache(tmp_path: Path) -> Non
         )
 
     assert result is None
+
+
+def test_taiwan_institutional_and_futures_round_trip(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    retrieved_at = datetime.now(timezone.utc).replace(microsecond=0)
+    spot = [
+        TaiwanInstitutionalMarketSnapshot(
+            as_of_date=date(2026, 8, 5),
+            market="twse",
+            foreign_net_twd=10_000_000_000.0,
+            investment_trust_net_twd=2_000_000_000.0,
+            dealer_net_twd=-1_000_000_000.0,
+            total_net_twd=11_000_000_000.0,
+            source="TWSE BFI82U",
+            retrieved_at=retrieved_at,
+        ),
+        TaiwanInstitutionalMarketSnapshot(
+            as_of_date=date(2026, 8, 5),
+            market="tpex",
+            foreign_net_twd=-500_000_000.0,
+            investment_trust_net_twd=100_000_000.0,
+            dealer_net_twd=50_000_000.0,
+            total_net_twd=-350_000_000.0,
+            source="TPEx 3insti_summary",
+            retrieved_at=retrieved_at,
+        ),
+    ]
+    positions = [
+        TaiwanFuturesPosition(
+            as_of_date=date(2026, 8, 5) - timedelta(days=offset),
+            contract_code="TX",
+            institution=institution,
+            trading_long=1_000,
+            trading_short=1_200,
+            trading_net=-200,
+            open_interest_long=10_000,
+            open_interest_short=90_000 - offset * 1_000,
+            open_interest_net=-80_000 + offset * 1_000,
+            source="TAIFEX",
+            retrieved_at=retrieved_at,
+        )
+        for offset in range(6)
+        for institution in ("foreign", "investment_trust")
+    ]
+    report = DailyReport(
+        report_date=date(2026, 8, 6),
+        generated_at=retrieved_at,
+        ticker_reports=[],
+        taiwan_institutional_market=spot,
+        taiwan_futures_positions=positions,
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, report)
+        fresh_spot = load_fresh_taiwan_institutional_market(
+            conn,
+            before_or_on=report.report_date,
+        )
+        latest_spot = load_latest_taiwan_institutional_market(
+            conn,
+            before_or_on=report.report_date,
+        )
+        fresh_positions = load_fresh_taiwan_futures_positions(
+            conn,
+            before_or_on=report.report_date,
+            session_limit=3,
+        )
+        latest_positions = load_latest_taiwan_futures_positions(
+            conn,
+            before_or_on=report.report_date,
+            session_limit=5,
+        )
+        before_disclosure = load_latest_taiwan_institutional_market(
+            conn,
+            before_or_on=date(2026, 8, 4),
+        )
+
+    assert {item.market for item in fresh_spot} == {"twse", "tpex"}
+    assert latest_spot == fresh_spot
+    assert len({item.as_of_date for item in fresh_positions}) == 3
+    assert len(fresh_positions) == 6
+    assert len({item.as_of_date for item in latest_positions}) == 5
+    assert len(latest_positions) == 10
+    assert before_disclosure == []
