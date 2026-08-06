@@ -191,6 +191,7 @@ def render_markdown_report(report: DailyReport, template_dir: str | Path | None 
         report=report,
         metric_labels=METRIC_LABELS,
         taiwan_margin=taiwan_margin_maintenance_view(report),
+        taiwan_chips=taiwan_chip_view(report),
     )
 
 
@@ -282,6 +283,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         metric_labels=METRIC_LABELS,
         summary=build_summary(report),
         taiwan_margin=taiwan_margin_maintenance_view(report),
+        taiwan_chips=taiwan_chip_view(report),
         history=history_sections(report),
         research_payload=research_payload(report),
         earnings_soon=earnings_soon(report),
@@ -510,6 +512,240 @@ def taiwan_margin_maintenance_view(report: DailyReport) -> dict[str, object]:
         ),
         "disclaimer": "市場彙總估算，不等同個別信用帳戶的正式整戶維持率。",
     }
+
+
+def taiwan_chip_view(report: DailyReport) -> dict[str, object]:
+    """Build one Taiwan-only view for cash-market and TX positioning."""
+    has_taiwan = any(
+        item.ticker.market in {"twse", "tpex"}
+        for item in report.ticker_reports
+    )
+    if not has_taiwan:
+        return {"visible": False, "available": False}
+
+    snapshots_by_date: dict[date, list[object]] = {}
+    for snapshot in report.taiwan_institutional_market:
+        if snapshot.as_of_date <= report.report_date:
+            snapshots_by_date.setdefault(snapshot.as_of_date, []).append(snapshot)
+    spot_date = max(snapshots_by_date, default=None)
+    spot_rows = snapshots_by_date.get(spot_date, []) if spot_date else []
+    foreign_net = sum(row.foreign_net_twd for row in spot_rows)
+    trust_net = sum(row.investment_trust_net_twd for row in spot_rows)
+    dealer_net = sum(row.dealer_net_twd for row in spot_rows)
+    total_net = sum(row.total_net_twd for row in spot_rows)
+    venues = {row.market for row in spot_rows}
+    venue_label = (
+        "\u4e0a\u5e02\uff0b\u4e0a\u6ac3"
+        if venues == {"twse", "tpex"}
+        else "\u4e0a\u5e02"
+        if venues == {"twse"}
+        else "\u4e0a\u6ac3"
+        if venues == {"tpex"}
+        else "\u5e02\u5834"
+    )
+    spot_metrics = [
+        _taiwan_chip_metric("\u5916\u8cc7\u73fe\u8ca8", foreign_net),
+        _taiwan_chip_metric("\u6295\u4fe1\u73fe\u8ca8", trust_net),
+        _taiwan_chip_metric("\u81ea\u71df\u5546\u73fe\u8ca8", dealer_net),
+        _taiwan_chip_metric("\u4e09\u5927\u6cd5\u4eba\u5408\u8a08", total_net),
+    ] if spot_rows else []
+
+    foreign_by_date = {
+        position.as_of_date: position
+        for position in report.taiwan_futures_positions
+        if position.institution == "foreign"
+        and position.as_of_date <= report.report_date
+    }
+    foreign_positions = [
+        foreign_by_date[as_of]
+        for as_of in sorted(foreign_by_date, reverse=True)
+    ]
+    current_future = foreign_positions[0] if foreign_positions else None
+    previous_future = foreign_positions[1] if len(foreign_positions) > 1 else None
+    oldest_future = foreign_positions[-1] if len(foreign_positions) > 1 else None
+    day_delta = (
+        current_future.open_interest_net - previous_future.open_interest_net
+        if current_future is not None and previous_future is not None
+        else None
+    )
+    trend_delta = (
+        current_future.open_interest_net - oldest_future.open_interest_net
+        if current_future is not None and oldest_future is not None
+        else None
+    )
+    trust_future = next(
+        (
+            position
+            for position in report.taiwan_futures_positions
+            if current_future is not None
+            and position.as_of_date == current_future.as_of_date
+            and position.institution == "investment_trust"
+        ),
+        None,
+    )
+    futures_view: dict[str, object] = {}
+    if current_future is not None:
+        session_count = len(foreign_positions)
+        futures_view = {
+            "as_of_label": current_future.as_of_date.isoformat(),
+            "net_open_interest": current_future.open_interest_net,
+            "net_open_interest_label": (
+                f"{current_future.open_interest_net:+,} \u53e3"
+            ),
+            "short_open_interest_label": (
+                f"{current_future.open_interest_short:,} \u53e3"
+            ),
+            "trading_net_label": f"{current_future.trading_net:+,} \u53e3",
+            "trading_tone": change_class(current_future.trading_net),
+            "day_change_label": _futures_position_change_label(
+                current_future.open_interest_net,
+                day_delta,
+                "\u8f03\u524d\u65e5",
+            ),
+            "day_change_tone": change_class(day_delta),
+            "trend_label": _futures_position_change_label(
+                current_future.open_interest_net,
+                trend_delta,
+                f"{session_count}\u65e5",
+            ),
+            "trend_tone": change_class(trend_delta),
+            "session_count": session_count,
+            "trust_net_label": (
+                f"{trust_future.open_interest_net:+,} \u53e3"
+                if trust_future is not None
+                else "\u2014"
+            ),
+            "history": [
+                {
+                    "date": position.as_of_date.strftime("%m/%d"),
+                    "value": position.open_interest_net,
+                    "value_label": f"{position.open_interest_net:+,}",
+                }
+                for position in reversed(foreign_positions[:5])
+            ],
+            "source": current_future.source,
+        }
+
+    ranking_rows: list[dict[str, object]] = []
+    for item in report.ticker_reports:
+        if item.ticker.market not in {"twse", "tpex"} or item.taiwan_market is None:
+            continue
+        snapshot = item.taiwan_market
+        total_shares = snapshot.institutional_net_shares
+        if total_shares is None:
+            components = [
+                value
+                for value in (
+                    snapshot.foreign_net_shares,
+                    snapshot.investment_trust_net_shares,
+                    snapshot.dealer_net_shares,
+                )
+                if value is not None
+            ]
+            total_shares = sum(components) if components else None
+        if total_shares is None:
+            continue
+        average_volume = _metric_float(item, "avg_volume_20d")
+        volume_share_pct = (
+            total_shares / average_volume * 100.0
+            if average_volume is not None and average_volume > 0
+            else None
+        )
+        ranking_rows.append({
+            "symbol": item.ticker.symbol,
+            "display_symbol": item.ticker.display_symbol,
+            "company_name": item.ticker.company_name,
+            "total": total_shares,
+            "total_label": format_tw_shares(total_shares),
+            "tone": change_class(total_shares),
+            "volume_share_label": (
+                f"\u4f54 20 \u65e5\u5747\u91cf {volume_share_pct:+.1f}%"
+                if volume_share_pct is not None
+                else ""
+            ),
+            "multi_day_label": (
+                f"{snapshot.institutional_flow_days}D "
+                f"{format_tw_shares(snapshot.institutional_net_shares_5d)}"
+                if snapshot.institutional_net_shares_5d is not None
+                and snapshot.institutional_flow_days > 1
+                else ""
+            ),
+            "as_of_label": (
+                snapshot.institutional_as_of.isoformat()
+                if snapshot.institutional_as_of is not None
+                else ""
+            ),
+        })
+    buy_rows = sorted(
+        (row for row in ranking_rows if float(row["total"]) > 0),
+        key=lambda row: float(row["total"]),
+        reverse=True,
+    )[:5]
+    sell_rows = sorted(
+        (row for row in ranking_rows if float(row["total"]) < 0),
+        key=lambda row: float(row["total"]),
+    )[:5]
+
+    reading = "\u7c4c\u78bc\u8cc7\u6599\u4e0d\u8db3\uff0c\u4e0d\u505a\u65b9\u5411\u89e3\u8b80\u3002"
+    reading_tone = "missing"
+    if spot_rows and day_delta is not None:
+        if foreign_net > 0 and day_delta > 0:
+            reading = "\u5916\u8cc7\u73fe\u8ca8\u8cb7\u8d85\uff0c\u671f\u8ca8\u6de8\u90e8\u4f4d\u540c\u6b65\u6539\u5584\u3002"
+            reading_tone = "good"
+        elif foreign_net < 0 and day_delta < 0:
+            reading = "\u5916\u8cc7\u73fe\u8ca8\u8ce3\u8d85\uff0c\u671f\u8ca8\u6de8\u90e8\u4f4d\u540c\u6b65\u8f49\u5f31\u3002"
+            reading_tone = "danger"
+        else:
+            reading = "\u73fe\u8ca8\u8207\u671f\u8ca8\u8a0a\u865f\u5206\u6b67\uff0c\u907f\u514d\u53ea\u770b\u55ae\u4e00\u7c4c\u78bc\u3002"
+            reading_tone = "mixed"
+
+    source_parts = sorted({row.source for row in spot_rows})
+    if current_future is not None:
+        source_parts.append(current_future.source)
+    return {
+        "visible": True,
+        "available": bool(spot_rows or current_future or ranking_rows),
+        "spot_available": bool(spot_rows),
+        "spot_date_label": spot_date.isoformat() if spot_date else "",
+        "spot_scope_label": venue_label,
+        "spot_metrics": spot_metrics,
+        "futures_available": current_future is not None,
+        "futures": futures_view,
+        "reading": reading,
+        "reading_tone": reading_tone,
+        "buy_rows": buy_rows,
+        "sell_rows": sell_rows,
+        "ranking_count": len(ranking_rows),
+        "source_label": " / ".join(source_parts),
+        "disclaimer": (
+            "\u6cd5\u4eba\u8207\u671f\u8ca8\u6578\u64da\u70ba\u591a\u5bb6\u6a5f\u69cb\u5408\u8a08\u7684\u76e4\u5f8c\u5feb\u7167\uff0c"
+            "\u4e0d\u4ee3\u8868\u55ae\u4e00\u6a5f\u69cb\u7b56\u7565\uff0c\u4e5f\u4e0d\u662f\u8cb7\u8ce3\u6307\u793a\u3002"
+        ),
+    }
+
+
+def _taiwan_chip_metric(label: str, value: float) -> dict[str, object]:
+    return {
+        "label": label,
+        "value": value,
+        "value_label": f"{value / 100_000_000:+,.1f} \u5104\u5143",
+        "tone": change_class(value),
+    }
+
+
+def _futures_position_change_label(
+    current_net: int,
+    delta: int | None,
+    prefix: str,
+) -> str:
+    if delta is None:
+        return f"{prefix}\u5c1a\u7121\u53ef\u6bd4\u8cc7\u6599"
+    magnitude = abs(delta)
+    if current_net < 0:
+        action = "\u6de8\u7a7a\u589e\u52a0" if delta < 0 else "\u6de8\u7a7a\u56de\u88dc"
+    else:
+        action = "\u6de8\u591a\u589e\u52a0" if delta > 0 else "\u6de8\u591a\u6e1b\u5c11"
+    return f"{prefix} {action} {magnitude:,} \u53e3"
 
 
 def related_ticker_links(report: DailyReport) -> dict[str, list[dict[str, str]]]:

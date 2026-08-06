@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 import requests
 
-from .models import TaiwanMarketOverview, TaiwanMarketSnapshot, TickerConfig
+from .models import (
+    TaiwanInstitutionalMarketSnapshot,
+    TaiwanMarketOverview,
+    TaiwanMarketSnapshot,
+    TickerConfig,
+)
 
 
 TWSE_MONTHLY_REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 TWSE_DIVIDEND_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap45_L"
 TWSE_INSTITUTIONAL_URL = "https://www.twse.com.tw/rwd/zh/fund/T86"
+TWSE_INSTITUTIONAL_SUMMARY_URL = "https://www.twse.com.tw/rwd/zh/fund/BFI82U"
 TPEX_MONTHLY_REVENUE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O"
 TPEX_DIVIDEND_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap39_O"
 TPEX_INSTITUTIONAL_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
+TPEX_INSTITUTIONAL_SUMMARY_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_summary"
 TWSE_MARGIN_URL = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TWSE_DAILY_CLOSE_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
 _REQUEST_TIMEOUT_SECONDS = 12
@@ -26,6 +33,7 @@ class TaiwanMarketFetchResult:
     snapshots: dict[str, TaiwanMarketSnapshot]
     overview: TaiwanMarketOverview | None
     warnings: list[str]
+    institutional_market: list[TaiwanInstitutionalMarketSnapshot] = field(default_factory=list)
 
 
 class TaiwanMarketDataProvider:
@@ -36,9 +44,15 @@ class TaiwanMarketDataProvider:
         timeout_seconds: int = _REQUEST_TIMEOUT_SECONDS,
         *,
         include_market_overview: bool = True,
+        include_institutional_market: bool | None = None,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.include_market_overview = include_market_overview
+        self.include_institutional_market = (
+            include_market_overview
+            if include_institutional_market is None
+            else include_institutional_market
+        )
 
     def fetch(self, tickers: list[TickerConfig], report_date: date) -> TaiwanMarketFetchResult:
         twse_tickers = [ticker for ticker in tickers if ticker.market == "twse"]
@@ -53,6 +67,11 @@ class TaiwanMarketDataProvider:
             self._margin_maintenance_overview(report_date, retrieved_at, warnings)
             if self.include_market_overview
             else None
+        )
+        institutional_market = (
+            self._institutional_market_overview(report_date, retrieved_at, warnings)
+            if self.include_institutional_market
+            else []
         )
         revenue_by_symbol: dict[str, dict[str, object]] = {}
         dividend_by_symbol: dict[str, dict[str, object]] = {}
@@ -92,15 +111,23 @@ class TaiwanMarketDataProvider:
                 foreign_net_shares=flow.get("foreign"),
                 investment_trust_net_shares=flow.get("trust"),
                 dealer_net_shares=flow.get("dealer"),
+                institutional_net_shares=flow.get("total"),
                 foreign_net_shares_5d=flow.get("foreign_5d"),
                 investment_trust_net_shares_5d=flow.get("trust_5d"),
+                dealer_net_shares_5d=flow.get("dealer_5d"),
+                institutional_net_shares_5d=flow.get("total_5d"),
                 institutional_net_buy_days_5d=flow.get("net_buy_days"),
                 institutional_flow_days=int(flow.get("flow_days", 0) or 0),
                 institutional_as_of=flow.get("as_of"),
                 source="TWSE OpenAPI / T86" if ticker.market == "twse" else "TPEx OpenAPI",
                 retrieved_at=retrieved_at,
             )
-        return TaiwanMarketFetchResult(snapshots=snapshots, overview=overview, warnings=warnings)
+        return TaiwanMarketFetchResult(
+            snapshots=snapshots,
+            overview=overview,
+            warnings=warnings,
+            institutional_market=institutional_market,
+        )
 
     def _margin_maintenance_overview(
         self,
@@ -146,6 +173,57 @@ class TaiwanMarketDataProvider:
                 "TWSE margin maintenance estimate unavailable for recent trading days."
             )
         return None
+
+    def _institutional_market_overview(
+        self,
+        report_date: date,
+        retrieved_at: datetime,
+        warnings: list[str],
+    ) -> list[TaiwanInstitutionalMarketSnapshot]:
+        snapshots: list[TaiwanInstitutionalMarketSnapshot] = []
+        for offset in range(10):
+            candidate = report_date - timedelta(days=offset)
+            if candidate.weekday() >= 5:
+                continue
+            try:
+                payload = self._get_json(
+                    TWSE_INSTITUTIONAL_SUMMARY_URL,
+                    params={
+                        "date": candidate.strftime("%Y%m%d"),
+                        "response": "json",
+                    },
+                )
+            except requests.RequestException:
+                continue
+            snapshot = _twse_institutional_market_snapshot(payload, retrieved_at)
+            if (
+                snapshot is not None
+                and snapshot.as_of_date <= report_date
+                and (report_date - snapshot.as_of_date).days <= 10
+            ):
+                snapshots.append(snapshot)
+                break
+
+        try:
+            tpex_payload = self._get_json(TPEX_INSTITUTIONAL_SUMMARY_URL)
+        except requests.RequestException:
+            tpex_payload = None
+        tpex_snapshot = _tpex_institutional_market_snapshot(
+            tpex_payload,
+            retrieved_at,
+        )
+        if (
+            tpex_snapshot is not None
+            and tpex_snapshot.as_of_date <= report_date
+            and (report_date - tpex_snapshot.as_of_date).days <= 10
+        ):
+            snapshots.append(tpex_snapshot)
+
+        if not snapshots:
+            warnings.append(
+                "Taiwan institutional market totals unavailable for recent trading days."
+            )
+        return snapshots
 
     def _monthly_revenue(self, url: str, source: str, warnings: list[str]) -> dict[str, dict[str, object]]:
         try:
@@ -367,6 +445,118 @@ def _margin_maintenance_snapshot(
     )
 
 
+def _twse_institutional_market_snapshot(
+    payload: object,
+    retrieved_at: datetime,
+) -> TaiwanInstitutionalMarketSnapshot | None:
+    as_of = _payload_date(payload)
+    if as_of is None or not isinstance(payload, dict):
+        return None
+    fields = payload.get("fields")
+    rows = payload.get("data")
+    if not isinstance(fields, list) or not isinstance(rows, list):
+        return None
+    field_names = [str(value) for value in fields]
+    name_index = _field_index(
+        field_names,
+        ("\u55ae\u4f4d\u540d\u7a31",),
+    )
+    net_index = _field_index(
+        field_names,
+        ("\u8cb7\u8ce3\u5dee\u984d", "\u8cb7\u8ce3\u8d85"),
+    )
+    if name_index is None or net_index is None:
+        return None
+
+    foreign: float | None = None
+    trust: float | None = None
+    total: float | None = None
+    dealer_parts: list[float] = []
+    for row in rows:
+        if not isinstance(row, list):
+            continue
+        label = _row_value(row, name_index).replace(" ", "")
+        value = _number_value(_row_value(row, net_index))
+        if value is None:
+            continue
+        if label.startswith("\u5916\u8cc7\u53ca\u9678\u8cc7(") and "\u4e0d\u542b" in label:
+            foreign = value
+        elif label == "\u6295\u4fe1":
+            trust = value
+        elif label.startswith("\u81ea\u71df\u5546("):
+            dealer_parts.append(value)
+        elif label == "\u5408\u8a08":
+            total = value
+
+    dealer = sum(dealer_parts) if dealer_parts else None
+    if any(value is None for value in (foreign, trust, dealer)):
+        return None
+    calculated_total = float(foreign) + float(trust) + float(dealer)
+    return TaiwanInstitutionalMarketSnapshot(
+        as_of_date=as_of,
+        market="twse",
+        foreign_net_twd=float(foreign),
+        investment_trust_net_twd=float(trust),
+        dealer_net_twd=float(dealer),
+        total_net_twd=float(total) if total is not None else calculated_total,
+        source="TWSE BFI82U",
+        retrieved_at=retrieved_at,
+    )
+
+
+def _tpex_institutional_market_snapshot(
+    payload: object,
+    retrieved_at: datetime,
+) -> TaiwanInstitutionalMarketSnapshot | None:
+    if not isinstance(payload, list):
+        return None
+    as_of: date | None = None
+    foreign: float | None = None
+    foreign_fallback: float | None = None
+    trust: float | None = None
+    dealer: float | None = None
+    total: float | None = None
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        row_date = _roc_date(_text(row, "Date"))
+        if row_date is None:
+            continue
+        if as_of is None:
+            as_of = row_date
+        if row_date != as_of:
+            continue
+        label = _text(row, "Investor").replace(" ", "")
+        value = _number(row, "Net")
+        if value is None:
+            continue
+        if label.startswith("\u5916\u8cc7\u53ca\u9678\u8cc7") and "\u4e0d\u542b\u81ea\u71df\u5546" in label:
+            foreign = value
+        elif label == "\u5916\u8cc7\u53ca\u9678\u8cc7\u5408\u8a08":
+            foreign_fallback = value
+        elif label == "\u6295\u4fe1":
+            trust = value
+        elif label == "\u81ea\u71df\u5546\u5408\u8a08":
+            dealer = value
+        elif label.rstrip("*") == "\u4e09\u5927\u6cd5\u4eba\u5408\u8a08":
+            total = value
+
+    foreign = foreign if foreign is not None else foreign_fallback
+    if as_of is None or any(value is None for value in (foreign, trust, dealer)):
+        return None
+    calculated_total = float(foreign) + float(trust) + float(dealer)
+    return TaiwanInstitutionalMarketSnapshot(
+        as_of_date=as_of,
+        market="tpex",
+        foreign_net_twd=float(foreign),
+        investment_trust_net_twd=float(trust),
+        dealer_net_twd=float(dealer),
+        total_net_twd=float(total) if total is not None else calculated_total,
+        source="TPEx OpenAPI / tpex_3insti_summary",
+        retrieved_at=retrieved_at,
+    )
+
+
 def _payload_date(payload: object) -> date | None:
     if not isinstance(payload, dict) or payload.get("stat") != "OK":
         return None
@@ -412,14 +602,18 @@ def _summarize_institutional_history(
         latest = dict(records[0])
         foreign = [float(value) for row in records if (value := row.get("foreign")) is not None]
         trust = [float(value) for row in records if (value := row.get("trust")) is not None]
+        dealer = [float(value) for row in records if (value := row.get("dealer")) is not None]
+        total = [float(value) for row in records if (value := row.get("total")) is not None]
         net_buy_days = sum(
             1
             for row in records
-            if sum(float(row.get(key) or 0.0) for key in ("foreign", "trust", "dealer")) > 0
+            if float(row.get("total") or 0.0) > 0
         )
         latest.update({
             "foreign_5d": sum(foreign) if foreign else None,
             "trust_5d": sum(trust) if trust else None,
+            "dealer_5d": sum(dealer) if dealer else None,
+            "total_5d": sum(total) if total else None,
             "net_buy_days": net_buy_days,
             "flow_days": len(records),
         })
@@ -439,6 +633,7 @@ def _institutional_rows(payload: object, as_of: date) -> dict[str, dict[str, obj
         "foreign": _field_index(field_names, (_u("5916", "9678", "8cc7", "8cb7", "8ce3", "8d85", "80a1", "6578", "0028", "4e0d", "542b", "5916", "8cc7", "81ea", "71df", "5546", "0029"), _u("5916", "9678", "8cc7", "8cb7", "8ce3", "8d85", "80a1", "6578"), _u("5916", "8cc7", "53ca", "9678", "8cc7", "8ce3", "8ce3", "8d85", "80a1", "6578"))),
         "trust": _field_index(field_names, (_u("6295", "4fe1", "8cb7", "8ce3", "8d85", "80a1", "6578"),)),
         "dealer": _field_index(field_names, (_u("81ea", "71df", "5546", "8cb7", "8ce3", "8d85", "80a1", "6578"),)),
+        "total": _field_index(field_names, (_u("4e09", "5927", "6cd5", "4eba", "8cb7", "8ce3", "8d85", "80a1", "6578"),)),
     }
     if indexes["code"] is None:
         return {}
@@ -450,10 +645,15 @@ def _institutional_rows(payload: object, as_of: date) -> dict[str, dict[str, obj
         code = _row_value(raw, indexes["code"])
         if not code:
             continue
+        foreign = _number_value(_row_value(raw, indexes["foreign"]))
+        trust = _number_value(_row_value(raw, indexes["trust"]))
+        dealer = _number_value(_row_value(raw, indexes["dealer"]))
+        total = _number_value(_row_value(raw, indexes["total"]))
         output[code] = {
-            "foreign": _number_value(_row_value(raw, indexes["foreign"])),
-            "trust": _number_value(_row_value(raw, indexes["trust"])),
-            "dealer": _number_value(_row_value(raw, indexes["dealer"])),
+            "foreign": foreign,
+            "trust": trust,
+            "dealer": dealer,
+            "total": total if total is not None else _sum_available(foreign, trust, dealer),
             "as_of": as_of,
         }
     return output
@@ -489,9 +689,16 @@ def _tpex_institutional_rows(payload: object) -> dict[str, dict[str, object]]:
             ),
             "trust": _number(row, "SecuritiesInvestmentTrustCompanies-Difference"),
             "dealer": _number(row, "Dealers-Difference"),
+            "total": _number(row, "TotalDifference"),
             "flow_days": 1,
             "as_of": _roc_date(_text(row, "Date")),
         }
+        if output[code]["total"] is None:
+            output[code]["total"] = _sum_available(
+                output[code]["foreign"],
+                output[code]["trust"],
+                output[code]["dealer"],
+            )
     return output
 
 
@@ -531,6 +738,13 @@ def _number(row: dict[str, object], *keys: str) -> float | None:
         if value is not None:
             return value
     return None
+
+
+def _sum_available(*values: object) -> float | None:
+    numbers = [float(value) for value in values if isinstance(value, (int, float))]
+    if not numbers:
+        return None
+    return sum(numbers)
 
 
 def _number_value(value: object) -> float | None:

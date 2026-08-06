@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from unittest.mock import patch
@@ -471,9 +471,14 @@ def test_fetch_one_ticker_skips_earnings_fetch_for_etf(monkeypatch) -> None:
 
 
 def test_run_daily_persists_and_reuses_taiwan_margin_overview(tmp_path: Path, monkeypatch) -> None:
-    from stock_daily_research.models import TaiwanMarketOverview
+    from stock_daily_research.models import (
+        TaiwanFuturesPosition,
+        TaiwanInstitutionalMarketSnapshot,
+        TaiwanMarketOverview,
+    )
     from stock_daily_research.storage import load_latest_taiwan_market_overview
     from stock_daily_research.taiwan_market import TaiwanMarketFetchResult
+    from stock_daily_research.taifex import TaifexFetchResult
 
     config_path = tmp_path / "watchlist.yaml"
     config_path.write_text(
@@ -504,19 +509,70 @@ tickers:
         source="TWSE MI_MARGN / MI_INDEX",
         retrieved_at=datetime.now(timezone.utc).replace(microsecond=0),
     )
+
+    institutional = [
+        TaiwanInstitutionalMarketSnapshot(
+            as_of_date=date(2026, 7, 28),
+            market=market,
+            foreign_net_twd=foreign,
+            investment_trust_net_twd=1_000_000_000.0,
+            dealer_net_twd=-500_000_000.0,
+            total_net_twd=foreign + 500_000_000.0,
+            source=source,
+            retrieved_at=overview.retrieved_at,
+        )
+        for market, foreign, source in (
+            ("twse", 10_000_000_000.0, "TWSE BFI82U"),
+            ("tpex", -1_000_000_000.0, "TPEx 3insti_summary"),
+        )
+    ]
+    futures = [
+        TaiwanFuturesPosition(
+            as_of_date=date(2026, 7, 28) - timedelta(days=offset),
+            contract_code="TX",
+            institution="foreign",
+            trading_long=1_000,
+            trading_short=1_200,
+            trading_net=-200,
+            open_interest_long=10_000,
+            open_interest_short=90_000 - offset * 1_000,
+            open_interest_net=-80_000 + offset * 1_000,
+            source="TAIFEX",
+            retrieved_at=overview.retrieved_at,
+        )
+        for offset in range(5)
+    ]
+
     overview_fetch_flags: list[bool] = []
+    institutional_fetch_flags: list[bool] = []
+    taifex_fetch_dates: list[date] = []
 
     def fake_fetch(self, tickers, report_date):
         overview_fetch_flags.append(self.include_market_overview)
+        institutional_fetch_flags.append(self.include_institutional_market)
         return TaiwanMarketFetchResult(
             snapshots={},
             overview=overview if self.include_market_overview else None,
+            institutional_market=(
+                institutional if self.include_institutional_market else []
+            ),
             warnings=[],
         )
+
+    def fake_taifex_fetch(self, report_date, *, history_sessions=5):
+        taifex_fetch_dates.append(report_date)
+        assert history_sessions == 5
+        return TaifexFetchResult(positions=futures, warnings=[])
+
+
 
     monkeypatch.setattr(
         "stock_daily_research.runner.TaiwanMarketDataProvider.fetch",
         fake_fetch,
+    )
+    monkeypatch.setattr(
+        "stock_daily_research.runner.TaifexInstitutionalProvider.fetch",
+        fake_taifex_fetch,
     )
 
     first = run_daily(
@@ -553,5 +609,12 @@ tickers:
     assert second.taiwan_market_overview == overview
     assert cached == overview
     assert overview_fetch_flags == [True, False]
+    assert institutional_fetch_flags == [True, False]
+    assert first.taiwan_institutional_market == institutional
+    assert second.taiwan_institutional_market == institutional
+    assert len(first.taiwan_futures_positions) == 5
+    assert len(second.taiwan_futures_positions) == 5
+    assert taifex_fetch_dates == [date(2026, 7, 29)]
+    assert "+90.0 \u5104\u5143" in html
     assert "163.1%" in html
     assert "\u4e0a\u5e02\u5927\u76e4\u878d\u8cc7\u7dad\u6301\u7387" in html

@@ -3,15 +3,19 @@ from datetime import date, datetime, timezone
 from stock_daily_research.models import TickerConfig
 from stock_daily_research.taiwan_market import (
     TPEX_DIVIDEND_URL,
+    TPEX_INSTITUTIONAL_SUMMARY_URL,
     TPEX_INSTITUTIONAL_URL,
     TPEX_MONTHLY_REVENUE_URL,
     TWSE_DAILY_CLOSE_URL,
     TWSE_DIVIDEND_URL,
     TWSE_INSTITUTIONAL_URL,
+    TWSE_INSTITUTIONAL_SUMMARY_URL,
     TWSE_MARGIN_URL,
     TWSE_MONTHLY_REVENUE_URL,
     TaiwanMarketDataProvider,
     _margin_maintenance_snapshot,
+    _tpex_institutional_market_snapshot,
+    _twse_institutional_market_snapshot,
 )
 
 
@@ -60,6 +64,8 @@ def test_provider_normalizes_official_taiwan_disclosures(monkeypatch) -> None:
     assert snapshot.institutional_as_of == date(2026, 7, 14)
     assert snapshot.foreign_net_shares_5d == 61725.0
     assert snapshot.investment_trust_net_shares_5d == -1170.0
+    assert snapshot.institutional_net_shares == 12161.0
+    assert snapshot.institutional_net_shares_5d == 60805.0
     assert snapshot.institutional_net_buy_days_5d == 5
     assert snapshot.institutional_flow_days == 5
     assert result.warnings == []
@@ -112,6 +118,7 @@ def test_provider_normalizes_tpex_disclosures(monkeypatch) -> None:
     assert snapshot.foreign_net_shares == 12_000.0
     assert snapshot.investment_trust_net_shares == -400.0
     assert snapshot.dealer_net_shares == 80.0
+    assert snapshot.institutional_net_shares == 11_680.0
     assert snapshot.institutional_as_of == date(2026, 7, 14)
     assert snapshot.source == "TPEx OpenAPI"
 
@@ -136,6 +143,74 @@ def test_provider_hides_stale_dividend_disclosures(monkeypatch) -> None:
     )
 
     assert result.snapshots == {}
+
+
+def test_twse_institutional_market_summary_uses_named_fields() -> None:
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    payload = {
+        "stat": "OK",
+        "date": "20260805",
+        "fields": [
+            "\u55ae\u4f4d\u540d\u7a31",
+            "\u8cb7\u9032\u91d1\u984d",
+            "\u8ce3\u51fa\u91d1\u984d",
+            "\u8cb7\u8ce3\u5dee\u984d",
+        ],
+        "data": [
+            ["\u81ea\u71df\u5546(\u81ea\u884c\u8cb7\u8ce3)", "0", "0", "-200"],
+            ["\u81ea\u71df\u5546(\u907f\u96aa)", "0", "0", "500"],
+            ["\u6295\u4fe1", "0", "0", "1,200"],
+            ["\u5916\u8cc7\u53ca\u9678\u8cc7(\u4e0d\u542b\u5916\u8cc7\u81ea\u71df\u5546)", "0", "0", "3,000"],
+            ["\u5408\u8a08", "0", "0", "4,500"],
+        ],
+    }
+
+    snapshot = _twse_institutional_market_snapshot(payload, retrieved_at)
+
+    assert snapshot is not None
+    assert snapshot.as_of_date == date(2026, 8, 5)
+    assert snapshot.market == "twse"
+    assert snapshot.foreign_net_twd == 3_000.0
+    assert snapshot.investment_trust_net_twd == 1_200.0
+    assert snapshot.dealer_net_twd == 300.0
+    assert snapshot.total_net_twd == 4_500.0
+
+
+def test_tpex_institutional_market_summary_normalizes_roc_date() -> None:
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    payload = [
+        {
+            "Date": "1150805",
+            "Investor": "\u3000\u5916\u8cc7\u53ca\u9678\u8cc7(\u4e0d\u542b\u81ea\u71df\u5546)",
+            "Net": "-3,000",
+        },
+        {
+            "Date": "1150805",
+            "Investor": "\u6295\u4fe1",
+            "Net": "1,000",
+        },
+        {
+            "Date": "1150805",
+            "Investor": "\u81ea\u71df\u5546\u5408\u8a08",
+            "Net": "-500",
+        },
+        {
+            "Date": "1150805",
+            "Investor": "\u4e09\u5927\u6cd5\u4eba\u5408\u8a08*",
+            "Net": "-2,500",
+        },
+    ]
+
+    snapshot = _tpex_institutional_market_snapshot(payload, retrieved_at)
+
+    assert snapshot is not None
+    assert snapshot.as_of_date == date(2026, 8, 5)
+    assert snapshot.market == "tpex"
+    assert snapshot.foreign_net_twd == -3_000.0
+    assert snapshot.investment_trust_net_twd == 1_000.0
+    assert snapshot.dealer_net_twd == -500.0
+    assert snapshot.total_net_twd == -2_500.0
+
 
 def _margin_payload(on: str = "20260728") -> dict[str, object]:
     return {
@@ -227,4 +302,46 @@ def test_margin_maintenance_overview_scans_back_to_latest_trading_day(monkeypatc
         (TWSE_MARGIN_URL, "20260729"),
         (TWSE_MARGIN_URL, "20260728"),
         (TWSE_DAILY_CLOSE_URL, "20260728"),
+    ]
+
+
+def test_institutional_market_overview_rejects_future_disclosures(monkeypatch) -> None:
+    provider = TaiwanMarketDataProvider()
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    twse_payload = {
+        "stat": "OK",
+        "date": "20260807",
+        "fields": ["\u55ae\u4f4d\u540d\u7a31", "\u8cb7\u8ce3\u5dee\u984d"],
+        "data": [
+            ["\u5916\u8cc7\u53ca\u9678\u8cc7(\u4e0d\u542b\u5916\u8cc7\u81ea\u71df\u5546)", "3,000"],
+            ["\u6295\u4fe1", "1,200"],
+            ["\u81ea\u71df\u5546(\u81ea\u884c\u8cb7\u8ce3)", "300"],
+            ["\u5408\u8a08", "4,500"],
+        ],
+    }
+    tpex_payload = [
+        {"Date": "1150807", "Investor": "\u5916\u8cc7\u53ca\u9678\u8cc7(\u4e0d\u542b\u81ea\u71df\u5546)", "Net": "-3,000"},
+        {"Date": "1150807", "Investor": "\u6295\u4fe1", "Net": "1,000"},
+        {"Date": "1150807", "Investor": "\u81ea\u71df\u5546\u5408\u8a08", "Net": "-500"},
+        {"Date": "1150807", "Investor": "\u4e09\u5927\u6cd5\u4eba\u5408\u8a08*", "Net": "-2,500"},
+    ]
+
+    def fake_get_json(url: str, params=None):
+        if url == TWSE_INSTITUTIONAL_SUMMARY_URL:
+            return twse_payload
+        assert url == TPEX_INSTITUTIONAL_SUMMARY_URL
+        return tpex_payload
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+    warnings: list[str] = []
+
+    snapshots = provider._institutional_market_overview(
+        date(2026, 8, 6),
+        retrieved_at,
+        warnings,
+    )
+
+    assert snapshots == []
+    assert warnings == [
+        "Taiwan institutional market totals unavailable for recent trading days."
     ]

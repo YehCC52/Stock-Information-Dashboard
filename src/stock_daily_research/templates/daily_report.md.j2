@@ -23,6 +23,28 @@ Generated: {{ report.generated_at|twn_datetime }}
 
 {% endif %}
 
+{% if taiwan_chips.visible %}
+## {{ "\u53f0\u80a1\u7c4c\u78bc\u6982\u6cc1" }}
+
+{% if taiwan_chips.available %}
+{% for metric in taiwan_chips.spot_metrics %}
+- {{ metric.label }}: {{ metric.value_label }}
+{% endfor %}
+{% if taiwan_chips.futures_available %}
+- {{ "\u5916\u8cc7\u81fa\u6307\u671f\u6de8\u672a\u5e73\u5009" }}: {{ taiwan_chips.futures.net_open_interest_label }}
+- {{ taiwan_chips.futures.day_change_label }}
+- {{ taiwan_chips.futures.trend_label }}
+- {{ "\u7576\u65e5\u4ea4\u6613\u6de8\u984d" }}: {{ taiwan_chips.futures.trading_net_label }}
+{% endif %}
+- {{ "\u5224\u8b80" }}: {{ taiwan_chips.reading }}
+- {{ "\u8cc7\u6599" }}: {{ taiwan_chips.source_label }}
+- {{ "\u8a3b" }}: {{ taiwan_chips.disclaimer }}
+{% else %}
+- {{ "\u5c1a\u672a\u53d6\u5f97\u6700\u8fd1\u76e4\u5f8c\u7c4c\u78bc\u8cc7\u6599\u3002" }}
+{% endif %}
+
+{% endif %}
+
 {% if report.premarket %}
 ## Overnight / Premarket
 

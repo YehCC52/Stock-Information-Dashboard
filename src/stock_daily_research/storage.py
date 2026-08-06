@@ -14,6 +14,8 @@ from .models import (
     NewsArticle,
     PostEarningsReview,
     PositionConfig,
+    TaiwanFuturesPosition,
+    TaiwanInstitutionalMarketSnapshot,
     TaiwanMarketOverview,
     TickerHistoryPoint,
     TickerResearchState,
@@ -79,6 +81,38 @@ CREATE TABLE IF NOT EXISTS taiwan_market_overviews (
   source TEXT NOT NULL,
   retrieved_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS taiwan_institutional_market_snapshots (
+  as_of_date TEXT NOT NULL,
+  market TEXT NOT NULL,
+  foreign_net_twd REAL NOT NULL,
+  investment_trust_net_twd REAL NOT NULL,
+  dealer_net_twd REAL NOT NULL,
+  total_net_twd REAL NOT NULL,
+  source TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL,
+  PRIMARY KEY (as_of_date, market)
+);
+
+CREATE TABLE IF NOT EXISTS taiwan_futures_positions (
+  as_of_date TEXT NOT NULL,
+  contract_code TEXT NOT NULL,
+  institution TEXT NOT NULL,
+  trading_long INTEGER NOT NULL,
+  trading_short INTEGER NOT NULL,
+  trading_net INTEGER NOT NULL,
+  open_interest_long INTEGER NOT NULL,
+  open_interest_short INTEGER NOT NULL,
+  open_interest_net INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL,
+  PRIMARY KEY (as_of_date, contract_code, institution)
+);
+
+CREATE INDEX IF NOT EXISTS idx_taiwan_institutional_market_date
+  ON taiwan_institutional_market_snapshots(as_of_date, market);
+CREATE INDEX IF NOT EXISTS idx_taiwan_futures_position_date
+  ON taiwan_futures_positions(as_of_date, contract_code, institution);
 
 CREATE TABLE IF NOT EXISTS earnings_dates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -426,6 +460,10 @@ def save_report(conn: sqlite3.Connection, report: DailyReport) -> None:
             save_earnings(conn, ticker_report.earnings)
     if report.taiwan_market_overview:
         save_taiwan_market_overview(conn, report.taiwan_market_overview)
+    for snapshot in report.taiwan_institutional_market:
+        save_taiwan_institutional_market_snapshot(conn, snapshot)
+    for position in report.taiwan_futures_positions:
+        save_taiwan_futures_position(conn, position)
     for state in report.research_states.values():
         upsert_ticker_research_state(conn, state)
     for review in report.post_earnings_reviews.values():
@@ -609,6 +647,216 @@ def _load_taiwan_market_overview(
         source=str(row[10]),
         retrieved_at=datetime.fromisoformat(row[11]),
     )
+
+
+def save_taiwan_institutional_market_snapshot(
+    conn: sqlite3.Connection,
+    snapshot: TaiwanInstitutionalMarketSnapshot,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO taiwan_institutional_market_snapshots
+        (as_of_date, market, foreign_net_twd, investment_trust_net_twd,
+         dealer_net_twd, total_net_twd, source, retrieved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(as_of_date, market) DO UPDATE SET
+          foreign_net_twd = excluded.foreign_net_twd,
+          investment_trust_net_twd = excluded.investment_trust_net_twd,
+          dealer_net_twd = excluded.dealer_net_twd,
+          total_net_twd = excluded.total_net_twd,
+          source = excluded.source,
+          retrieved_at = excluded.retrieved_at
+        """,
+        (
+            snapshot.as_of_date.isoformat(),
+            snapshot.market,
+            snapshot.foreign_net_twd,
+            snapshot.investment_trust_net_twd,
+            snapshot.dealer_net_twd,
+            snapshot.total_net_twd,
+            snapshot.source,
+            snapshot.retrieved_at.isoformat(),
+        ),
+    )
+
+
+def load_fresh_taiwan_institutional_market(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    max_age_hours: int = 4,
+) -> list[TaiwanInstitutionalMarketSnapshot]:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    return _load_taiwan_institutional_market(
+        conn,
+        before_or_on=before_or_on,
+        cutoff=cutoff,
+    )
+
+
+def load_latest_taiwan_institutional_market(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+) -> list[TaiwanInstitutionalMarketSnapshot]:
+    return _load_taiwan_institutional_market(
+        conn,
+        before_or_on=before_or_on,
+    )
+
+
+def _load_taiwan_institutional_market(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    cutoff: str | None = None,
+) -> list[TaiwanInstitutionalMarketSnapshot]:
+    sql = """
+        SELECT as_of_date, market, foreign_net_twd,
+               investment_trust_net_twd, dealer_net_twd, total_net_twd,
+               source, retrieved_at
+        FROM taiwan_institutional_market_snapshots
+        WHERE as_of_date <= ?
+    """
+    params: list[object] = [before_or_on.isoformat()]
+    if cutoff is not None:
+        sql += " AND retrieved_at >= ?"
+        params.append(cutoff)
+    sql += " ORDER BY as_of_date DESC, retrieved_at DESC"
+
+    output: list[TaiwanInstitutionalMarketSnapshot] = []
+    seen_markets: set[str] = set()
+    for row in conn.execute(sql, params).fetchall():
+        market = str(row[1])
+        if market in seen_markets:
+            continue
+        seen_markets.add(market)
+        output.append(
+            TaiwanInstitutionalMarketSnapshot(
+                as_of_date=date.fromisoformat(row[0]),
+                market=market,
+                foreign_net_twd=float(row[2]),
+                investment_trust_net_twd=float(row[3]),
+                dealer_net_twd=float(row[4]),
+                total_net_twd=float(row[5]),
+                source=str(row[6]),
+                retrieved_at=datetime.fromisoformat(row[7]),
+            )
+        )
+    return output
+
+
+def save_taiwan_futures_position(
+    conn: sqlite3.Connection,
+    position: TaiwanFuturesPosition,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO taiwan_futures_positions
+        (as_of_date, contract_code, institution, trading_long, trading_short,
+         trading_net, open_interest_long, open_interest_short,
+         open_interest_net, source, retrieved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(as_of_date, contract_code, institution) DO UPDATE SET
+          trading_long = excluded.trading_long,
+          trading_short = excluded.trading_short,
+          trading_net = excluded.trading_net,
+          open_interest_long = excluded.open_interest_long,
+          open_interest_short = excluded.open_interest_short,
+          open_interest_net = excluded.open_interest_net,
+          source = excluded.source,
+          retrieved_at = excluded.retrieved_at
+        """,
+        (
+            position.as_of_date.isoformat(),
+            position.contract_code,
+            position.institution,
+            position.trading_long,
+            position.trading_short,
+            position.trading_net,
+            position.open_interest_long,
+            position.open_interest_short,
+            position.open_interest_net,
+            position.source,
+            position.retrieved_at.isoformat(),
+        ),
+    )
+
+
+def load_fresh_taiwan_futures_positions(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    max_age_hours: int = 4,
+    session_limit: int = 5,
+) -> list[TaiwanFuturesPosition]:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    return _load_taiwan_futures_positions(
+        conn,
+        before_or_on=before_or_on,
+        cutoff=cutoff,
+        session_limit=session_limit,
+    )
+
+
+def load_latest_taiwan_futures_positions(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    session_limit: int = 5,
+) -> list[TaiwanFuturesPosition]:
+    return _load_taiwan_futures_positions(
+        conn,
+        before_or_on=before_or_on,
+        session_limit=session_limit,
+    )
+
+
+def _load_taiwan_futures_positions(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    session_limit: int,
+    cutoff: str | None = None,
+) -> list[TaiwanFuturesPosition]:
+    sql = """
+        SELECT as_of_date, contract_code, institution,
+               trading_long, trading_short, trading_net,
+               open_interest_long, open_interest_short, open_interest_net,
+               source, retrieved_at
+        FROM taiwan_futures_positions
+        WHERE as_of_date <= ?
+    """
+    params: list[object] = [before_or_on.isoformat()]
+    if cutoff is not None:
+        sql += " AND retrieved_at >= ?"
+        params.append(cutoff)
+    sql += " ORDER BY as_of_date DESC, contract_code, institution"
+
+    output: list[TaiwanFuturesPosition] = []
+    included_dates: list[str] = []
+    for row in conn.execute(sql, params).fetchall():
+        as_of_text = str(row[0])
+        if as_of_text not in included_dates:
+            if len(included_dates) >= max(1, session_limit):
+                break
+            included_dates.append(as_of_text)
+        output.append(
+            TaiwanFuturesPosition(
+                as_of_date=date.fromisoformat(as_of_text),
+                contract_code=str(row[1]),
+                institution=str(row[2]),
+                trading_long=int(row[3]),
+                trading_short=int(row[4]),
+                trading_net=int(row[5]),
+                open_interest_long=int(row[6]),
+                open_interest_short=int(row[7]),
+                open_interest_net=int(row[8]),
+                source=str(row[9]),
+                retrieved_at=datetime.fromisoformat(row[10]),
+            )
+        )
+    return output
 
 
 def save_earnings(conn: sqlite3.Connection, earnings: EarningsDate) -> None:

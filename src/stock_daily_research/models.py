@@ -531,6 +531,33 @@ class TaiwanMarketOverview:
 
 
 @dataclass(frozen=True)
+class TaiwanInstitutionalMarketSnapshot:
+    as_of_date: date
+    market: str
+    foreign_net_twd: float
+    investment_trust_net_twd: float
+    dealer_net_twd: float
+    total_net_twd: float
+    source: str
+    retrieved_at: datetime
+
+
+@dataclass(frozen=True)
+class TaiwanFuturesPosition:
+    as_of_date: date
+    contract_code: str
+    institution: str
+    trading_long: int
+    trading_short: int
+    trading_net: int
+    open_interest_long: int
+    open_interest_short: int
+    open_interest_net: int
+    source: str
+    retrieved_at: datetime
+
+
+@dataclass(frozen=True)
 class TaiwanMarketSnapshot:
     ticker: str
     revenue_month: str = ""
@@ -542,8 +569,11 @@ class TaiwanMarketSnapshot:
     foreign_net_shares: float | None = None
     investment_trust_net_shares: float | None = None
     dealer_net_shares: float | None = None
+    institutional_net_shares: float | None = None
     foreign_net_shares_5d: float | None = None
     investment_trust_net_shares_5d: float | None = None
+    dealer_net_shares_5d: float | None = None
+    institutional_net_shares_5d: float | None = None
     institutional_net_buy_days_5d: int | None = None
     institutional_flow_days: int = 0
     institutional_as_of: date | None = None
@@ -573,6 +603,8 @@ class DailyReport:
     market_context: MarketContext | None = None
     premarket: PremarketSnapshot | None = None
     taiwan_market_overview: TaiwanMarketOverview | None = None
+    taiwan_institutional_market: list[TaiwanInstitutionalMarketSnapshot] = field(default_factory=list)
+    taiwan_futures_positions: list[TaiwanFuturesPosition] = field(default_factory=list)
     research_states: dict[str, TickerResearchState] = field(default_factory=dict)
     post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
     trade_journal: list[TradeJournalEntry] = field(default_factory=list)
