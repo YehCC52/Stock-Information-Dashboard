@@ -14,6 +14,10 @@ from stock_daily_research.taiwan_market import (
     TWSE_MONTHLY_REVENUE_URL,
     TaiwanMarketDataProvider,
     _margin_maintenance_snapshot,
+    _company_profile_rows,
+    _tpex_market_highlight_snapshot,
+    _tpex_market_sessions,
+    _twse_market_session,
     _tpex_institutional_market_snapshot,
     _twse_institutional_market_snapshot,
 )
@@ -345,3 +349,187 @@ def test_institutional_market_overview_rejects_future_disclosures(monkeypatch) -
     assert warnings == [
         "Taiwan institutional market totals unavailable for recent trading days."
     ]
+
+def test_twse_market_session_builds_official_breadth_and_excludes_etfs() -> None:
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    payload = {
+        "stat": "OK",
+        "date": "20260805",
+        "tables": [
+            {
+                "fields": [
+                    "\u6307\u6578",
+                    "\u6536\u76e4\u6307\u6578",
+                    "\u6f32\u8dcc\u767e\u5206\u6bd4(%)",
+                ],
+                "data": [
+                    [
+                        "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578",
+                        "24,000.00",
+                        "1.25",
+                    ]
+                ],
+            },
+            {
+                "fields": [
+                    "\u6210\u4ea4\u7d71\u8a08",
+                    "\u6210\u4ea4\u91d1\u984d(\u5143)",
+                ],
+                "data": [["1.\u4e00\u822c\u80a1\u7968", "500,000,000,000"]],
+            },
+            {
+                "fields": ["\u985e\u578b", "\u6574\u9ad4\u5e02\u5834", "\u80a1\u7968"],
+                "data": [
+                    ["\u4e0a\u6f32(\u6f32\u505c)", "620(20)", "600(18)"],
+                    ["\u4e0b\u8dcc(\u8dcc\u505c)", "300(4)", "280(3)"],
+                    ["\u6301\u5e73", "100", "90"],
+                ],
+            },
+            {
+                "fields": [
+                    "\u8b49\u5238\u4ee3\u865f",
+                    "\u8b49\u5238\u540d\u7a31",
+                    "\u6210\u4ea4\u80a1\u6578",
+                    "\u6210\u4ea4\u91d1\u984d",
+                    "\u6536\u76e4\u50f9",
+                    "\u6f32\u8dcc(+/-)",
+                    "\u6f32\u8dcc\u50f9\u5dee",
+                ],
+                "data": [
+                    ["2330", "\u53f0\u7a4d\u96fb", "10,000", "10,000,000", "1,000", "+", "20"],
+                    ["0050", "\u5143\u5927\u53f0\u706350", "5,000", "1,000,000", "200", "-", "2"],
+                ],
+            },
+        ],
+    }
+    profiles = {
+        "2330": {
+            "name": "\u53f0\u7a4d\u96fb",
+            "industry_code": "24",
+            "industry_name": "\u534a\u5c0e\u9ad4",
+        }
+    }
+    flow = {
+        "2330": {
+            "as_of": date(2026, 8, 5),
+            "foreign": 1_000.0,
+            "trust": 200.0,
+            "dealer": -50.0,
+            "total": 1_150.0,
+        }
+    }
+
+    result = _twse_market_session(payload, profiles, flow, retrieved_at)
+
+    assert result is not None
+    pulse, stocks = result
+    assert pulse.index_close == 24_000.0
+    assert pulse.index_change_pct == 1.25
+    assert pulse.turnover_twd == 500_000_000_000.0
+    assert (pulse.advancers, pulse.decliners, pulse.unchanged) == (600, 280, 90)
+    assert (pulse.limit_up, pulse.limit_down) == (18, 3)
+    assert [item.symbol for item in stocks] == ["2330.TW"]
+    assert stocks[0].industry_name == "\u534a\u5c0e\u9ad4"
+    assert stocks[0].institutional_net_shares == 1_150.0
+
+
+def test_tpex_market_sessions_respect_date_boundary_and_company_classification() -> None:
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    profiles = _company_profile_rows(
+        [{
+            "SecuritiesCompanyCode": "5425",
+            "CompanyAbbreviation": "\u53f0\u534a",
+            "SecuritiesIndustryCode": "24",
+        }],
+        "tpex",
+    )
+    payload = [
+        {
+            "Date": "1150806",
+            "SecuritiesCompanyCode": "5425",
+            "CompanyName": "\u53f0\u534a",
+            "Close": "110",
+            "Change": "10",
+            "TradingShares": "2,000",
+            "TransactionAmount": "220,000",
+        },
+        {
+            "Date": "1150805",
+            "SecuritiesCompanyCode": "5425",
+            "CompanyName": "\u53f0\u534a",
+            "Close": "100",
+            "Change": "5",
+            "TradingShares": "1,000",
+            "TransactionAmount": "100,000",
+        },
+        {
+            "Date": "1150804",
+            "SecuritiesCompanyCode": "5425",
+            "CompanyName": "\u53f0\u534a",
+            "Close": "95",
+            "Change": "-1",
+            "TradingShares": "900",
+            "TransactionAmount": "85,500",
+        },
+        {
+            "Date": "1150805",
+            "SecuritiesCompanyCode": "00679B",
+            "CompanyName": "ETF",
+            "Close": "30",
+            "Change": "0.1",
+            "TradingShares": "50",
+            "TransactionAmount": "1,500",
+        },
+    ]
+    flow = {
+        "5425": {
+            "as_of": date(2026, 8, 5),
+            "foreign": 800.0,
+            "trust": 100.0,
+            "dealer": -20.0,
+            "total": 880.0,
+        }
+    }
+
+    pulses, stocks = _tpex_market_sessions(
+        payload,
+        profiles,
+        flow,
+        retrieved_at,
+        date(2026, 8, 5),
+        session_limit=6,
+    )
+
+    assert {item.as_of_date for item in pulses} == {
+        date(2026, 8, 4),
+        date(2026, 8, 5),
+    }
+    assert {item.symbol for item in stocks} == {"5425.TWO"}
+    latest = next(item for item in stocks if item.as_of_date == date(2026, 8, 5))
+    assert latest.industry_name == "\u534a\u5c0e\u9ad4"
+    assert latest.institutional_net_shares == 880.0
+    assert all(item.as_of_date <= date(2026, 8, 5) for item in stocks)
+
+
+def test_tpex_market_highlight_converts_index_points_to_percent() -> None:
+    snapshot = _tpex_market_highlight_snapshot(
+        [{
+            "Date": "1150805",
+            "CloseIndex": "250",
+            "IndexChange": "5",
+            "DailyTradingValue": "225,000",
+            "PriceRiseCompanyNumbers": "400",
+            "LimitUpCompanyNumbers": "20",
+            "PriceDeclineCompanyNumbers": "250",
+            "LimitDownCompanyNumbers": "8",
+            "PriceFlatCompanyNumbers": "50",
+        }],
+        datetime(2026, 8, 6, tzinfo=timezone.utc),
+        date(2026, 8, 5),
+    )
+
+    assert snapshot is not None
+    assert snapshot.index_change_pct == 2.0408163265306123
+    assert snapshot.turnover_twd == 225_000_000_000.0
+    assert snapshot.advancers == 400
+    assert snapshot.limit_down == 8

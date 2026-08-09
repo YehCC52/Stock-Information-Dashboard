@@ -4869,3 +4869,146 @@ def test_taiwan_chip_view_is_absent_for_us_only_report() -> None:
     )
 
     assert taiwan_chip_view(report) == {"visible": False, "available": False}
+
+def test_taiwan_market_pulse_view_uses_whole_market_history_and_stays_scoped() -> None:
+    from stock_daily_research.models import (
+        TaiwanFuturesPosition,
+        TaiwanInstitutionalMarketSnapshot,
+        TaiwanMarketPulseSnapshot,
+        TaiwanMarketStockSnapshot,
+    )
+    from stock_daily_research.report import taiwan_market_pulse_view
+
+    retrieved_at = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    tw = TickerReport(
+        ticker=TickerConfig(
+            symbol="2330.TW",
+            company_name="TSMC",
+            market="twse",
+            currency="TWD",
+        ),
+        articles=[],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+    us = TickerReport(
+        ticker=TickerConfig(symbol="NVDA", company_name="NVIDIA"),
+        articles=[],
+        x_signals=[],
+        valuation=None,
+        earnings=None,
+    )
+    pulses = [
+        TaiwanMarketPulseSnapshot(
+            as_of_date=date(2026, 8, 5),
+            market=market,
+            index_name="TAIEX" if market == "twse" else "OTC",
+            index_close=24_000.0 if market == "twse" else 250.0,
+            index_change_pct=1.2 if market == "twse" else 0.8,
+            turnover_twd=500_000_000_000.0 if market == "twse" else 200_000_000_000.0,
+            advancers=600 if market == "twse" else 400,
+            decliners=300 if market == "twse" else 200,
+            unchanged=100 if market == "twse" else 50,
+            limit_up=20,
+            limit_down=5,
+            source="official",
+            retrieved_at=retrieved_at,
+        )
+        for market in ("twse", "tpex")
+    ]
+    definitions = [
+        ("2330.TW", "TSMC", "Semiconductor", 1_000.0, 900.0, 2.0, 2_000_000.0),
+        ("2454.TW", "MediaTek", "Semiconductor", 1_500.0, 1_400.0, 1.0, 1_000_000.0),
+        ("2603.TW", "Evergreen", "Shipping", 200.0, 220.0, -2.0, -2_000_000.0),
+        ("2615.TW", "Wan Hai", "Shipping", 100.0, 110.0, -1.0, -1_000_000.0),
+    ]
+    market_stocks = []
+    for offset in range(6):
+        as_of = date(2026, 8, 5) - timedelta(days=offset)
+        for symbol, company, industry, current, oldest, daily, institutional in definitions:
+            close = current - (current - oldest) * offset / 5
+            market_stocks.append(
+                TaiwanMarketStockSnapshot(
+                    as_of_date=as_of,
+                    market="twse",
+                    symbol=symbol,
+                    company_name=company,
+                    industry_code="24" if industry == "Semiconductor" else "15",
+                    industry_name=industry,
+                    close=close,
+                    change_pct=daily,
+                    trading_shares=10_000_000.0,
+                    turnover_twd=10_000_000_000.0,
+                    foreign_net_shares=institutional if offset == 0 else None,
+                    investment_trust_net_shares=100_000.0 if offset == 0 else None,
+                    dealer_net_shares=-50_000.0 if offset == 0 else None,
+                    institutional_net_shares=institutional if offset == 0 else None,
+                    source="official",
+                    retrieved_at=retrieved_at,
+                )
+            )
+    spot = [
+        TaiwanInstitutionalMarketSnapshot(
+            as_of_date=date(2026, 8, 5),
+            market="twse",
+            foreign_net_twd=10_000_000_000.0,
+            investment_trust_net_twd=1_000_000_000.0,
+            dealer_net_twd=-500_000_000.0,
+            total_net_twd=10_500_000_000.0,
+            source="official",
+            retrieved_at=retrieved_at,
+        )
+    ]
+    futures = [
+        TaiwanFuturesPosition(
+            as_of_date=as_of,
+            contract_code="TX",
+            institution="foreign",
+            trading_long=1_000,
+            trading_short=2_000,
+            trading_net=-1_000,
+            open_interest_long=10_000,
+            open_interest_short=short,
+            open_interest_net=10_000 - short,
+            source="official",
+            retrieved_at=retrieved_at,
+        )
+        for as_of, short in (
+            (date(2026, 8, 5), 90_000),
+            (date(2026, 8, 4), 95_000),
+        )
+    ]
+    report = DailyReport(
+        report_date=date(2026, 8, 6),
+        generated_at=retrieved_at,
+        ticker_reports=[us, tw],
+        taiwan_market_pulse=pulses,
+        taiwan_market_stocks=market_stocks,
+        taiwan_institutional_market=spot,
+        taiwan_futures_positions=futures,
+    )
+
+    view = taiwan_market_pulse_view(report)
+    html = render_html_report(report)
+
+    assert view["state_label"] == "\u76e4\u52e2\u504f\u591a"
+    assert view["advancer_ratio_label"] == "60.6%"
+    assert view["industry_window_label"] == "5D"
+    assert view["leaders"][0]["industry"] == "Semiconductor"
+    assert view["laggards"][0]["industry"] == "Shipping"
+    assert [row["display_symbol"] for row in view["buy_rows"][:2]] == ["2330", "2454"]
+    assert [row["display_symbol"] for row in view["sell_rows"][:2]] == ["2603", "2615"]
+    assert view["source_label"] == (
+        "\u8b49\u4ea4\u6240\uff0f\u6ac3\u8cb7\u4e2d\u5fc3"
+        "\u5b98\u65b9\u76e4\u5f8c\u8cc7\u6599"
+    )
+    assert 'id="taiwan-market-context"' in html
+    assert 'data-market-context="taiwan" hidden' in html
+    assert 'data-taiwan-view="industry"' in html
+    assert "\u5168\u5e02\u5834\u7522\u696d\u8f2a\u52d5" in html
+    assert "\u89c0\u5bdf\u80a1\u7522\u696d\u5730\u5716" in html
+
+    us_only = replace(report, ticker_reports=[us])
+    assert taiwan_market_pulse_view(us_only)["visible"] is False
+    assert 'id="taiwan-market-context"' not in render_html_report(us_only)

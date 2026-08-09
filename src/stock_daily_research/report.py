@@ -190,6 +190,7 @@ def render_markdown_report(report: DailyReport, template_dir: str | Path | None 
     return template.render(
         report=report,
         metric_labels=METRIC_LABELS,
+        taiwan_market=taiwan_market_pulse_view(report),
         taiwan_margin=taiwan_margin_maintenance_view(report),
         taiwan_chips=taiwan_chip_view(report),
     )
@@ -282,6 +283,7 @@ def render_html_report(report: DailyReport, template_dir: str | Path | None = No
         report=report,
         metric_labels=METRIC_LABELS,
         summary=build_summary(report),
+        taiwan_market=taiwan_market_pulse_view(report),
         taiwan_margin=taiwan_margin_maintenance_view(report),
         taiwan_chips=taiwan_chip_view(report),
         history=history_sections(report),
@@ -746,6 +748,551 @@ def _futures_position_change_label(
     else:
         action = "\u6de8\u591a\u589e\u52a0" if delta > 0 else "\u6de8\u591a\u6e1b\u5c11"
     return f"{prefix} {action} {magnitude:,} \u53e3"
+
+
+def taiwan_market_pulse_view(report: DailyReport) -> dict[str, object]:
+    """Build an explainable Taiwan-wide market, breadth, and rotation view."""
+    has_taiwan = any(
+        item.ticker.market in {"twse", "tpex"}
+        for item in report.ticker_reports
+    )
+    if not has_taiwan:
+        return {"visible": False, "available": False}
+
+    current_pulses = _latest_taiwan_rows_by_market(
+        report.taiwan_market_pulse,
+        report.report_date,
+    )
+    current_stocks = _latest_taiwan_rows_by_market(
+        report.taiwan_market_stocks,
+        report.report_date,
+    )
+    if not current_pulses and not current_stocks:
+        return {
+            "visible": True,
+            "available": False,
+            "state_label": "\u8cc7\u6599\u5c1a\u672a\u53d6\u5f97",
+            "state_tone": "missing",
+            "state_action": (
+                "\u91cd\u65b0\u7522\u6a94\u6642\u6703\u8b80\u53d6"
+                "\u8b49\u4ea4\u6240\u8207\u6ac3\u8cb7\u4e2d\u5fc3"
+                "\u6700\u8fd1\u76e4\u5f8c\u8cc7\u6599\u3002"
+            ),
+            "evidence": [],
+            "indices": [],
+            "industries": [],
+            "leaders": [],
+            "laggards": [],
+            "buy_rows": [],
+            "sell_rows": [],
+        }
+
+    pulse_by_market = {item.market: item for item in current_pulses}
+    indices: list[dict[str, object]] = []
+    for market in ("twse", "tpex"):
+        pulse = pulse_by_market.get(market)
+        if pulse is None:
+            continue
+        indices.append({
+            "market": market,
+            "market_label": (
+                "\u4e0a\u5e02" if market == "twse" else "\u4e0a\u6ac3"
+            ),
+            "name": pulse.index_name,
+            "close": pulse.index_close,
+            "close_label": _format_index_value(pulse.index_close),
+            "change_pct": pulse.index_change_pct,
+            "change_label": (
+                format_pct(pulse.index_change_pct)
+                if pulse.index_change_pct is not None
+                else "\u2014"
+            ),
+            "tone": (
+                change_class(pulse.index_change_pct)
+                if pulse.index_change_pct is not None
+                else "flat"
+            ),
+            "turnover_label": _format_twd_market_value(pulse.turnover_twd),
+            "breadth_label": (
+                f"\u6f32 {pulse.advancers} / "
+                f"\u8dcc {pulse.decliners} / "
+                f"\u5e73 {pulse.unchanged}"
+            ),
+            "limit_label": (
+                f"\u6f32\u505c {pulse.limit_up} / "
+                f"\u8dcc\u505c {pulse.limit_down}"
+            ),
+            "as_of_label": pulse.as_of_date.isoformat(),
+        })
+
+    advancers = sum(item.advancers for item in current_pulses)
+    decliners = sum(item.decliners for item in current_pulses)
+    unchanged = sum(item.unchanged for item in current_pulses)
+    breadth_total = advancers + decliners + unchanged
+    advancer_ratio = (
+        advancers / breadth_total * 100.0
+        if breadth_total > 0
+        else None
+    )
+    turnover = sum(item.turnover_twd for item in current_pulses)
+    if turnover <= 0:
+        turnover = sum(item.turnover_twd for item in current_stocks)
+
+    industries = _taiwan_industry_rotation_rows(
+        report,
+        current_stocks,
+        turnover,
+    )
+    positive_industry_ratio = (
+        sum(1 for row in industries if float(row["change_1d"]) > 0)
+        / len(industries)
+        * 100.0
+        if industries
+        else None
+    )
+
+    spot_by_date: dict[date, list[object]] = {}
+    for snapshot in report.taiwan_institutional_market:
+        if snapshot.as_of_date <= report.report_date:
+            spot_by_date.setdefault(snapshot.as_of_date, []).append(snapshot)
+    spot_date = max(spot_by_date, default=None)
+    spot_rows = spot_by_date.get(spot_date, []) if spot_date else []
+    foreign_net = (
+        sum(item.foreign_net_twd for item in spot_rows)
+        if spot_rows
+        else None
+    )
+
+    foreign_positions = sorted(
+        (
+            item
+            for item in report.taiwan_futures_positions
+            if item.institution == "foreign"
+            and item.as_of_date <= report.report_date
+        ),
+        key=lambda item: item.as_of_date,
+        reverse=True,
+    )
+    futures_delta = (
+        foreign_positions[0].open_interest_net
+        - foreign_positions[1].open_interest_net
+        if len(foreign_positions) >= 2
+        else None
+    )
+
+    evidence: list[dict[str, str]] = []
+    positive_votes = 0
+    negative_votes = 0
+
+    def add_evidence(
+        label: str,
+        value: str,
+        direction: int,
+    ) -> None:
+        nonlocal positive_votes, negative_votes
+        if direction > 0:
+            tone = "good"
+            positive_votes += 1
+        elif direction < 0:
+            tone = "danger"
+            negative_votes += 1
+        else:
+            tone = "mixed"
+        evidence.append({"label": label, "value": value, "tone": tone})
+
+    index_changes = [
+        float(item.index_change_pct)
+        for item in current_pulses
+        if item.index_change_pct is not None
+    ]
+    if index_changes:
+        index_mid = median(index_changes)
+        add_evidence(
+            "\u6307\u6578\u65b9\u5411",
+            f"\u5e73\u5747 {index_mid:+.2f}%",
+            1 if index_mid >= 0.15 else -1 if index_mid <= -0.15 else 0,
+        )
+    if advancer_ratio is not None:
+        add_evidence(
+            "\u5e02\u5834\u5ee3\u5ea6",
+            f"\u4e0a\u6f32\u5bb6\u6578 {advancer_ratio:.1f}%",
+            1 if advancer_ratio >= 55 else -1 if advancer_ratio <= 45 else 0,
+        )
+    if positive_industry_ratio is not None:
+        add_evidence(
+            "\u7522\u696d\u64f4\u6563",
+            f"\u4e0a\u6f32\u7522\u696d {positive_industry_ratio:.1f}%",
+            (
+                1
+                if positive_industry_ratio >= 55
+                else -1
+                if positive_industry_ratio <= 45
+                else 0
+            ),
+        )
+    if foreign_net is not None:
+        add_evidence(
+            "\u5916\u8cc7\u73fe\u8ca8",
+            _format_twd_signed_value(foreign_net),
+            1 if foreign_net > 0 else -1 if foreign_net < 0 else 0,
+        )
+    if futures_delta is not None:
+        add_evidence(
+            "\u5916\u8cc7\u53f0\u6307\u671f",
+            (
+                f"\u6de8\u90e8\u4f4d\u8f03\u524d\u65e5 "
+                f"{futures_delta:+,} \u53e3"
+            ),
+            1 if futures_delta > 0 else -1 if futures_delta < 0 else 0,
+        )
+
+    if positive_votes >= 3 and negative_votes <= 1:
+        state_label = "\u76e4\u52e2\u504f\u591a"
+        state_tone = "good"
+        state_action = (
+            "\u512a\u5148\u627e\u9818\u5148\u7522\u696d\u4e2d"
+            "\u5b8c\u6210\u7a81\u7834\u6216\u56de\u6e2c\u627f\u63a5"
+            "\u7684\u5f37\u52e2\u80a1\uff0c\u4ecd\u4f9d\u5931\u6548"
+            "\u50f9\u63a7\u5236\u98a8\u96aa\u3002"
+        )
+    elif negative_votes >= 3 and positive_votes <= 1:
+        state_label = "\u98a8\u96aa\u5347\u9ad8"
+        state_tone = "danger"
+        state_action = (
+            "\u964d\u4f4e\u8ffd\u50f9\u8207\u64f4\u5927\u90e8\u4f4d"
+            "\u7684\u512a\u5148\u5ea6\uff0c\u5148\u7b49\u5ee3\u5ea6"
+            "\u8207\u9818\u5148\u7522\u696d\u6b62\u8dcc\u3002"
+        )
+    elif positive_votes and negative_votes:
+        state_label = "\u9078\u80a1\u76e4\uff0f\u8a0a\u865f\u5206\u6b67"
+        state_tone = "mixed"
+        state_action = (
+            "\u5927\u76e4\u8a0a\u865f\u4e0d\u4e00\u81f4\uff0c"
+            "\u628a\u6ce8\u610f\u529b\u653e\u5728\u7522\u696d"
+            "\u9818\u5148\u8207\u500b\u80a1\u76f8\u5c0d\u5f37\u5ea6"
+            "\uff0c\u4e0d\u7528\u55ae\u4e00\u6307\u6578\u505a"
+            "\u5168\u9762\u5224\u65b7\u3002"
+        )
+    else:
+        state_label = "\u9707\u76ea\u6574\u7406"
+        state_tone = "neutral"
+        state_action = (
+            "\u65b9\u5411\u8b49\u64da\u9084\u4e0d\u8db3\uff0c"
+            "\u7b49\u5f85\u6307\u6578\u3001\u5ee3\u5ea6\u8207"
+            "\u7c4c\u78bc\u51fa\u73fe\u66f4\u4e00\u81f4\u7684"
+            "\u8b8a\u5316\u3002"
+        )
+
+    ranking_rows = _taiwan_market_flow_rankings(
+        report,
+        current_stocks,
+    )
+    buy_rows = sorted(
+        (row for row in ranking_rows if float(row["total"]) > 0),
+        key=lambda row: float(row["total"]),
+        reverse=True,
+    )[:5]
+    sell_rows = sorted(
+        (row for row in ranking_rows if float(row["total"]) < 0),
+        key=lambda row: float(row["total"]),
+    )[:5]
+
+    dates = {
+        item.market: item.as_of_date.isoformat()
+        for item in current_pulses
+    }
+    if not dates:
+        dates = {
+            item.market: item.as_of_date.isoformat()
+            for item in current_stocks
+        }
+    date_parts = [
+        (
+            "\u4e0a\u5e02" if market == "twse" else "\u4e0a\u6ac3"
+        ) + f" {as_of}"
+        for market, as_of in sorted(dates.items())
+    ]
+    source_markets = {
+        getattr(item, "market", "")
+        for item in [*current_pulses, *current_stocks]
+    }
+    source_names = [
+        label
+        for market, label in (
+            ("twse", "\u8b49\u4ea4\u6240"),
+            ("tpex", "\u6ac3\u8cb7\u4e2d\u5fc3"),
+        )
+        if market in source_markets
+    ]
+    return {
+        "visible": True,
+        "available": True,
+        "state_label": state_label,
+        "state_tone": state_tone,
+        "state_action": state_action,
+        "evidence": evidence,
+        "positive_votes": positive_votes,
+        "negative_votes": negative_votes,
+        "indices": indices,
+        "turnover_label": _format_twd_market_value(turnover),
+        "advancers": advancers,
+        "decliners": decliners,
+        "unchanged": unchanged,
+        "advancer_ratio": advancer_ratio,
+        "advancer_ratio_label": (
+            f"{advancer_ratio:.1f}%"
+            if advancer_ratio is not None
+            else "\u2014"
+        ),
+        "breadth_tone": (
+            "good"
+            if advancer_ratio is not None and advancer_ratio >= 55
+            else "danger"
+            if advancer_ratio is not None and advancer_ratio <= 45
+            else "mixed"
+        ),
+        "limit_up": sum(item.limit_up for item in current_pulses),
+        "limit_down": sum(item.limit_down for item in current_pulses),
+        "industries": industries,
+        "leaders": industries[:5],
+        "laggards": list(reversed(industries[-3:])),
+        "industry_count": len(industries),
+        "industry_window_label": _taiwan_industry_window_label(
+            report,
+            current_stocks,
+        ),
+        "buy_rows": buy_rows,
+        "sell_rows": sell_rows,
+        "flow_ranking_count": len(ranking_rows),
+        "data_date_label": " \u00b7 ".join(date_parts),
+        "source_label": (
+            "\uff0f".join(source_names)
+            + "\u5b98\u65b9\u76e4\u5f8c\u8cc7\u6599"
+            if source_names
+            else ""
+        ),
+        "disclaimer": (
+            "\u5168\u5e02\u5834\u5ee3\u5ea6\u8207\u7522\u696d"
+            "\u7d71\u8a08\u70ba\u76e4\u5f8c\u5feb\u7167\uff0c"
+            "\u7522\u696d\u6f32\u8dcc\u4f7f\u7528\u666e\u901a\u80a1"
+            "\u4e2d\u4f4d\u6578\uff0c\u4e0d\u662f\u6210\u4ea4\u4e2d"
+            "\u7684\u76e4\u4e2d\u5373\u6642\u8a0a\u865f\u3002"
+        ),
+    }
+
+
+def _latest_taiwan_rows_by_market(
+    rows: list[object],
+    report_date: date,
+) -> list[object]:
+    latest_dates: dict[str, date] = {}
+    for item in rows:
+        as_of = getattr(item, "as_of_date", None)
+        market = getattr(item, "market", "")
+        if not isinstance(as_of, date) or as_of > report_date or not market:
+            continue
+        previous = latest_dates.get(market)
+        if previous is None or as_of > previous:
+            latest_dates[market] = as_of
+    return [
+        item
+        for item in rows
+        if getattr(item, "as_of_date", None) == latest_dates.get(
+            getattr(item, "market", "")
+        )
+    ]
+
+
+def _taiwan_industry_rotation_rows(
+    report: DailyReport,
+    current_stocks: list[object],
+    market_turnover: float,
+) -> list[dict[str, object]]:
+    history_by_symbol: dict[str, list[object]] = {}
+    for item in report.taiwan_market_stocks:
+        if item.as_of_date <= report.report_date:
+            history_by_symbol.setdefault(item.symbol, []).append(item)
+    for history in history_by_symbol.values():
+        history.sort(key=lambda item: item.as_of_date, reverse=True)
+
+    buckets: dict[str, dict[str, object]] = {}
+    for item in current_stocks:
+        industry = str(getattr(item, "industry_name", "") or "")
+        if not industry or industry in {"\u672a\u5206\u985e", "\u7ba1\u7406\u80a1\u7968"}:
+            continue
+        bucket = buckets.setdefault(industry, {
+            "changes": [],
+            "returns": [],
+            "turnover": 0.0,
+            "institutional": [],
+            "advancers": 0,
+            "members": 0,
+        })
+        bucket["changes"].append(float(item.change_pct))
+        bucket["turnover"] = float(bucket["turnover"]) + float(item.turnover_twd)
+        bucket["members"] = int(bucket["members"]) + 1
+        if item.change_pct > 0:
+            bucket["advancers"] = int(bucket["advancers"]) + 1
+        if item.institutional_net_shares is not None:
+            bucket["institutional"].append(float(item.institutional_net_shares))
+        history = history_by_symbol.get(item.symbol, [])
+        if len(history) >= 2 and history[-1].close > 0:
+            bucket["returns"].append(
+                (float(item.close) / float(history[-1].close) - 1.0) * 100.0
+            )
+
+    rows: list[dict[str, object]] = []
+    for industry, bucket in buckets.items():
+        changes = list(bucket["changes"])
+        returns = list(bucket["returns"])
+        institutional = list(bucket["institutional"])
+        member_count = int(bucket["members"])
+        change_1d = median(changes)
+        return_5d = median(returns) if returns else None
+        breadth = (
+            int(bucket["advancers"]) / member_count * 100.0
+            if member_count
+            else 0.0
+        )
+        if return_5d is not None and return_5d >= 2 and change_1d > 0 and breadth >= 55:
+            momentum = "\u9818\u5148"
+            momentum_tone = "good"
+        elif return_5d is not None and return_5d > 0 and change_1d < 0:
+            momentum = "\u5f37\u52e2\u56de\u6a94"
+            momentum_tone = "mixed"
+        elif return_5d is not None and return_5d < 0 and change_1d > 0:
+            momentum = "\u8d85\u8dcc\u53cd\u5f48"
+            momentum_tone = "mixed"
+        elif return_5d is not None and return_5d <= -2 and change_1d <= 0:
+            momentum = "\u843d\u5f8c"
+            momentum_tone = "danger"
+        else:
+            momentum = "\u6574\u7406"
+            momentum_tone = "neutral"
+        turnover_value = float(bucket["turnover"])
+        institutional_value = sum(institutional) if institutional else None
+        rows.append({
+            "industry": industry,
+            "member_count": member_count,
+            "change_1d": change_1d,
+            "change_1d_label": format_pct(change_1d),
+            "change_tone": change_class(change_1d),
+            "return_5d": return_5d,
+            "return_5d_label": (
+                format_pct(return_5d) if return_5d is not None else "\u2014"
+            ),
+            "return_tone": (
+                change_class(return_5d)
+                if return_5d is not None
+                else "flat"
+            ),
+            "breadth": breadth,
+            "breadth_label": f"{breadth:.0f}%",
+            "turnover": turnover_value,
+            "turnover_label": _format_twd_market_value(turnover_value),
+            "turnover_share_label": (
+                f"{turnover_value / market_turnover * 100.0:.1f}%"
+                if market_turnover > 0
+                else "\u2014"
+            ),
+            "institutional": institutional_value,
+            "institutional_label": (
+                format_tw_shares(institutional_value)
+                if institutional_value is not None
+                else "\u2014"
+            ),
+            "institutional_tone": (
+                change_class(institutional_value)
+                if institutional_value is not None
+                else "flat"
+            ),
+            "momentum": momentum,
+            "momentum_tone": momentum_tone,
+        })
+    rows.sort(
+        key=lambda row: (
+            float(row["return_5d"])
+            if row["return_5d"] is not None
+            else float(row["change_1d"]),
+            float(row["change_1d"]),
+        ),
+        reverse=True,
+    )
+    return rows
+
+
+def _taiwan_industry_window_label(
+    report: DailyReport,
+    current_stocks: list[object],
+) -> str:
+    current_symbols = {getattr(item, "symbol", "") for item in current_stocks}
+    dates = sorted({
+        item.as_of_date
+        for item in report.taiwan_market_stocks
+        if item.symbol in current_symbols
+        and item.as_of_date <= report.report_date
+    })
+    intervals = max(0, min(5, len(dates) - 1))
+    return f"{intervals}D" if intervals else "\u7576\u65e5"
+
+
+def _taiwan_market_flow_rankings(
+    report: DailyReport,
+    current_stocks: list[object],
+) -> list[dict[str, object]]:
+    watchlist = {
+        item.ticker.symbol: item
+        for item in report.ticker_reports
+        if item.ticker.market in {"twse", "tpex"}
+    }
+    rows: list[dict[str, object]] = []
+    for item in current_stocks:
+        total = getattr(item, "institutional_net_shares", None)
+        if total is None:
+            continue
+        symbol = str(item.symbol)
+        watch_item = watchlist.get(symbol)
+        rows.append({
+            "symbol": symbol,
+            "display_symbol": (
+                watch_item.ticker.display_symbol
+                if watch_item is not None
+                else symbol.split(".")[0]
+            ),
+            "company_name": str(item.company_name),
+            "market_label": (
+                "\u4e0a\u5e02" if item.market == "twse" else "\u4e0a\u6ac3"
+            ),
+            "in_watchlist": watch_item is not None,
+            "total": float(total),
+            "total_label": format_tw_shares(total),
+            "tone": change_class(total),
+            "foreign_label": (
+                format_tw_shares(item.foreign_net_shares)
+                if item.foreign_net_shares is not None
+                else "\u2014"
+            ),
+            "trust_label": (
+                format_tw_shares(item.investment_trust_net_shares)
+                if item.investment_trust_net_shares is not None
+                else "\u2014"
+            ),
+        })
+    return rows
+
+
+def _format_twd_market_value(value: float) -> str:
+    if abs(value) >= 1_000_000_000_000:
+        return f"{value / 1_000_000_000_000:,.2f} \u5146\u5143"
+    return f"{value / 100_000_000:,.1f} \u5104\u5143"
+
+
+def _format_twd_signed_value(value: float) -> str:
+    return f"{value / 100_000_000:+,.1f} \u5104\u5143"
+
+
+def _format_index_value(value: float | None) -> str:
+    return f"{value:,.2f}" if value is not None else "\u2014"
 
 
 def related_ticker_links(report: DailyReport) -> dict[str, list[dict[str, str]]]:

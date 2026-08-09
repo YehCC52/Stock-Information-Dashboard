@@ -558,6 +558,43 @@ class TaiwanFuturesPosition:
 
 
 @dataclass(frozen=True)
+class TaiwanMarketPulseSnapshot:
+    as_of_date: date
+    market: str
+    index_name: str
+    index_close: float | None
+    index_change_pct: float | None
+    turnover_twd: float
+    advancers: int
+    decliners: int
+    unchanged: int
+    limit_up: int
+    limit_down: int
+    source: str
+    retrieved_at: datetime
+
+
+@dataclass(frozen=True)
+class TaiwanMarketStockSnapshot:
+    as_of_date: date
+    market: str
+    symbol: str
+    company_name: str
+    industry_code: str
+    industry_name: str
+    close: float
+    change_pct: float
+    trading_shares: float
+    turnover_twd: float
+    foreign_net_shares: float | None
+    investment_trust_net_shares: float | None
+    dealer_net_shares: float | None
+    institutional_net_shares: float | None
+    source: str
+    retrieved_at: datetime
+
+
+@dataclass(frozen=True)
 class TaiwanMarketSnapshot:
     ticker: str
     revenue_month: str = ""
@@ -605,6 +642,8 @@ class DailyReport:
     taiwan_market_overview: TaiwanMarketOverview | None = None
     taiwan_institutional_market: list[TaiwanInstitutionalMarketSnapshot] = field(default_factory=list)
     taiwan_futures_positions: list[TaiwanFuturesPosition] = field(default_factory=list)
+    taiwan_market_pulse: list[TaiwanMarketPulseSnapshot] = field(default_factory=list)
+    taiwan_market_stocks: list[TaiwanMarketStockSnapshot] = field(default_factory=list)
     research_states: dict[str, TickerResearchState] = field(default_factory=dict)
     post_earnings_reviews: dict[str, PostEarningsReview] = field(default_factory=dict)
     trade_journal: list[TradeJournalEntry] = field(default_factory=list)

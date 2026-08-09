@@ -45,9 +45,13 @@ from .storage import (
     load_fresh_taiwan_futures_positions,
     load_fresh_taiwan_institutional_market,
     load_fresh_taiwan_market_overview,
+    load_fresh_taiwan_market_pulse,
+    load_fresh_taiwan_market_stocks,
     load_latest_taiwan_futures_positions,
     load_latest_taiwan_institutional_market,
     load_latest_taiwan_market_overview,
+    load_latest_taiwan_market_pulse,
+    load_latest_taiwan_market_stocks,
     load_ticker_history,
     load_ticker_research_states,
     load_trade_journal_entries,
@@ -129,6 +133,8 @@ def run_daily(
     taiwan_market_overview = None
     taiwan_institutional_market = []
     taiwan_futures_positions = []
+    taiwan_market_pulse = []
+    taiwan_market_stocks = []
     if fetch_valuation:
         try:
             market_sentiment = fetch_market_sentiment()
@@ -224,14 +230,40 @@ def run_daily(
                     session_limit=5,
                 )
                 taiwan_market_overview = fresh_taiwan_overview
+                fresh_taiwan_market_pulse = load_fresh_taiwan_market_pulse(
+                    conn,
+                    before_or_on=actual_report_date,
+                    max_age_hours=VALUATION_CACHE_TTL_HOURS,
+                    session_limit=6,
+                )
+                fresh_taiwan_market_stocks = load_fresh_taiwan_market_stocks(
+                    conn,
+                    before_or_on=actual_report_date,
+                    max_age_hours=VALUATION_CACHE_TTL_HOURS,
+                    session_limit=6,
+                )
+                expected_taiwan_markets = {
+                    ticker.market
+                    for ticker in tickers
+                    if ticker.market in {"twse", "tpex"}
+                }
                 taiwan_institutional_market = fresh_taiwan_institutional
                 taiwan_futures_positions = fresh_taiwan_futures
+                taiwan_market_pulse = fresh_taiwan_market_pulse
+                taiwan_market_stocks = fresh_taiwan_market_stocks
 
                 try:
                     taiwan_result = TaiwanMarketDataProvider(
                         include_market_overview=fresh_taiwan_overview is None,
                         include_institutional_market=(
                             len({item.market for item in fresh_taiwan_institutional}) < 2
+                        ),
+                        include_market_pulse=not (
+                            fresh_taiwan_market_pulse
+                            and fresh_taiwan_market_stocks
+                            and expected_taiwan_markets <= {
+                                item.market for item in fresh_taiwan_market_pulse
+                            }
                         ),
                     ).fetch(tickers, actual_report_date)
                     global_warnings.extend(taiwan_result.warnings)
@@ -248,6 +280,24 @@ def run_daily(
                     taiwan_institutional_market = list(
                         institutional_by_market.values()
                     )
+                    pulse_by_key = {
+                        (item.as_of_date, item.market): item
+                        for item in fresh_taiwan_market_pulse
+                    }
+                    pulse_by_key.update({
+                        (item.as_of_date, item.market): item
+                        for item in taiwan_result.market_pulse
+                    })
+                    taiwan_market_pulse = list(pulse_by_key.values())
+                    stock_by_key = {
+                        (item.as_of_date, item.market, item.symbol): item
+                        for item in fresh_taiwan_market_stocks
+                    }
+                    stock_by_key.update({
+                        (item.as_of_date, item.market, item.symbol): item
+                        for item in taiwan_result.market_stocks
+                    })
+                    taiwan_market_stocks = list(stock_by_key.values())
                     ticker_reports = [
                         replace(
                             item,
@@ -288,6 +338,38 @@ def run_daily(
                     taiwan_institutional_market = list(
                         institutional_by_market.values()
                     )
+
+                pulse_markets = {item.market for item in taiwan_market_pulse}
+                stock_markets = {item.market for item in taiwan_market_stocks}
+                if not expected_taiwan_markets <= (pulse_markets & stock_markets):
+                    fallback_pulse = load_latest_taiwan_market_pulse(
+                        conn,
+                        before_or_on=actual_report_date,
+                        session_limit=6,
+                    )
+                    fallback_stocks = load_latest_taiwan_market_stocks(
+                        conn,
+                        before_or_on=actual_report_date,
+                        session_limit=6,
+                    )
+                    pulse_by_key = {
+                        (item.as_of_date, item.market): item
+                        for item in fallback_pulse
+                    }
+                    pulse_by_key.update({
+                        (item.as_of_date, item.market): item
+                        for item in taiwan_market_pulse
+                    })
+                    taiwan_market_pulse = list(pulse_by_key.values())
+                    stock_by_key = {
+                        (item.as_of_date, item.market, item.symbol): item
+                        for item in fallback_stocks
+                    }
+                    stock_by_key.update({
+                        (item.as_of_date, item.market, item.symbol): item
+                        for item in taiwan_market_stocks
+                    })
+                    taiwan_market_stocks = list(stock_by_key.values())
 
                 future_dates = {
                     item.as_of_date
@@ -359,6 +441,8 @@ def run_daily(
             taiwan_market_overview=taiwan_market_overview,
             taiwan_institutional_market=taiwan_institutional_market,
             taiwan_futures_positions=taiwan_futures_positions,
+            taiwan_market_pulse=taiwan_market_pulse,
+            taiwan_market_stocks=taiwan_market_stocks,
             research_states=research_states,
             post_earnings_reviews=post_earnings_reviews,
             trade_journal=trade_journal,
@@ -430,6 +514,8 @@ def run_daily(
         taiwan_market_overview=taiwan_market_overview,
         taiwan_institutional_market=taiwan_institutional_market,
         taiwan_futures_positions=taiwan_futures_positions,
+        taiwan_market_pulse=taiwan_market_pulse,
+        taiwan_market_stocks=taiwan_market_stocks,
         research_states=research_states,
         post_earnings_reviews=post_earnings_reviews,
         trade_journal=trade_journal,

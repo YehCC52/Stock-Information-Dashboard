@@ -475,8 +475,14 @@ def test_run_daily_persists_and_reuses_taiwan_margin_overview(tmp_path: Path, mo
         TaiwanFuturesPosition,
         TaiwanInstitutionalMarketSnapshot,
         TaiwanMarketOverview,
+        TaiwanMarketPulseSnapshot,
+        TaiwanMarketStockSnapshot,
     )
     from stock_daily_research.storage import load_latest_taiwan_market_overview
+    from stock_daily_research.storage import (
+        load_latest_taiwan_market_pulse,
+        load_latest_taiwan_market_stocks,
+    )
     from stock_daily_research.taiwan_market import TaiwanMarketFetchResult
     from stock_daily_research.taifex import TaifexFetchResult
 
@@ -543,19 +549,62 @@ tickers:
         for offset in range(5)
     ]
 
+    market_pulse = [
+        TaiwanMarketPulseSnapshot(
+            as_of_date=date(2026, 7, 28),
+            market="twse",
+            index_name="TAIEX",
+            index_close=24_000.0,
+            index_change_pct=1.0,
+            turnover_twd=500_000_000_000.0,
+            advancers=600,
+            decliners=300,
+            unchanged=100,
+            limit_up=20,
+            limit_down=5,
+            source="TWSE MI_INDEX",
+            retrieved_at=overview.retrieved_at,
+        )
+    ]
+    market_stocks = [
+        TaiwanMarketStockSnapshot(
+            as_of_date=date(2026, 7, 28) - timedelta(days=offset),
+            market="twse",
+            symbol="2330.TW",
+            company_name="TSMC",
+            industry_code="24",
+            industry_name="Semiconductor",
+            close=1_000.0 - offset * 10,
+            change_pct=1.0,
+            trading_shares=10_000_000.0,
+            turnover_twd=10_000_000_000.0,
+            foreign_net_shares=2_000_000.0 if offset == 0 else None,
+            investment_trust_net_shares=100_000.0 if offset == 0 else None,
+            dealer_net_shares=-50_000.0 if offset == 0 else None,
+            institutional_net_shares=2_050_000.0 if offset == 0 else None,
+            source="TWSE official",
+            retrieved_at=overview.retrieved_at,
+        )
+        for offset in range(6)
+    ]
+
     overview_fetch_flags: list[bool] = []
     institutional_fetch_flags: list[bool] = []
+    pulse_fetch_flags: list[bool] = []
     taifex_fetch_dates: list[date] = []
 
     def fake_fetch(self, tickers, report_date):
         overview_fetch_flags.append(self.include_market_overview)
         institutional_fetch_flags.append(self.include_institutional_market)
+        pulse_fetch_flags.append(self.include_market_pulse)
         return TaiwanMarketFetchResult(
             snapshots={},
             overview=overview if self.include_market_overview else None,
             institutional_market=(
                 institutional if self.include_institutional_market else []
             ),
+            market_pulse=market_pulse if self.include_market_pulse else [],
+            market_stocks=market_stocks if self.include_market_pulse else [],
             warnings=[],
         )
 
@@ -602,6 +651,14 @@ tickers:
             before_or_on=date(2026, 7, 29),
         )
 
+        cached_pulse = load_latest_taiwan_market_pulse(
+            conn,
+            before_or_on=date(2026, 7, 29),
+        )
+        cached_stocks = load_latest_taiwan_market_stocks(
+            conn,
+            before_or_on=date(2026, 7, 29),
+        )
     html = (output_dir / "2026" / "07" / "2026-07-29.html").read_text(
         encoding="utf-8"
     )
@@ -610,6 +667,12 @@ tickers:
     assert cached == overview
     assert overview_fetch_flags == [True, False]
     assert institutional_fetch_flags == [True, False]
+    assert pulse_fetch_flags == [True, False]
+    assert first.taiwan_market_pulse == market_pulse
+    assert second.taiwan_market_pulse == market_pulse
+    assert cached_pulse == market_pulse
+    assert first.taiwan_market_stocks == market_stocks
+    assert cached_stocks == market_stocks
     assert first.taiwan_institutional_market == institutional
     assert second.taiwan_institutional_market == institutional
     assert len(first.taiwan_futures_positions) == 5
@@ -618,3 +681,4 @@ tickers:
     assert "+90.0 \u5104\u5143" in html
     assert "163.1%" in html
     assert "\u4e0a\u5e02\u5927\u76e4\u878d\u8cc7\u7dad\u6301\u7387" in html
+    assert "\u53f0\u80a1\u5e02\u5834\u8108\u52d5" in html
