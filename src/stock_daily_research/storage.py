@@ -17,6 +17,8 @@ from .models import (
     TaiwanFuturesPosition,
     TaiwanInstitutionalMarketSnapshot,
     TaiwanMarketOverview,
+    TaiwanMarketPulseSnapshot,
+    TaiwanMarketStockSnapshot,
     TickerHistoryPoint,
     TickerResearchState,
     TradeFill,
@@ -108,6 +110,48 @@ CREATE TABLE IF NOT EXISTS taiwan_futures_positions (
   retrieved_at TEXT NOT NULL,
   PRIMARY KEY (as_of_date, contract_code, institution)
 );
+
+CREATE TABLE IF NOT EXISTS taiwan_market_pulse_snapshots (
+  as_of_date TEXT NOT NULL,
+  market TEXT NOT NULL,
+  index_name TEXT NOT NULL,
+  index_close REAL,
+  index_change_pct REAL,
+  turnover_twd REAL NOT NULL,
+  advancers INTEGER NOT NULL,
+  decliners INTEGER NOT NULL,
+  unchanged INTEGER NOT NULL,
+  limit_up INTEGER NOT NULL,
+  limit_down INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL,
+  PRIMARY KEY (as_of_date, market)
+);
+
+CREATE TABLE IF NOT EXISTS taiwan_market_stock_snapshots (
+  as_of_date TEXT NOT NULL,
+  market TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  industry_code TEXT NOT NULL,
+  industry_name TEXT NOT NULL,
+  close REAL NOT NULL,
+  change_pct REAL NOT NULL,
+  trading_shares REAL NOT NULL,
+  turnover_twd REAL NOT NULL,
+  foreign_net_shares REAL,
+  investment_trust_net_shares REAL,
+  dealer_net_shares REAL,
+  institutional_net_shares REAL,
+  source TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL,
+  PRIMARY KEY (as_of_date, market, symbol)
+);
+
+CREATE INDEX IF NOT EXISTS idx_taiwan_market_pulse_date
+  ON taiwan_market_pulse_snapshots(as_of_date, market);
+CREATE INDEX IF NOT EXISTS idx_taiwan_market_stock_date
+  ON taiwan_market_stock_snapshots(as_of_date, market, industry_code);
 
 CREATE INDEX IF NOT EXISTS idx_taiwan_institutional_market_date
   ON taiwan_institutional_market_snapshots(as_of_date, market);
@@ -464,6 +508,10 @@ def save_report(conn: sqlite3.Connection, report: DailyReport) -> None:
         save_taiwan_institutional_market_snapshot(conn, snapshot)
     for position in report.taiwan_futures_positions:
         save_taiwan_futures_position(conn, position)
+    for snapshot in report.taiwan_market_pulse:
+        save_taiwan_market_pulse_snapshot(conn, snapshot)
+    for snapshot in report.taiwan_market_stocks:
+        save_taiwan_market_stock_snapshot(conn, snapshot)
     for state in report.research_states.values():
         upsert_ticker_research_state(conn, state)
     for review in report.post_earnings_reviews.values():
@@ -647,6 +695,255 @@ def _load_taiwan_market_overview(
         source=str(row[10]),
         retrieved_at=datetime.fromisoformat(row[11]),
     )
+
+
+def save_taiwan_market_pulse_snapshot(
+    conn: sqlite3.Connection,
+    snapshot: TaiwanMarketPulseSnapshot,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO taiwan_market_pulse_snapshots
+        (as_of_date, market, index_name, index_close, index_change_pct,
+         turnover_twd, advancers, decliners, unchanged, limit_up, limit_down,
+         source, retrieved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(as_of_date, market) DO UPDATE SET
+          index_name = excluded.index_name,
+          index_close = excluded.index_close,
+          index_change_pct = excluded.index_change_pct,
+          turnover_twd = excluded.turnover_twd,
+          advancers = excluded.advancers,
+          decliners = excluded.decliners,
+          unchanged = excluded.unchanged,
+          limit_up = excluded.limit_up,
+          limit_down = excluded.limit_down,
+          source = excluded.source,
+          retrieved_at = excluded.retrieved_at
+        """,
+        (
+            snapshot.as_of_date.isoformat(),
+            snapshot.market,
+            snapshot.index_name,
+            snapshot.index_close,
+            snapshot.index_change_pct,
+            snapshot.turnover_twd,
+            snapshot.advancers,
+            snapshot.decliners,
+            snapshot.unchanged,
+            snapshot.limit_up,
+            snapshot.limit_down,
+            snapshot.source,
+            snapshot.retrieved_at.isoformat(),
+        ),
+    )
+
+
+def load_fresh_taiwan_market_pulse(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    max_age_hours: int = 4,
+    session_limit: int = 6,
+) -> list[TaiwanMarketPulseSnapshot]:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    return _load_taiwan_market_pulse(
+        conn,
+        before_or_on=before_or_on,
+        cutoff=cutoff,
+        session_limit=session_limit,
+    )
+
+
+def load_latest_taiwan_market_pulse(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    session_limit: int = 6,
+) -> list[TaiwanMarketPulseSnapshot]:
+    return _load_taiwan_market_pulse(
+        conn,
+        before_or_on=before_or_on,
+        session_limit=session_limit,
+    )
+
+
+def _load_taiwan_market_pulse(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    session_limit: int,
+    cutoff: str | None = None,
+) -> list[TaiwanMarketPulseSnapshot]:
+    sql = """
+        SELECT as_of_date, market, index_name, index_close, index_change_pct,
+               turnover_twd, advancers, decliners, unchanged, limit_up,
+               limit_down, source, retrieved_at
+        FROM taiwan_market_pulse_snapshots
+        WHERE as_of_date <= ?
+    """
+    params: list[object] = [before_or_on.isoformat()]
+    if cutoff is not None:
+        sql += " AND retrieved_at >= ?"
+        params.append(cutoff)
+    sql += " ORDER BY as_of_date DESC, market"
+
+    output: list[TaiwanMarketPulseSnapshot] = []
+    included_dates: list[str] = []
+    for row in conn.execute(sql, params).fetchall():
+        as_of_text = str(row[0])
+        if as_of_text not in included_dates:
+            if len(included_dates) >= max(1, session_limit):
+                break
+            included_dates.append(as_of_text)
+        output.append(
+            TaiwanMarketPulseSnapshot(
+                as_of_date=date.fromisoformat(as_of_text),
+                market=str(row[1]),
+                index_name=str(row[2]),
+                index_close=float(row[3]) if row[3] is not None else None,
+                index_change_pct=float(row[4]) if row[4] is not None else None,
+                turnover_twd=float(row[5]),
+                advancers=int(row[6]),
+                decliners=int(row[7]),
+                unchanged=int(row[8]),
+                limit_up=int(row[9]),
+                limit_down=int(row[10]),
+                source=str(row[11]),
+                retrieved_at=datetime.fromisoformat(row[12]),
+            )
+        )
+    return output
+
+
+def save_taiwan_market_stock_snapshot(
+    conn: sqlite3.Connection,
+    snapshot: TaiwanMarketStockSnapshot,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO taiwan_market_stock_snapshots
+        (as_of_date, market, symbol, company_name, industry_code,
+         industry_name, close, change_pct, trading_shares, turnover_twd,
+         foreign_net_shares, investment_trust_net_shares, dealer_net_shares,
+         institutional_net_shares, source, retrieved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(as_of_date, market, symbol) DO UPDATE SET
+          company_name = excluded.company_name,
+          industry_code = excluded.industry_code,
+          industry_name = excluded.industry_name,
+          close = excluded.close,
+          change_pct = excluded.change_pct,
+          trading_shares = excluded.trading_shares,
+          turnover_twd = excluded.turnover_twd,
+          foreign_net_shares = excluded.foreign_net_shares,
+          investment_trust_net_shares = excluded.investment_trust_net_shares,
+          dealer_net_shares = excluded.dealer_net_shares,
+          institutional_net_shares = excluded.institutional_net_shares,
+          source = excluded.source,
+          retrieved_at = excluded.retrieved_at
+        """,
+        (
+            snapshot.as_of_date.isoformat(),
+            snapshot.market,
+            snapshot.symbol,
+            snapshot.company_name,
+            snapshot.industry_code,
+            snapshot.industry_name,
+            snapshot.close,
+            snapshot.change_pct,
+            snapshot.trading_shares,
+            snapshot.turnover_twd,
+            snapshot.foreign_net_shares,
+            snapshot.investment_trust_net_shares,
+            snapshot.dealer_net_shares,
+            snapshot.institutional_net_shares,
+            snapshot.source,
+            snapshot.retrieved_at.isoformat(),
+        ),
+    )
+
+
+def load_fresh_taiwan_market_stocks(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    max_age_hours: int = 4,
+    session_limit: int = 6,
+) -> list[TaiwanMarketStockSnapshot]:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    return _load_taiwan_market_stocks(
+        conn,
+        before_or_on=before_or_on,
+        cutoff=cutoff,
+        session_limit=session_limit,
+    )
+
+
+def load_latest_taiwan_market_stocks(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    session_limit: int = 6,
+) -> list[TaiwanMarketStockSnapshot]:
+    return _load_taiwan_market_stocks(
+        conn,
+        before_or_on=before_or_on,
+        session_limit=session_limit,
+    )
+
+
+def _load_taiwan_market_stocks(
+    conn: sqlite3.Connection,
+    *,
+    before_or_on: date,
+    session_limit: int,
+    cutoff: str | None = None,
+) -> list[TaiwanMarketStockSnapshot]:
+    sql = """
+        SELECT as_of_date, market, symbol, company_name, industry_code,
+               industry_name, close, change_pct, trading_shares, turnover_twd,
+               foreign_net_shares, investment_trust_net_shares,
+               dealer_net_shares, institutional_net_shares, source,
+               retrieved_at
+        FROM taiwan_market_stock_snapshots
+        WHERE as_of_date <= ?
+    """
+    params: list[object] = [before_or_on.isoformat()]
+    if cutoff is not None:
+        sql += " AND retrieved_at >= ?"
+        params.append(cutoff)
+    sql += " ORDER BY as_of_date DESC, market, symbol"
+
+    output: list[TaiwanMarketStockSnapshot] = []
+    included_dates: list[str] = []
+    for row in conn.execute(sql, params).fetchall():
+        as_of_text = str(row[0])
+        if as_of_text not in included_dates:
+            if len(included_dates) >= max(1, session_limit):
+                break
+            included_dates.append(as_of_text)
+        output.append(
+            TaiwanMarketStockSnapshot(
+                as_of_date=date.fromisoformat(as_of_text),
+                market=str(row[1]),
+                symbol=str(row[2]),
+                company_name=str(row[3]),
+                industry_code=str(row[4]),
+                industry_name=str(row[5]),
+                close=float(row[6]),
+                change_pct=float(row[7]),
+                trading_shares=float(row[8]),
+                turnover_twd=float(row[9]),
+                foreign_net_shares=float(row[10]) if row[10] is not None else None,
+                investment_trust_net_shares=float(row[11]) if row[11] is not None else None,
+                dealer_net_shares=float(row[12]) if row[12] is not None else None,
+                institutional_net_shares=float(row[13]) if row[13] is not None else None,
+                source=str(row[14]),
+                retrieved_at=datetime.fromisoformat(row[15]),
+            )
+        )
+    return output
 
 
 def save_taiwan_institutional_market_snapshot(

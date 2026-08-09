@@ -1565,7 +1565,259 @@
       font-size: 9px;
       overflow-wrap: anywhere;
     }
+    .taiwan-market-context {
+      grid-column: 1 / -1;
+      min-width: 0;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .taiwan-market-context[hidden] { display: none; }
+    .taiwan-market-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .taiwan-market-heading > div:first-child {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+    .taiwan-market-heading strong { color: var(--text); font-size: 14px; }
+    .taiwan-market-heading span { color: var(--muted); font-size: 10px; }
+    .taiwan-market-state {
+      display: grid;
+      justify-items: end;
+      gap: 1px;
+      min-width: 120px;
+    }
+    .taiwan-market-state > span { font-size: 12px; font-weight: 800; }
+    .taiwan-market-state small { color: var(--muted); font-size: 9px; }
+    .taiwan-market-state.tone-good > span, .tone-good { color: var(--good); }
+    .taiwan-market-state.tone-danger > span, .tone-danger { color: var(--danger); }
+    .taiwan-market-state.tone-mixed > span, .tone-mixed { color: var(--warning); }
+    .tone-neutral { color: var(--muted); }
+    .taiwan-view-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: min(100%, 420px);
+      margin: 9px 0 11px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-alt);
+    }
+    .taiwan-view-tab {
+      min-width: 0;
+      min-height: 32px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .taiwan-view-tab:hover { color: var(--text); background: var(--surface-soft); }
+    .taiwan-view-tab.is-active {
+      color: var(--text);
+      border-color: var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .taiwan-view-panel {
+      min-width: 0;
+      padding-top: 2px;
+    }
+    .taiwan-view-panel[hidden] { display: none; }
+    .taiwan-overview-grid {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .taiwan-state-summary { min-width: 0; }
+    .taiwan-panel-kicker {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 800;
+    }
+    .taiwan-state-summary > strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--text);
+      font-size: 20px;
+    }
+    .taiwan-state-summary p {
+      margin: 5px 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .taiwan-evidence-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 10px;
+    }
+    .taiwan-evidence {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+      padding: 4px 0 4px 7px;
+      border-left: 2px solid var(--border);
+      font-size: 10px;
+    }
+    .taiwan-evidence span { color: var(--muted); }
+    .taiwan-evidence strong {
+      color: var(--text);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .taiwan-evidence.tone-good { border-color: var(--good); }
+    .taiwan-evidence.tone-danger { border-color: var(--danger); }
+    .taiwan-evidence.tone-mixed { border-color: var(--warning); }
+    .taiwan-index-area { min-width: 0; }
+    .taiwan-index-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .taiwan-index-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 2px 10px;
+      min-width: 0;
+      padding: 3px 0 8px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .taiwan-index-row > div { display: grid; min-width: 0; }
+    .taiwan-index-row > div span { color: var(--muted); font-size: 9px; }
+    .taiwan-index-row > div strong { color: var(--text); font-size: 11px; }
+    .taiwan-index-value {
+      color: var(--text);
+      font-size: 18px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .taiwan-index-row > .change { font-size: 12px; }
+    .taiwan-index-row > small {
+      color: var(--muted);
+      font-size: 9px;
+      text-align: right;
+      white-space: normal;
+    }
+    .taiwan-breadth-strip {
+      display: grid;
+      grid-template-columns: 1.35fr repeat(4, minmax(76px, 1fr));
+      margin-top: 9px;
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .taiwan-breadth-strip > div {
+      min-width: 0;
+      padding: 7px 8px;
+      border-left: 1px solid var(--border-soft);
+    }
+    .taiwan-breadth-strip > div:first-child { border-left: 0; }
+    .taiwan-breadth-strip span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      white-space: nowrap;
+    }
+    .taiwan-breadth-strip strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--text);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .taiwan-market-context .taiwan-margin-context {
+      grid-column: auto;
+      margin-top: 11px;
+      padding-top: 10px;
+    }
+    .taiwan-panel-head, .taiwan-flow-ranking-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: end;
+      margin-bottom: 8px;
+    }
+    .taiwan-panel-head > div, .taiwan-flow-ranking-head > div { display: grid; gap: 2px; }
+    .taiwan-panel-head strong, .taiwan-flow-ranking-head strong { color: var(--text); font-size: 12px; }
+    .taiwan-panel-head span, .taiwan-flow-ranking-head span { color: var(--muted); font-size: 9px; }
+    .taiwan-rotation-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .taiwan-rotation-split h4 {
+      margin: 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--border-soft);
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .taiwan-rotation-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(58px, auto) auto auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      min-height: 38px;
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 10px;
+    }
+    .taiwan-rotation-row > div { display: grid; min-width: 0; }
+    .taiwan-rotation-row > div strong { color: var(--text); font-size: 11px; }
+    .taiwan-rotation-row > div span { color: var(--muted); font-size: 9px; }
+    .taiwan-rotation-row > span { white-space: nowrap; }
+    .taiwan-market-details { margin-top: 9px; }
+    .taiwan-market-details > summary, .taiwan-chip-details > summary {
+      color: var(--link);
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .taiwan-industry-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .taiwan-industry-table th, .taiwan-industry-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-soft);
+      text-align: left;
+      white-space: nowrap;
+    }
+    .taiwan-industry-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .taiwan-industry-table td:first-child { white-space: normal; }
+    .taiwan-industry-table td small {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+    }
+    .taiwan-flow-ranking-head {
+      margin-top: 11px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .taiwan-flow-name { display: grid; min-width: 0; }
+    .taiwan-flow-name > strong, .taiwan-flow-name > a { color: var(--text); font-size: 11px; }
+    .taiwan-flow-name small { color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+    .taiwan-panel-empty {
+      padding: 14px 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
     @media (max-width: 760px) {
+      .taiwan-overview-grid { grid-template-columns: 1fr; }
+      .taiwan-rotation-split { grid-template-columns: 1fr; gap: 12px; }
+      .taiwan-breadth-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .taiwan-breadth-strip > div:nth-child(4) { border-left: 0; }
+      .taiwan-panel-head, .taiwan-flow-ranking-head { align-items: flex-start; }
       .taiwan-margin-context { grid-template-columns: minmax(0, 1fr) auto; }
       .taiwan-margin-detail, .taiwan-margin-source { grid-column: 1 / -1; }
       .taiwan-margin-source { text-align: left; white-space: normal; }
@@ -1574,6 +1826,17 @@
       .valuation-company { max-width: 168px; }
     }
     @media (max-width: 480px) {
+      .taiwan-market-heading { display: grid; }
+      .taiwan-market-state { justify-items: start; }
+      .taiwan-view-tabs { width: 100%; }
+      .taiwan-evidence-list { grid-template-columns: 1fr; }
+      .taiwan-index-grid { grid-template-columns: 1fr; }
+      .taiwan-breadth-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .taiwan-breadth-strip > div:nth-child(odd) { border-left: 0; }
+      .taiwan-breadth-strip > div:nth-child(4) { border-left: 1px solid var(--border-soft); }
+      .taiwan-rotation-row { grid-template-columns: minmax(0, 1fr) auto; padding: 5px 0; }
+      .taiwan-panel-head, .taiwan-flow-ranking-head { display: grid; }
+      .taiwan-market-rankings { grid-template-columns: 1fr; }
       .taiwan-margin-context { grid-template-columns: 1fr; }
       .taiwan-margin-value, .taiwan-margin-detail, .taiwan-margin-source { grid-column: 1; }
       .taiwan-chip-heading { grid-template-columns: 1fr; }
@@ -3606,8 +3869,59 @@
         <div class="market-workspace-stat"><strong id="market-stat-attention">0</strong><span>&#x9700;&#x7559;&#x610F;</span></div>
         <div class="market-workspace-stat"><strong id="market-stat-news">0</strong><span>&#x4ECA;&#x65E5;&#x65B0;&#x805E;</span></div>
       </div>
+      {% if taiwan_market.visible or taiwan_margin.visible or taiwan_chips.visible %}
+      <div id="taiwan-market-context" class="taiwan-market-context" data-market-context="taiwan" hidden>
+        <div class="taiwan-market-heading">
+          <div><strong>台股市場脈動</strong><span>{{ taiwan_market.data_date_label or "最近盤後資料" }}</span></div>
+          <div class="taiwan-market-state tone-{{ taiwan_market.state_tone }}">
+            <span>{{ taiwan_market.state_label }}</span>
+            {% if taiwan_market.available %}<small>{{ taiwan_market.positive_votes }} 項偏多 · {{ taiwan_market.negative_votes }} 項偏空</small>{% endif %}
+          </div>
+        </div>
+        <div class="taiwan-view-tabs" role="tablist" aria-label="台股市場視圖">
+          <button type="button" class="taiwan-view-tab is-active" role="tab" aria-selected="true" data-taiwan-view="overview">今日總覽</button>
+          <button type="button" class="taiwan-view-tab" role="tab" aria-selected="false" data-taiwan-view="industry">產業輪動</button>
+          <button type="button" class="taiwan-view-tab" role="tab" aria-selected="false" data-taiwan-view="chips">法人籌碼</button>
+        </div>
+        <div class="taiwan-view-panel" data-taiwan-panel="overview">
+          {% if taiwan_market.available %}
+          <div class="taiwan-overview-grid">
+            <div class="taiwan-state-summary">
+              <span class="taiwan-panel-kicker">今日判讀</span>
+              <strong>{{ taiwan_market.state_label }}</strong>
+              <p>{{ taiwan_market.state_action }}</p>
+              <div class="taiwan-evidence-list" aria-label="盤勢判讀依據">
+                {% for item in taiwan_market.evidence %}
+                <div class="taiwan-evidence tone-{{ item.tone }}"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="taiwan-index-area">
+              <div class="taiwan-index-grid">
+                {% for item in taiwan_market.indices %}
+                <div class="taiwan-index-row">
+                  <div><span>{{ item.market_label }}</span><strong>{{ item.name }}</strong></div>
+                  <strong class="taiwan-index-value">{{ item.close_label }}</strong>
+                  <span class="change change-{{ item.tone }}">{{ item.change_label }}</span>
+                  <small>{{ item.turnover_label }} · {{ item.as_of_label }}</small>
+                </div>
+                {% endfor %}
+              </div>
+              <div class="taiwan-breadth-strip">
+                <div><span>上市櫃成交額</span><strong>{{ taiwan_market.turnover_label }}</strong></div>
+                <div><span>上漲家數</span><strong class="change change-pos">{{ taiwan_market.advancers }}</strong></div>
+                <div><span>下跌家數</span><strong class="change change-neg">{{ taiwan_market.decliners }}</strong></div>
+                <div><span>上漲比率</span><strong class="change change-{{ taiwan_market.breadth_tone }}">{{ taiwan_market.advancer_ratio_label }}</strong></div>
+                <div><span>漲停 / 跌停</span><strong>{{ taiwan_market.limit_up }} / {{ taiwan_market.limit_down }}</strong></div>
+              </div>
+            </div>
+          </div>
+          {% else %}
+          <div class="taiwan-panel-empty">{{ taiwan_market.state_action }}</div>
+          {% endif %}
+
       {% if taiwan_margin.visible %}
-      <div id="taiwan-margin-context" class="taiwan-margin-context tone-{{ taiwan_margin.tone }}" data-market-context="taiwan" hidden title="{{ taiwan_margin.method }}；{{ taiwan_margin.disclaimer }}">
+      <div id="taiwan-margin-context" class="taiwan-margin-context tone-{{ taiwan_margin.tone }}" title="{{ taiwan_margin.method }}；{{ taiwan_margin.disclaimer }}">
         <div class="taiwan-margin-heading">
           <strong>上市大盤融資維持率（估算）</strong>
           <span class="taiwan-margin-status">{{ taiwan_margin.status }}</span>
@@ -3626,8 +3940,57 @@
         </span>
       </div>
       {% endif %}
+        </div>
+        <div class="taiwan-view-panel" data-taiwan-panel="industry" hidden>
+          {% if taiwan_market.available and taiwan_market.industries %}
+          <div class="taiwan-panel-head">
+            <div><strong>全市場產業輪動</strong><span>{{ taiwan_market.industry_count }} 類產業 · {{ taiwan_market.industry_window_label }} 區間</span></div>
+            <span>以普通股中位數衡量，避免單一大型權值股扭曲整體產業</span>
+          </div>
+          <div class="taiwan-rotation-split">
+            <div>
+              <h4>領先產業</h4>
+              {% for row in taiwan_market.leaders %}
+              <div class="taiwan-rotation-row">
+                <div><strong>{{ row.industry }}</strong><span>{{ row.member_count }} 檔 · 上漲 {{ row.breadth_label }}</span></div>
+                <span class="tone-{{ row.momentum_tone }}">{{ row.momentum }}</span>
+                <span class="change change-{{ row.change_tone }}">1D {{ row.change_1d_label }}</span>
+                <span class="change change-{{ row.return_tone }}">{{ taiwan_market.industry_window_label }} {{ row.return_5d_label }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            <div>
+              <h4>落後產業</h4>
+              {% for row in taiwan_market.laggards %}
+              <div class="taiwan-rotation-row">
+                <div><strong>{{ row.industry }}</strong><span>{{ row.member_count }} 檔 · 上漲 {{ row.breadth_label }}</span></div>
+                <span class="tone-{{ row.momentum_tone }}">{{ row.momentum }}</span>
+                <span class="change change-{{ row.change_tone }}">1D {{ row.change_1d_label }}</span>
+                <span class="change change-{{ row.return_tone }}">{{ taiwan_market.industry_window_label }} {{ row.return_5d_label }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <details class="taiwan-market-details">
+            <summary>查看全部產業與資金明細</summary>
+            <div class="table-wrap">
+              <table class="taiwan-industry-table">
+                <thead><tr><th>產業</th><th class="num">1D 中位數</th><th class="num">{{ taiwan_market.industry_window_label }}</th><th class="num">上漲比率</th><th class="num">成交占比</th><th class="num">法人買賣超</th><th>狀態</th></tr></thead>
+                <tbody>
+                  {% for row in taiwan_market.industries %}
+                  <tr><td><strong>{{ row.industry }}</strong><small>{{ row.member_count }} 檔</small></td><td class="num change change-{{ row.change_tone }}">{{ row.change_1d_label }}</td><td class="num change change-{{ row.return_tone }}">{{ row.return_5d_label }}</td><td class="num">{{ row.breadth_label }}</td><td class="num">{{ row.turnover_share_label }}</td><td class="num change change-{{ row.institutional_tone }}">{{ row.institutional_label }}</td><td class="tone-{{ row.momentum_tone }}">{{ row.momentum }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          {% else %}
+          <div class="taiwan-panel-empty">目前沒有足夠的全市場產業資料可供比較。</div>
+          {% endif %}
+        </div>
+        <div class="taiwan-view-panel" data-taiwan-panel="chips" hidden>
       {% if taiwan_chips.visible %}
-      <div id="taiwan-chip-context" class="taiwan-chip-context" data-market-context="taiwan" hidden>
+      <div id="taiwan-chip-context" class="taiwan-chip-context">
         <div class="taiwan-chip-heading">
           <div class="taiwan-chip-title">
             <strong>&#x53F0;&#x80A1;&#x7C4C;&#x78BC;&#x6982;&#x6CC1;</strong>
@@ -3702,6 +4065,33 @@
         {% else %}
         <span class="taiwan-chip-source">&#x5C1A;&#x672A;&#x53D6;&#x5F97;&#x6700;&#x8FD1;&#x76E4;&#x5F8C;&#x7C4C;&#x78BC;&#x8CC7;&#x6599;&#x3002;</span>
         {% endif %}
+      </div>
+      {% endif %}
+          {% if taiwan_market.flow_ranking_count %}
+          <div class="taiwan-flow-ranking-head"><div><strong>全市場三大法人買賣超</strong><span>{{ taiwan_market.flow_ranking_count }} 檔有資料</span></div><span>排行採股數，不等同買賣金額或投資建議</span></div>
+          <div class="taiwan-chip-rankings taiwan-market-rankings">
+            <div class="taiwan-chip-ranking">
+              <h4>買超前五名</h4>
+              {% for row in taiwan_market.buy_rows %}
+              <div class="taiwan-chip-row">
+                <span class="taiwan-flow-name">{% if row.in_watchlist %}<a href="#{{ row.symbol|ticker_anchor }}">{{ row.display_symbol }}</a>{% else %}<strong>{{ row.display_symbol }}</strong>{% endif %}<small>{{ row.company_name }} · {{ row.market_label }}</small></span>
+                <span class="amount change change-{{ row.tone }}">{{ row.total_label }}<span class="sub">外資 {{ row.foreign_label }} · 投信 {{ row.trust_label }}</span></span>
+              </div>
+              {% else %}<div class="empty-inline">目前沒有買超資料。</div>{% endfor %}
+            </div>
+            <div class="taiwan-chip-ranking">
+              <h4>賣超前五名</h4>
+              {% for row in taiwan_market.sell_rows %}
+              <div class="taiwan-chip-row">
+                <span class="taiwan-flow-name">{% if row.in_watchlist %}<a href="#{{ row.symbol|ticker_anchor }}">{{ row.display_symbol }}</a>{% else %}<strong>{{ row.display_symbol }}</strong>{% endif %}<small>{{ row.company_name }} · {{ row.market_label }}</small></span>
+                <span class="amount change change-{{ row.tone }}">{{ row.total_label }}<span class="sub">外資 {{ row.foreign_label }} · 投信 {{ row.trust_label }}</span></span>
+              </div>
+              {% else %}<div class="empty-inline">目前沒有賣超資料。</div>{% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          <span class="taiwan-chip-source">{% if taiwan_market.source_label %}{{ taiwan_market.source_label }} · {% endif %}{{ taiwan_market.disclaimer }}</span>
+        </div>
       </div>
       {% endif %}
     </section>
@@ -4702,9 +5092,9 @@
     {% if sector_map_markets %}
     <section id="sector-leadership" class="section section-secondary">
       <div class="section-header">
-        <h2>產業地圖</h2>
+        <h2>觀察股產業地圖</h2>
       </div>
-      <div id="market-map-context" class="market-map-context">內容會跟隨頁首市場切換</div>
+      <div id="market-map-context" class="market-map-context">僅統計你的觀察清單，內容會跟隨頁首市場切換</div>
 
       {% for panel in sector_map_markets %}
       <div class="map-market-panel{% if loop.first %} active{% endif %}" data-market-panel="{{ panel.key }}">
@@ -7825,6 +8215,38 @@
       applyFilters();
       updateMarketWorkspace();
     })();
+    (function () {
+      var root = document.getElementById("taiwan-market-context");
+      if (!root) return;
+      var tabs = Array.prototype.slice.call(root.querySelectorAll("[data-taiwan-view]"));
+      var panels = Array.prototype.slice.call(root.querySelectorAll("[data-taiwan-panel]"));
+      function selectTaiwanView(value, focusTab) {
+        tabs.forEach(function (tab) {
+          var selected = tab.dataset.taiwanView === value;
+          tab.classList.toggle("is-active", selected);
+          tab.setAttribute("aria-selected", selected ? "true" : "false");
+          tab.tabIndex = selected ? 0 : -1;
+          if (selected && focusTab) tab.focus();
+        });
+        panels.forEach(function (panel) {
+          panel.hidden = panel.dataset.taiwanPanel !== value;
+        });
+      }
+      tabs.forEach(function (tab, index) {
+        tab.addEventListener("click", function () {
+          selectTaiwanView(tab.dataset.taiwanView, false);
+        });
+        tab.addEventListener("keydown", function (event) {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          var offset = event.key === "ArrowRight" ? 1 : -1;
+          var next = (index + offset + tabs.length) % tabs.length;
+          selectTaiwanView(tabs[next].dataset.taiwanView, true);
+        });
+      });
+      selectTaiwanView("overview", false);
+    })();
+
 
     (function () {
       var NEWS_READ_KEY = "stock-daily-read-news";

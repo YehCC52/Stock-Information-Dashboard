@@ -11,6 +11,8 @@ from stock_daily_research.models import (
     TaiwanFuturesPosition,
     TaiwanInstitutionalMarketSnapshot,
     TaiwanMarketOverview,
+    TaiwanMarketPulseSnapshot,
+    TaiwanMarketStockSnapshot,
     TickerConfig,
     TickerHistoryPoint,
     TickerResearchState,
@@ -24,6 +26,10 @@ from stock_daily_research.storage import (
     load_fresh_taiwan_futures_positions,
     load_fresh_taiwan_institutional_market,
     load_fresh_taiwan_market_overview,
+    load_fresh_taiwan_market_pulse,
+    load_fresh_taiwan_market_stocks,
+    load_latest_taiwan_market_pulse,
+    load_latest_taiwan_market_stocks,
     load_fresh_valuation_snapshot,
     load_latest_taiwan_market_overview,
     load_latest_taiwan_futures_positions,
@@ -923,3 +929,87 @@ def test_taiwan_institutional_and_futures_round_trip(tmp_path: Path) -> None:
     assert len({item.as_of_date for item in latest_positions}) == 5
     assert len(latest_positions) == 10
     assert before_disclosure == []
+
+def test_taiwan_market_pulse_and_stocks_round_trip(tmp_path: Path) -> None:
+    db_path = tmp_path / "stock.sqlite3"
+    retrieved_at = datetime.now(timezone.utc).replace(microsecond=0)
+    pulses = [
+        TaiwanMarketPulseSnapshot(
+            as_of_date=date(2026, 8, 5) - timedelta(days=offset),
+            market=market,
+            index_name="TAIEX" if market == "twse" else "OTC",
+            index_close=24_000.0 if market == "twse" else 250.0,
+            index_change_pct=1.2 - offset,
+            turnover_twd=500_000_000_000.0,
+            advancers=600,
+            decliners=300,
+            unchanged=100,
+            limit_up=20,
+            limit_down=5,
+            source="official",
+            retrieved_at=retrieved_at,
+        )
+        for offset in range(2)
+        for market in ("twse", "tpex")
+    ]
+    stocks = [
+        TaiwanMarketStockSnapshot(
+            as_of_date=date(2026, 8, 5) - timedelta(days=offset),
+            market="twse",
+            symbol="2330.TW",
+            company_name="TSMC",
+            industry_code="24",
+            industry_name="Semiconductor",
+            close=1_000.0 - offset * 10,
+            change_pct=1.0,
+            trading_shares=10_000_000.0,
+            turnover_twd=10_000_000_000.0,
+            foreign_net_shares=2_000_000.0 if offset == 0 else None,
+            investment_trust_net_shares=100_000.0 if offset == 0 else None,
+            dealer_net_shares=-50_000.0 if offset == 0 else None,
+            institutional_net_shares=2_050_000.0 if offset == 0 else None,
+            source="official",
+            retrieved_at=retrieved_at,
+        )
+        for offset in range(2)
+    ]
+    report = DailyReport(
+        report_date=date(2026, 8, 6),
+        generated_at=retrieved_at,
+        ticker_reports=[],
+        taiwan_market_pulse=pulses,
+        taiwan_market_stocks=stocks,
+    )
+
+    with init_db(db_path) as conn:
+        save_report(conn, report)
+        fresh_pulse = load_fresh_taiwan_market_pulse(
+            conn,
+            before_or_on=report.report_date,
+            session_limit=6,
+        )
+        fresh_stocks = load_fresh_taiwan_market_stocks(
+            conn,
+            before_or_on=report.report_date,
+            session_limit=6,
+        )
+        latest_pulse = load_latest_taiwan_market_pulse(
+            conn,
+            before_or_on=report.report_date,
+            session_limit=1,
+        )
+        latest_stocks = load_latest_taiwan_market_stocks(
+            conn,
+            before_or_on=report.report_date,
+            session_limit=1,
+        )
+
+    assert len(fresh_pulse) == len(pulses)
+    assert set(fresh_pulse) == set(pulses)
+    assert fresh_stocks == sorted(
+        stocks,
+        key=lambda item: (item.as_of_date, item.market, item.symbol),
+        reverse=True,
+    )
+    assert {item.as_of_date for item in latest_pulse} == {date(2026, 8, 5)}
+    assert [item.as_of_date for item in latest_stocks] == [date(2026, 8, 5)]

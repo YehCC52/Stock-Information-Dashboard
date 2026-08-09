@@ -9,7 +9,9 @@ import requests
 from .models import (
     TaiwanInstitutionalMarketSnapshot,
     TaiwanMarketOverview,
+    TaiwanMarketPulseSnapshot,
     TaiwanMarketSnapshot,
+    TaiwanMarketStockSnapshot,
     TickerConfig,
 )
 
@@ -24,6 +26,48 @@ TPEX_INSTITUTIONAL_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_t
 TPEX_INSTITUTIONAL_SUMMARY_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_summary"
 TWSE_MARGIN_URL = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TWSE_DAILY_CLOSE_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
+TWSE_COMPANY_PROFILE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+TPEX_COMPANY_PROFILE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
+TPEX_DAILY_CLOSE_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TPEX_MARKET_HIGHLIGHT_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight"
+_MARKET_HISTORY_SESSIONS = 6
+_INDUSTRY_NAMES = {
+    "01": "\u6c34\u6ce5\u5de5\u696d",
+    "02": "\u98df\u54c1\u5de5\u696d",
+    "03": "\u5851\u81a0\u5de5\u696d",
+    "04": "\u7d21\u7e54\u7e96\u7dad",
+    "05": "\u96fb\u6a5f\u6a5f\u68b0",
+    "06": "\u96fb\u5668\u96fb\u7e9c",
+    "08": "\u73bb\u7483\u9676\u74f7",
+    "09": "\u9020\u7d19\u5de5\u696d",
+    "10": "\u92fc\u9435\u5de5\u696d",
+    "11": "\u6a61\u81a0\u5de5\u696d",
+    "12": "\u6c7d\u8eca\u5de5\u696d",
+    "14": "\u5efa\u6750\u71df\u9020",
+    "15": "\u822a\u904b\u696d",
+    "16": "\u89c0\u5149\u9910\u65c5",
+    "17": "\u91d1\u878d\u4fdd\u96aa",
+    "18": "\u8cbf\u6613\u767e\u8ca8",
+    "20": "\u5176\u4ed6",
+    "21": "\u5316\u5b78\u5de5\u696d",
+    "22": "\u751f\u6280\u91ab\u7642",
+    "23": "\u6cb9\u96fb\u71c3\u6c23",
+    "24": "\u534a\u5c0e\u9ad4",
+    "25": "\u96fb\u8166\u53ca\u9031\u908a\u8a2d\u5099",
+    "26": "\u5149\u96fb",
+    "27": "\u901a\u4fe1\u7db2\u8def",
+    "28": "\u96fb\u5b50\u96f6\u7d44\u4ef6",
+    "29": "\u96fb\u5b50\u901a\u8def",
+    "30": "\u8cc7\u8a0a\u670d\u52d9",
+    "31": "\u5176\u4ed6\u96fb\u5b50",
+    "32": "\u6587\u5316\u5275\u610f",
+    "33": "\u8fb2\u696d\u79d1\u6280",
+    "35": "\u7da0\u80fd\u74b0\u4fdd",
+    "36": "\u6578\u4f4d\u96f2\u7aef",
+    "37": "\u904b\u52d5\u4f11\u9592",
+    "38": "\u5c45\u5bb6\u751f\u6d3b",
+    "80": "\u7ba1\u7406\u80a1\u7968",
+}
 _REQUEST_TIMEOUT_SECONDS = 12
 _MIN_MARGIN_PRICE_COVERAGE_PCT = 95.0
 
@@ -34,6 +78,8 @@ class TaiwanMarketFetchResult:
     overview: TaiwanMarketOverview | None
     warnings: list[str]
     institutional_market: list[TaiwanInstitutionalMarketSnapshot] = field(default_factory=list)
+    market_pulse: list[TaiwanMarketPulseSnapshot] = field(default_factory=list)
+    market_stocks: list[TaiwanMarketStockSnapshot] = field(default_factory=list)
 
 
 class TaiwanMarketDataProvider:
@@ -45,6 +91,7 @@ class TaiwanMarketDataProvider:
         *,
         include_market_overview: bool = True,
         include_institutional_market: bool | None = None,
+        include_market_pulse: bool | None = None,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.include_market_overview = include_market_overview
@@ -52,6 +99,11 @@ class TaiwanMarketDataProvider:
             include_market_overview
             if include_institutional_market is None
             else include_institutional_market
+        )
+        self.include_market_pulse = (
+            include_market_overview
+            if include_market_pulse is None
+            else include_market_pulse
         )
 
     def fetch(self, tickers: list[TickerConfig], report_date: date) -> TaiwanMarketFetchResult:
@@ -83,7 +135,19 @@ class TaiwanMarketDataProvider:
         if tpex_tickers:
             revenue_by_symbol.update(self._monthly_revenue(TPEX_MONTHLY_REVENUE_URL, "TPEx", warnings))
             dividend_by_symbol.update(self._cash_dividends(TPEX_DIVIDEND_URL, "TPEx", warnings))
-            flow_by_symbol.update(self._tpex_institutional_flow(warnings))
+            flow_by_symbol.update(self._tpex_institutional_flow(report_date, warnings))
+
+        market_pulse: list[TaiwanMarketPulseSnapshot] = []
+        market_stocks: list[TaiwanMarketStockSnapshot] = []
+        if self.include_market_pulse:
+            market_pulse, market_stocks = self._market_history(
+                report_date,
+                retrieved_at,
+                warnings,
+                include_twse=bool(twse_tickers),
+                include_tpex=bool(tpex_tickers),
+                flow_by_symbol=flow_by_symbol,
+            )
 
         snapshots: dict[str, TaiwanMarketSnapshot] = {}
         for ticker in taiwan_tickers:
@@ -127,6 +191,8 @@ class TaiwanMarketDataProvider:
             overview=overview,
             warnings=warnings,
             institutional_market=institutional_market,
+            market_pulse=market_pulse,
+            market_stocks=market_stocks,
         )
 
     def _margin_maintenance_overview(
@@ -312,16 +378,144 @@ class TaiwanMarketDataProvider:
             return {}
         return _summarize_institutional_history(daily_rows)
 
-    def _tpex_institutional_flow(self, warnings: list[str]) -> dict[str, dict[str, object]]:
+    def _tpex_institutional_flow(
+        self,
+        report_date: date,
+        warnings: list[str],
+    ) -> dict[str, dict[str, object]]:
         try:
             payload = self._get_json(TPEX_INSTITUTIONAL_URL)
         except requests.RequestException as exc:
             warnings.append(f"TPEx institutional-flow data unavailable: {exc}")
             return {}
-        rows = _tpex_institutional_rows(payload)
+        rows = _tpex_institutional_rows(payload, before_or_on=report_date)
         if not rows:
             warnings.append("TPEx institutional-flow data unavailable: unexpected payload.")
         return rows
+    def _market_history(
+        self,
+        report_date: date,
+        retrieved_at: datetime,
+        warnings: list[str],
+        *,
+        include_twse: bool,
+        include_tpex: bool,
+        flow_by_symbol: dict[str, dict[str, object]],
+    ) -> tuple[list[TaiwanMarketPulseSnapshot], list[TaiwanMarketStockSnapshot]]:
+        pulses: list[TaiwanMarketPulseSnapshot] = []
+        stocks: list[TaiwanMarketStockSnapshot] = []
+
+        if include_twse:
+            profiles = self._company_profiles(
+                TWSE_COMPANY_PROFILE_URL,
+                "TWSE",
+                warnings,
+            )
+            seen_dates: set[date] = set()
+            for offset in range(18):
+                candidate = report_date - timedelta(days=offset)
+                if candidate.weekday() >= 5:
+                    continue
+                try:
+                    payload = self._get_json(
+                        TWSE_DAILY_CLOSE_URL,
+                        params={
+                            "date": candidate.strftime("%Y%m%d"),
+                            "type": "ALLBUT0999",
+                            "response": "json",
+                        },
+                    )
+                except requests.RequestException:
+                    continue
+                session = _twse_market_session(
+                    payload,
+                    profiles,
+                    flow_by_symbol,
+                    retrieved_at,
+                )
+                if session is None:
+                    continue
+                pulse, session_stocks = session
+                if pulse.as_of_date > report_date or pulse.as_of_date in seen_dates:
+                    continue
+                seen_dates.add(pulse.as_of_date)
+                pulses.append(pulse)
+                stocks.extend(session_stocks)
+                if len(seen_dates) >= _MARKET_HISTORY_SESSIONS:
+                    break
+            if not seen_dates:
+                warnings.append("TWSE whole-market close and breadth data unavailable.")
+
+        if include_tpex:
+            profiles = self._company_profiles(
+                TPEX_COMPANY_PROFILE_URL,
+                "TPEx",
+                warnings,
+            )
+            try:
+                close_payload = self._get_json(TPEX_DAILY_CLOSE_URL)
+            except requests.RequestException as exc:
+                warnings.append(f"TPEx whole-market close data unavailable: {exc}")
+                close_payload = None
+            tpex_pulses, tpex_stocks = _tpex_market_sessions(
+                close_payload,
+                profiles,
+                flow_by_symbol,
+                retrieved_at,
+                report_date,
+                session_limit=_MARKET_HISTORY_SESSIONS,
+            )
+            pulses.extend(tpex_pulses)
+            stocks.extend(tpex_stocks)
+
+            try:
+                highlight_payload = self._get_json(TPEX_MARKET_HIGHLIGHT_URL)
+            except requests.RequestException as exc:
+                warnings.append(f"TPEx market highlight unavailable: {exc}")
+                highlight_payload = None
+            official_pulse = _tpex_market_highlight_snapshot(
+                highlight_payload,
+                retrieved_at,
+                report_date,
+            )
+            if official_pulse is not None:
+                pulses = [
+                    pulse
+                    for pulse in pulses
+                    if not (
+                        pulse.market == "tpex"
+                        and pulse.as_of_date == official_pulse.as_of_date
+                    )
+                ]
+                pulses.append(official_pulse)
+            if not tpex_stocks:
+                warnings.append("TPEx whole-market stock data unavailable.")
+
+        pulses.sort(key=lambda item: (item.as_of_date, item.market), reverse=True)
+        stocks.sort(
+            key=lambda item: (item.as_of_date, item.market, item.symbol),
+            reverse=True,
+        )
+        return pulses, stocks
+
+    def _company_profiles(
+        self,
+        url: str,
+        source: str,
+        warnings: list[str],
+    ) -> dict[str, dict[str, str]]:
+        try:
+            payload = self._get_json(url)
+        except requests.RequestException as exc:
+            warnings.append(f"{source} company classification unavailable: {exc}")
+            return {}
+        profiles = _company_profile_rows(payload, source.lower())
+        if not profiles:
+            warnings.append(
+                f"{source} company classification unavailable: unexpected payload."
+            )
+        return profiles
+
     def _get_json(self, url: str, params: dict[str, str] | None = None) -> object:
         last_error: requests.RequestException | None = None
         for attempt in range(2):
@@ -335,6 +529,446 @@ class TaiwanMarketDataProvider:
                     time.sleep(1)
         assert last_error is not None
         raise last_error
+
+
+def _company_profile_rows(
+    payload: object,
+    market: str,
+) -> dict[str, dict[str, str]]:
+    if not isinstance(payload, list):
+        return {}
+    output: dict[str, dict[str, str]] = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        if market == "twse":
+            code = _text(
+                row,
+                "\u516c\u53f8\u4ee3\u865f",
+                "\u8b49\u5238\u4ee3\u865f",
+            )
+            name = _text(
+                row,
+                "\u516c\u53f8\u7c21\u7a31",
+                "\u516c\u53f8\u540d\u7a31",
+            )
+            industry_code = _text(row, "\u7522\u696d\u5225")
+        else:
+            code = _text(row, "SecuritiesCompanyCode", "CompanyCode")
+            name = _text(
+                row,
+                "CompanyAbbreviation",
+                "CompanyName",
+                "SecuritiesCompanyName",
+            )
+            industry_code = _text(
+                row,
+                "SecuritiesIndustryCode",
+                "IndustryCode",
+            )
+        code = code.strip()
+        industry_code = industry_code.strip().zfill(2) if industry_code else ""
+        if not code:
+            continue
+        output[code] = {
+            "name": name.strip() or code,
+            "industry_code": industry_code,
+            "industry_name": _INDUSTRY_NAMES.get(
+                industry_code,
+                "\u672a\u5206\u985e",
+            ),
+        }
+    return output
+
+
+def _twse_market_session(
+    payload: object,
+    profiles: dict[str, dict[str, str]],
+    flow_by_symbol: dict[str, dict[str, object]],
+    retrieved_at: datetime,
+) -> tuple[TaiwanMarketPulseSnapshot, list[TaiwanMarketStockSnapshot]] | None:
+    as_of = _payload_date(payload)
+    if as_of is None:
+        return None
+    close_table = _table_with_fields(
+        payload,
+        ("\u8b49\u5238\u4ee3\u865f", "\u6536\u76e4\u50f9"),
+    )
+    stocks: list[TaiwanMarketStockSnapshot] = []
+    if close_table is not None:
+        fields = [str(value) for value in close_table["fields"]]
+        indexes = {
+            "code": _field_index(fields, ("\u8b49\u5238\u4ee3\u865f",)),
+            "name": _field_index(fields, ("\u8b49\u5238\u540d\u7a31",)),
+            "shares": _field_index(fields, ("\u6210\u4ea4\u80a1\u6578",)),
+            "amount": _field_index(fields, ("\u6210\u4ea4\u91d1\u984d",)),
+            "close": _field_index(fields, ("\u6536\u76e4\u50f9",)),
+            "sign": _field_index(fields, ("\u6f32\u8dcc(+/-)",)),
+            "change": _field_index(fields, ("\u6f32\u8dcc\u50f9\u5dee",)),
+        }
+        for raw in close_table["data"]:
+            if not isinstance(raw, list):
+                continue
+            code = _row_value(raw, indexes["code"])
+            profile = profiles.get(code)
+            if profiles and profile is None:
+                continue
+            if profile is None and not (len(code) == 4 and code.isdigit()):
+                continue
+            close = _number_value(_row_value(raw, indexes["close"]))
+            if close is None or close <= 0:
+                continue
+            change = _number_value(_row_value(raw, indexes["change"])) or 0.0
+            signed_change = _signed_change(
+                _row_value(raw, indexes["sign"]),
+                change,
+            )
+            change_pct = _close_change_pct(close, signed_change)
+            flow = _flow_for_session(flow_by_symbol.get(code, {}), as_of)
+            industry_code = profile.get("industry_code", "") if profile else ""
+            stocks.append(
+                TaiwanMarketStockSnapshot(
+                    as_of_date=as_of,
+                    market="twse",
+                    symbol=f"{code}.TW",
+                    company_name=(
+                        profile.get("name", code)
+                        if profile
+                        else _row_value(raw, indexes["name"]) or code
+                    ),
+                    industry_code=industry_code,
+                    industry_name=(
+                        profile.get("industry_name", "\u672a\u5206\u985e")
+                        if profile
+                        else "\u672a\u5206\u985e"
+                    ),
+                    close=close,
+                    change_pct=round(change_pct, 4),
+                    trading_shares=_number_value(
+                        _row_value(raw, indexes["shares"])
+                    ) or 0.0,
+                    turnover_twd=_number_value(
+                        _row_value(raw, indexes["amount"])
+                    ) or 0.0,
+                    foreign_net_shares=flow.get("foreign"),
+                    investment_trust_net_shares=flow.get("trust"),
+                    dealer_net_shares=flow.get("dealer"),
+                    institutional_net_shares=flow.get("total"),
+                    source="TWSE MI_INDEX / company profile / T86",
+                    retrieved_at=retrieved_at,
+                )
+            )
+
+    pulse = _twse_market_pulse_snapshot(
+        payload,
+        stocks,
+        retrieved_at,
+    )
+    if pulse is None:
+        return None
+    return pulse, stocks
+
+
+def _twse_market_pulse_snapshot(
+    payload: object,
+    stocks: list[TaiwanMarketStockSnapshot],
+    retrieved_at: datetime,
+) -> TaiwanMarketPulseSnapshot | None:
+    as_of = _payload_date(payload)
+    if as_of is None:
+        return None
+    index_close: float | None = None
+    index_change_pct: float | None = None
+    index_table = _table_with_fields(
+        payload,
+        ("\u6307\u6578", "\u6536\u76e4\u6307\u6578"),
+    )
+    if index_table is not None:
+        fields = [str(value) for value in index_table["fields"]]
+        label_index = _field_index(fields, ("\u6307\u6578",))
+        close_index = _field_index(fields, ("\u6536\u76e4\u6307\u6578",))
+        pct_index = _field_index(
+            fields,
+            (
+                "\u6f32\u8dcc\u767e\u5206\u6bd4(%)",
+                "\u6f32\u8dcc\u5e45\u5ea6(%)",
+            ),
+        )
+        for raw in index_table["data"]:
+            if not isinstance(raw, list):
+                continue
+            label = _row_value(raw, label_index)
+            if "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578" not in label:
+                continue
+            index_close = _number_value(_row_value(raw, close_index))
+            index_change_pct = _number_value(_row_value(raw, pct_index))
+            break
+
+    advancers = sum(1 for item in stocks if item.change_pct > 0)
+    decliners = sum(1 for item in stocks if item.change_pct < 0)
+    unchanged = len(stocks) - advancers - decliners
+    limit_up = sum(1 for item in stocks if item.change_pct >= 9.5)
+    limit_down = sum(1 for item in stocks if item.change_pct <= -9.5)
+    breadth_table = _table_with_fields(
+        payload,
+        ("\u985e\u578b", "\u6574\u9ad4\u5e02\u5834", "\u80a1\u7968"),
+    )
+    if breadth_table is not None:
+        fields = [str(value) for value in breadth_table["fields"]]
+        label_index = _field_index(fields, ("\u985e\u578b",))
+        stock_index = _field_index(fields, ("\u80a1\u7968",))
+        for raw in breadth_table["data"]:
+            if not isinstance(raw, list):
+                continue
+            label = _row_value(raw, label_index).replace(" ", "")
+            count, limit_count = _market_count_parts(
+                _row_value(raw, stock_index)
+            )
+            if label.startswith("\u4e0a\u6f32"):
+                advancers, limit_up = count, limit_count
+            elif label.startswith("\u4e0b\u8dcc"):
+                decliners, limit_down = count, limit_count
+            elif label.startswith("\u6301\u5e73"):
+                unchanged = count
+
+    turnover = sum(item.turnover_twd for item in stocks)
+    stats_table = _table_with_fields(
+        payload,
+        ("\u6210\u4ea4\u7d71\u8a08", "\u6210\u4ea4\u91d1\u984d(\u5143)"),
+    )
+    if stats_table is not None:
+        fields = [str(value) for value in stats_table["fields"]]
+        label_index = _field_index(fields, ("\u6210\u4ea4\u7d71\u8a08",))
+        amount_index = _field_index(fields, ("\u6210\u4ea4\u91d1\u984d(\u5143)",))
+        for raw in stats_table["data"]:
+            if not isinstance(raw, list):
+                continue
+            label = _row_value(raw, label_index).replace(" ", "")
+            if label.startswith("1.\u4e00\u822c\u80a1\u7968"):
+                turnover = _number_value(
+                    _row_value(raw, amount_index)
+                ) or turnover
+                break
+
+    return TaiwanMarketPulseSnapshot(
+        as_of_date=as_of,
+        market="twse",
+        index_name="\u52a0\u6b0a\u6307\u6578",
+        index_close=index_close,
+        index_change_pct=index_change_pct,
+        turnover_twd=turnover,
+        advancers=advancers,
+        decliners=decliners,
+        unchanged=unchanged,
+        limit_up=limit_up,
+        limit_down=limit_down,
+        source="TWSE MI_INDEX",
+        retrieved_at=retrieved_at,
+    )
+
+
+def _tpex_market_sessions(
+    payload: object,
+    profiles: dict[str, dict[str, str]],
+    flow_by_symbol: dict[str, dict[str, object]],
+    retrieved_at: datetime,
+    before_or_on: date,
+    *,
+    session_limit: int,
+) -> tuple[list[TaiwanMarketPulseSnapshot], list[TaiwanMarketStockSnapshot]]:
+    if not isinstance(payload, list):
+        return [], []
+    rows_by_date: dict[date, list[dict[str, object]]] = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        as_of = _taiwan_date(_text(row, "Date"))
+        if as_of is None or as_of > before_or_on:
+            continue
+        rows_by_date.setdefault(as_of, []).append(row)
+
+    pulses: list[TaiwanMarketPulseSnapshot] = []
+    stocks: list[TaiwanMarketStockSnapshot] = []
+    for as_of in sorted(rows_by_date, reverse=True)[:max(1, session_limit)]:
+        session_stocks: list[TaiwanMarketStockSnapshot] = []
+        for row in rows_by_date[as_of]:
+            code = _text(row, "SecuritiesCompanyCode")
+            profile = profiles.get(code)
+            if profiles and profile is None:
+                continue
+            if profile is None and not (len(code) == 4 and code.isdigit()):
+                continue
+            close = _number(row, "Close")
+            if close is None or close <= 0:
+                continue
+            signed_change = _number(row, "Change") or 0.0
+            flow = _flow_for_session(flow_by_symbol.get(code, {}), as_of)
+            industry_code = profile.get("industry_code", "") if profile else ""
+            session_stocks.append(
+                TaiwanMarketStockSnapshot(
+                    as_of_date=as_of,
+                    market="tpex",
+                    symbol=f"{code}.TWO",
+                    company_name=(
+                        profile.get("name", code)
+                        if profile
+                        else _text(row, "CompanyName") or code
+                    ),
+                    industry_code=industry_code,
+                    industry_name=(
+                        profile.get("industry_name", "\u672a\u5206\u985e")
+                        if profile
+                        else "\u672a\u5206\u985e"
+                    ),
+                    close=close,
+                    change_pct=round(
+                        _close_change_pct(close, signed_change),
+                        4,
+                    ),
+                    trading_shares=_number(row, "TradingShares") or 0.0,
+                    turnover_twd=_number(row, "TransactionAmount") or 0.0,
+                    foreign_net_shares=flow.get("foreign"),
+                    investment_trust_net_shares=flow.get("trust"),
+                    dealer_net_shares=flow.get("dealer"),
+                    institutional_net_shares=flow.get("total"),
+                    source="TPEx daily close / company profile / 3insti",
+                    retrieved_at=retrieved_at,
+                )
+            )
+        if not session_stocks:
+            continue
+        stocks.extend(session_stocks)
+        advancers = sum(1 for item in session_stocks if item.change_pct > 0)
+        decliners = sum(1 for item in session_stocks if item.change_pct < 0)
+        pulses.append(
+            TaiwanMarketPulseSnapshot(
+                as_of_date=as_of,
+                market="tpex",
+                index_name="\u6ac3\u8cb7\u6307\u6578",
+                index_close=None,
+                index_change_pct=None,
+                turnover_twd=sum(item.turnover_twd for item in session_stocks),
+                advancers=advancers,
+                decliners=decliners,
+                unchanged=len(session_stocks) - advancers - decliners,
+                limit_up=sum(
+                    1 for item in session_stocks if item.change_pct >= 9.5
+                ),
+                limit_down=sum(
+                    1 for item in session_stocks if item.change_pct <= -9.5
+                ),
+                source="TPEx daily close",
+                retrieved_at=retrieved_at,
+            )
+        )
+    return pulses, stocks
+
+
+def _tpex_market_highlight_snapshot(
+    payload: object,
+    retrieved_at: datetime,
+    before_or_on: date,
+) -> TaiwanMarketPulseSnapshot | None:
+    if not isinstance(payload, list):
+        return None
+    candidates: list[tuple[date, dict[str, object]]] = []
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        as_of = _taiwan_date(_text(row, "Date"))
+        if as_of is not None and as_of <= before_or_on:
+            candidates.append((as_of, row))
+    if not candidates:
+        return None
+    as_of, row = max(candidates, key=lambda item: item[0])
+    index_close = _number(row, "CloseIndex")
+    index_change = _number(row, "IndexChange")
+    index_change_pct = (
+        _close_change_pct(index_close, index_change)
+        if index_close is not None and index_change is not None
+        else None
+    )
+    return TaiwanMarketPulseSnapshot(
+        as_of_date=as_of,
+        market="tpex",
+        index_name="\u6ac3\u8cb7\u6307\u6578",
+        index_close=index_close,
+        index_change_pct=index_change_pct,
+        turnover_twd=(_number(row, "DailyTradingValue") or 0.0) * 1_000_000,
+        advancers=int(_number(row, "PriceRiseCompanyNumbers") or 0),
+        decliners=int(_number(row, "PriceDeclineCompanyNumbers") or 0),
+        unchanged=int(_number(row, "PriceFlatCompanyNumbers") or 0),
+        limit_up=int(_number(row, "LimitUpCompanyNumbers") or 0),
+        limit_down=int(_number(row, "LimitDownCompanyNumbers") or 0),
+        source="TPEx market highlight",
+        retrieved_at=retrieved_at,
+    )
+
+
+def _flow_for_session(
+    flow: dict[str, object],
+    as_of: date,
+) -> dict[str, float | None]:
+    if flow.get("as_of") != as_of:
+        return {
+            "foreign": None,
+            "trust": None,
+            "dealer": None,
+            "total": None,
+        }
+    return {
+        "foreign": _optional_float(flow.get("foreign")),
+        "trust": _optional_float(flow.get("trust")),
+        "dealer": _optional_float(flow.get("dealer")),
+        "total": _optional_float(flow.get("total")),
+    }
+
+
+def _optional_float(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _signed_change(sign: str, value: float) -> float:
+    normalized = sign.lower()
+    if "-" in normalized or "green" in normalized or "\u2212" in normalized:
+        return -abs(value)
+    if "+" in normalized or "red" in normalized:
+        return abs(value)
+    return value
+
+
+def _close_change_pct(close: float, signed_change: float) -> float:
+    previous = close - signed_change
+    if previous <= 0:
+        return 0.0
+    return signed_change / previous * 100.0
+
+
+def _market_count_parts(value: str) -> tuple[int, int]:
+    normalized = value.replace(",", "").replace(" ", "")
+    head, _, tail = normalized.partition("(")
+    count = int(float(head)) if head else 0
+    limit_text = tail.rstrip(")")
+    limit_count = int(float(limit_text)) if limit_text else 0
+    return count, limit_count
+
+
+def _taiwan_date(value: str) -> date | None:
+    normalized = value.strip().replace("/", "").replace("-", "")
+    if len(normalized) == 7 and normalized.isdigit():
+        return _roc_date(normalized)
+    if len(normalized) == 8 and normalized.isdigit():
+        try:
+            return date(
+                int(normalized[:4]),
+                int(normalized[4:6]),
+                int(normalized[6:]),
+            )
+        except ValueError:
+            return None
+    return None
 
 
 def _margin_maintenance_snapshot(
@@ -670,12 +1304,28 @@ def _has_recent_dividend(dividend: dict[str, object], report_date: date) -> bool
     current_year = report_date.year if year >= 1900 else report_date.year - 1911
     return year >= current_year - 1
 
-def _tpex_institutional_rows(payload: object) -> dict[str, dict[str, object]]:
+def _tpex_institutional_rows(
+    payload: object,
+    *,
+    before_or_on: date | None = None,
+) -> dict[str, dict[str, object]]:
     if not isinstance(payload, list):
         return {}
-    output: dict[str, dict[str, object]] = {}
+    dated_rows: list[tuple[date, dict[str, object]]] = []
     for row in payload:
         if not isinstance(row, dict):
+            continue
+        as_of = _taiwan_date(_text(row, "Date"))
+        if as_of is None or (before_or_on is not None and as_of > before_or_on):
+            continue
+        dated_rows.append((as_of, row))
+    if not dated_rows:
+        return {}
+
+    latest_date = max(item[0] for item in dated_rows)
+    output: dict[str, dict[str, object]] = {}
+    for as_of, row in dated_rows:
+        if as_of != latest_date:
             continue
         code = _text(row, "SecuritiesCompanyCode")
         if not code:
@@ -691,7 +1341,7 @@ def _tpex_institutional_rows(payload: object) -> dict[str, dict[str, object]]:
             "dealer": _number(row, "Dealers-Difference"),
             "total": _number(row, "TotalDifference"),
             "flow_days": 1,
-            "as_of": _roc_date(_text(row, "Date")),
+            "as_of": as_of,
         }
         if output[code]["total"] is None:
             output[code]["total"] = _sum_available(

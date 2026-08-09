@@ -10,6 +10,26 @@ Generated: {{ report.generated_at|twn_datetime }}
 {% endfor %}
 {% endif %}
 
+{% if taiwan_market.visible %}
+## 台股市場脈動
+
+- 盤勢：{{ taiwan_market.state_label }} · {{ taiwan_market.state_action }}
+{% if taiwan_market.available %}
+- 資料日：{{ taiwan_market.data_date_label }}
+- 全市場成交額：{{ taiwan_market.turnover_label }} · 上漲 {{ taiwan_market.advancers }} / 下跌 {{ taiwan_market.decliners }} · 上漲比率 {{ taiwan_market.advancer_ratio_label }}
+{% for item in taiwan_market.indices %}
+- {{ item.market_label }} {{ item.name }}：{{ item.close_label }}（{{ item.change_label }}）
+{% endfor %}
+{% for item in taiwan_market.evidence %}
+- {{ item.label }}：{{ item.value }}
+{% endfor %}
+{% if taiwan_market.leaders %}
+- 領先產業：{% for row in taiwan_market.leaders %}{{ row.industry }} {{ row.return_5d_label }}{% if not loop.last %}、{% endif %}{% endfor %}
+{% endif %}
+{% endif %}
+
+{% endif %}
+
 {% if taiwan_margin.visible %}
 ## 台股融資風險
 

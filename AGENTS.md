@@ -14,9 +14,9 @@ Prefer decision clarity over feature count. Do not add a new top-level section u
 
 ## Current Status
 
-Updated: 2026-08-06
+Updated: 2026-08-07
 
-- Test suite: 350 tests passing.
+- Test suite: 365 tests passing.
 - Report output: `reports/YYYY/MM/YYYY-MM-DD.html` plus Markdown and brief text.
 - Markets: `us`, `twse`, `tpex`, and `crypto`; UI groups TWSE/TPEX under Taiwan.
 - Data policy: free sources by default; no paid API dependency.
@@ -32,7 +32,7 @@ Updated: 2026-08-06
 - Right-side trading score with persisted five-session trend, execution gates, entry/invalidation/2R planning, and signal validation.
 - Market-aware MA5/10/20/60/120 plus MA200 for US/crypto and MA240 for Taiwan, relative strength, RSI, ATR, volume, gap, squeeze, breakout-hold, Wyckoff, VPA, Adam Theory scenario, and operator discipline analysis.
 - Earnings, valuation, compact TTM-to-FY1 EPS outlook, Forward EPS, analyst-consensus targets, attributable major-firm targets, estimate revisions, data-quality confidence, trusted news, manual X signals, and macro context.
-- Taiwan monthly revenue, dividends, institutional flow, and listed-market margin maintenance estimate from official/free sources.
+- Taiwan whole-market pulse, breadth, industry rotation, monthly revenue, dividends, institutional flow, futures positioning, and listed-market margin maintenance estimate from official/free sources.
 - Portfolio weighting, P&L, concentration, stop-risk, correlation, liquidity, and mixed-currency safeguards.
 - Research state, thesis, plans, post-earnings reviews, trade journal, export/import, and local save API.
 
