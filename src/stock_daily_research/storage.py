@@ -4,11 +4,15 @@ import json
 import math
 import sqlite3
 from contextlib import closing
+from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from .models import (
+    BacktestResult,
+    BacktestTrade,
+    HistoricalPriceBar,
     DailyReport,
     EarningsDate,
     NewsArticle,
@@ -68,6 +72,107 @@ CREATE TABLE IF NOT EXISTS valuation_snapshots (
   retrieved_at TEXT NOT NULL,
   UNIQUE(ticker, as_of_date, source, metric_name)
 );
+CREATE TABLE IF NOT EXISTS backtest_price_bars (
+  ticker TEXT NOT NULL,
+  market TEXT NOT NULL,
+  session_date TEXT NOT NULL,
+  open REAL NOT NULL,
+  high REAL NOT NULL,
+  low REAL NOT NULL,
+  close REAL NOT NULL,
+  volume REAL NOT NULL,
+  source TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL,
+  PRIMARY KEY (ticker, session_date, source)
+);
+
+CREATE TABLE IF NOT EXISTS backtest_price_coverage (
+  ticker TEXT NOT NULL,
+  market TEXT NOT NULL,
+  source TEXT NOT NULL,
+  coverage_start TEXT NOT NULL,
+  coverage_end TEXT NOT NULL,
+  first_bar_date TEXT,
+  last_bar_date TEXT,
+  retrieved_at TEXT NOT NULL,
+  status TEXT NOT NULL,
+  error TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (ticker, source)
+);
+
+CREATE TABLE IF NOT EXISTS backtest_runs (
+  run_id TEXT PRIMARY KEY,
+  generated_at TEXT NOT NULL,
+  strategy TEXT NOT NULL,
+  rule_version TEXT NOT NULL,
+  requested_start TEXT NOT NULL,
+  requested_end TEXT NOT NULL,
+  data_source TEXT NOT NULL,
+  price_basis TEXT NOT NULL,
+  config_hash TEXT NOT NULL,
+  data_fingerprint TEXT NOT NULL,
+  result_fingerprint TEXT NOT NULL,
+  deterministic_replay_passed INTEGER NOT NULL,
+  settings_json TEXT NOT NULL,
+  summary_json TEXT NOT NULL,
+  html_path TEXT NOT NULL,
+  markdown_path TEXT NOT NULL,
+  json_path TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS backtest_universe_members (
+  run_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  market TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  has_fundamentals INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  PRIMARY KEY (run_id, ticker)
+);
+
+CREATE TABLE IF NOT EXISTS backtest_trades (
+  run_id TEXT NOT NULL,
+  trade_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  market TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  setup TEXT NOT NULL,
+  signal_date TEXT NOT NULL,
+  entry_date TEXT NOT NULL,
+  exit_date TEXT NOT NULL,
+  entry_reference REAL NOT NULL,
+  entry_price REAL NOT NULL,
+  exit_reference REAL NOT NULL,
+  exit_price REAL NOT NULL,
+  initial_stop REAL NOT NULL,
+  target_price REAL NOT NULL,
+  units REAL NOT NULL,
+  gross_pnl REAL NOT NULL,
+  net_pnl REAL NOT NULL,
+  return_pct REAL NOT NULL,
+  r_multiple REAL NOT NULL,
+  holding_sessions INTEGER NOT NULL,
+  exit_reason TEXT NOT NULL,
+  entry_commission REAL NOT NULL,
+  exit_commission REAL NOT NULL,
+  sell_tax REAL NOT NULL,
+  slippage_cost REAL NOT NULL,
+  total_cost REAL NOT NULL,
+  score REAL,
+  rs_average REAL,
+  PRIMARY KEY (run_id, trade_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_price_bar_date
+  ON backtest_price_bars(ticker, session_date);
+CREATE INDEX IF NOT EXISTS idx_backtest_trade_run_market
+  ON backtest_trades(run_id, market, entry_date);
+CREATE INDEX IF NOT EXISTS idx_backtest_universe_run_market
+  ON backtest_universe_members(run_id, market, ticker);
+
 
 CREATE TABLE IF NOT EXISTS taiwan_market_overviews (
   as_of_date TEXT PRIMARY KEY,
@@ -2388,5 +2493,369 @@ def _coerce_metric_value(value: str | None) -> object:
     except ValueError:
         return value
     if number.is_integer():
+
+
         return int(number)
     return number
+def save_backtest_price_bars(
+    conn: sqlite3.Connection,
+    bars: list[HistoricalPriceBar],
+) -> None:
+    if not bars:
+        return
+    conn.executemany(
+        """
+        INSERT INTO backtest_price_bars
+        (ticker, market, session_date, open, high, low, close, volume,
+         source, retrieved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, session_date, source) DO UPDATE SET
+          market = excluded.market,
+          open = excluded.open,
+          high = excluded.high,
+          low = excluded.low,
+          close = excluded.close,
+          volume = excluded.volume,
+          retrieved_at = excluded.retrieved_at
+        """,
+        [
+            (
+                bar.ticker,
+                bar.market,
+                bar.session_date.isoformat(),
+                bar.open,
+                bar.high,
+                bar.low,
+                bar.close,
+                bar.volume,
+                bar.source,
+                bar.retrieved_at.isoformat(),
+            )
+            for bar in bars
+        ],
+    )
+
+
+def load_backtest_price_bars(
+    conn: sqlite3.Connection,
+    ticker: str,
+    *,
+    start_date: date,
+    end_date: date,
+    source: str = "yfinance",
+) -> list[HistoricalPriceBar]:
+    rows = conn.execute(
+        """
+        SELECT ticker, market, session_date, open, high, low, close, volume,
+               source, retrieved_at
+        FROM backtest_price_bars
+        WHERE ticker = ? AND source = ?
+          AND session_date BETWEEN ? AND ?
+        ORDER BY session_date
+        """,
+        (ticker, source, start_date.isoformat(), end_date.isoformat()),
+    ).fetchall()
+    return [
+        HistoricalPriceBar(
+            ticker=row[0],
+            market=row[1],
+            session_date=date.fromisoformat(row[2]),
+            open=float(row[3]),
+            high=float(row[4]),
+            low=float(row[5]),
+            close=float(row[6]),
+            volume=float(row[7]),
+            source=row[8],
+            retrieved_at=datetime.fromisoformat(row[9]),
+        )
+        for row in rows
+    ]
+
+
+def save_backtest_price_coverage(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    market: str,
+    source: str,
+    coverage_start: date,
+    coverage_end: date,
+    first_bar_date: date | None,
+    last_bar_date: date | None,
+    retrieved_at: datetime,
+    status: str,
+    error: str = "",
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO backtest_price_coverage
+        (ticker, market, source, coverage_start, coverage_end, first_bar_date,
+         last_bar_date, retrieved_at, status, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, source) DO UPDATE SET
+          market = excluded.market,
+          coverage_start = excluded.coverage_start,
+          coverage_end = excluded.coverage_end,
+          first_bar_date = excluded.first_bar_date,
+          last_bar_date = excluded.last_bar_date,
+          retrieved_at = excluded.retrieved_at,
+          status = excluded.status,
+          error = excluded.error
+        """,
+        (
+            ticker,
+            market,
+            source,
+            coverage_start.isoformat(),
+            coverage_end.isoformat(),
+            first_bar_date.isoformat() if first_bar_date else None,
+            last_bar_date.isoformat() if last_bar_date else None,
+            retrieved_at.isoformat(),
+            status,
+            error,
+        ),
+    )
+
+
+def load_backtest_price_coverage(
+    conn: sqlite3.Connection,
+    ticker: str,
+    *,
+    source: str = "yfinance",
+) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT market, coverage_start, coverage_end, first_bar_date,
+               last_bar_date, retrieved_at, status, error
+        FROM backtest_price_coverage
+        WHERE ticker = ? AND source = ?
+        """,
+        (ticker, source),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "ticker": ticker,
+        "market": row[0],
+        "source": source,
+        "coverage_start": date.fromisoformat(row[1]),
+        "coverage_end": date.fromisoformat(row[2]),
+        "first_bar_date": date.fromisoformat(row[3]) if row[3] else None,
+        "last_bar_date": date.fromisoformat(row[4]) if row[4] else None,
+        "retrieved_at": datetime.fromisoformat(row[5]),
+        "status": row[6],
+        "error": row[7],
+    }
+
+
+def save_backtest_result(
+    conn: sqlite3.Connection,
+    result: BacktestResult,
+    *,
+    summary_payload: dict[str, Any],
+    html_path: str | Path,
+    markdown_path: str | Path,
+    json_path: str | Path,
+) -> None:
+    settings_json = json.dumps(
+        asdict(result.settings),
+        ensure_ascii=True,
+        sort_keys=True,
+        default=_backtest_json_default,
+    )
+    summary_json = json.dumps(
+        summary_payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=_backtest_json_default,
+    )
+    conn.execute(
+        """
+        INSERT INTO backtest_runs
+        (run_id, generated_at, strategy, rule_version, requested_start,
+         requested_end, data_source, price_basis, config_hash,
+         data_fingerprint, result_fingerprint, deterministic_replay_passed,
+         settings_json, summary_json, html_path, markdown_path, json_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id) DO UPDATE SET
+          generated_at = excluded.generated_at,
+          strategy = excluded.strategy,
+          rule_version = excluded.rule_version,
+          requested_start = excluded.requested_start,
+          requested_end = excluded.requested_end,
+          data_source = excluded.data_source,
+          price_basis = excluded.price_basis,
+          config_hash = excluded.config_hash,
+          data_fingerprint = excluded.data_fingerprint,
+          result_fingerprint = excluded.result_fingerprint,
+          deterministic_replay_passed = excluded.deterministic_replay_passed,
+          settings_json = excluded.settings_json,
+          summary_json = excluded.summary_json,
+          html_path = excluded.html_path,
+          markdown_path = excluded.markdown_path,
+          json_path = excluded.json_path
+        """,
+        (
+            result.run_id,
+            result.generated_at.isoformat(),
+            result.strategy,
+            result.rule_version,
+            result.requested_start.isoformat(),
+            result.requested_end.isoformat(),
+            result.data_source,
+            result.price_basis,
+            result.config_hash,
+            result.data_fingerprint,
+            result.result_fingerprint,
+            int(result.deterministic_replay_passed),
+            settings_json,
+            summary_json,
+            str(html_path),
+            str(markdown_path),
+            str(json_path),
+        ),
+    )
+    conn.execute(
+        "DELETE FROM backtest_universe_members WHERE run_id = ?",
+        (result.run_id,),
+    )
+    if result.universe:
+        conn.executemany(
+            """
+            INSERT INTO backtest_universe_members
+            (run_id, ticker, company_name, market, currency,
+             has_fundamentals, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    result.run_id,
+                    member.ticker,
+                    member.company_name,
+                    member.market,
+                    member.currency,
+                    int(member.has_fundamentals),
+                    result.universe_source,
+                )
+                for member in result.universe
+            ],
+        )
+    conn.execute("DELETE FROM backtest_trades WHERE run_id = ?", (result.run_id,))
+    trades = [trade for market in result.markets for trade in market.trades]
+    if trades:
+        conn.executemany(
+            """
+            INSERT INTO backtest_trades
+            (run_id, trade_id, signal_id, ticker, company_name, market,
+             currency, setup, signal_date, entry_date, exit_date,
+             entry_reference, entry_price, exit_reference, exit_price,
+             initial_stop, target_price, units, gross_pnl, net_pnl,
+             return_pct, r_multiple, holding_sessions, exit_reason,
+             entry_commission, exit_commission, sell_tax, slippage_cost,
+             total_cost, score, rs_average)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [_backtest_trade_row(result.run_id, trade) for trade in trades],
+        )
+
+
+def load_backtest_run(conn: sqlite3.Connection, run_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT generated_at, strategy, rule_version, requested_start,
+               requested_end, data_source, price_basis, config_hash,
+               data_fingerprint, result_fingerprint,
+               deterministic_replay_passed, settings_json, summary_json,
+               html_path, markdown_path, json_path
+        FROM backtest_runs
+        WHERE run_id = ?
+        """,
+        (run_id,),
+    ).fetchone()
+    if not row:
+        return None
+    universe_rows = conn.execute(
+        """
+        SELECT ticker, company_name, market, currency,
+               has_fundamentals, source
+        FROM backtest_universe_members
+        WHERE run_id = ?
+        ORDER BY market, ticker
+        """,
+        (run_id,),
+    ).fetchall()
+    return {
+        "run_id": run_id,
+        "generated_at": datetime.fromisoformat(row[0]),
+        "strategy": row[1],
+        "rule_version": row[2],
+        "requested_start": date.fromisoformat(row[3]),
+        "requested_end": date.fromisoformat(row[4]),
+        "data_source": row[5],
+        "price_basis": row[6],
+        "config_hash": row[7],
+        "data_fingerprint": row[8],
+        "result_fingerprint": row[9],
+        "deterministic_replay_passed": bool(row[10]),
+        "settings": json.loads(row[11]),
+        "summary": json.loads(row[12]),
+        "html_path": row[13],
+        "universe_source": universe_rows[0][5] if universe_rows else None,
+        "universe": [
+            {
+                "ticker": member[0],
+                "company_name": member[1],
+                "market": member[2],
+                "currency": member[3],
+                "has_fundamentals": bool(member[4]),
+                "source": member[5],
+            }
+            for member in universe_rows
+        ],
+        "markdown_path": row[14],
+        "json_path": row[15],
+    }
+
+
+def _backtest_trade_row(run_id: str, trade: BacktestTrade) -> tuple[object, ...]:
+    return (
+        run_id,
+        trade.trade_id,
+        trade.signal_id,
+        trade.ticker,
+        trade.company_name,
+        trade.market,
+        trade.currency,
+        trade.setup,
+        trade.signal_date.isoformat(),
+        trade.entry_date.isoformat(),
+        trade.exit_date.isoformat(),
+        trade.entry_reference,
+        trade.entry_price,
+        trade.exit_reference,
+        trade.exit_price,
+        trade.initial_stop,
+        trade.target_price,
+        trade.units,
+        trade.gross_pnl,
+        trade.net_pnl,
+        trade.return_pct,
+        trade.r_multiple,
+        trade.holding_sessions,
+        trade.exit_reason,
+        trade.entry_commission,
+        trade.exit_commission,
+        trade.sell_tax,
+        trade.slippage_cost,
+        trade.total_cost,
+        trade.score,
+        trade.rs_average,
+    )
+
+
+def _backtest_json_default(value: object) -> str:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    raise TypeError(f"Unsupported backtest JSON value: {type(value).__name__}")

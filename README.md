@@ -14,6 +14,7 @@ This project is built for personal research workflow only. It is not investment 
 - Last-known-good valuation fallback from SQLite
 - Earnings date tracking
 - Macro calendar reliability: official BLS selected releases, BLS/FOMC fallback schedules, cached macro events, and optional manual events
+- Auditable right-side backtest with next-session execution, market costs, separate US/Taiwan/crypto portfolios, out-of-sample metrics, and deterministic replay verification
 - Interactive HTML dashboard with search, filters, pins, notes, tags, checklist status, compare mode, exports, and work modes
 - Morning workflow blocks: Today's Focus, My Book Today, overnight / premarket movers, catalyst list, post-earnings scoreboard, sector leadership, thesis state / trigger, and position view
 - RSI 14 technical indicator and rule-based alerts
@@ -114,9 +115,57 @@ python run_daily.py --notify-telegram
 
 Outputs:
 
-- Markdown report: `reports/YYYY-MM-DD.md`
-- HTML dashboard: `reports/YYYY-MM-DD.html`
+- Markdown report: `reports/YYYY/MM/YYYY-MM-DD.md`
+- HTML dashboard: `reports/YYYY/MM/YYYY-MM-DD.html`
 - SQLite database: `data/stock_daily.sqlite3`
+
+## Right-Side Backtest
+
+Run all three markets over the default three-year period:
+
+```powershell
+python run_backtest.py
+```
+
+Choose a period, market, or watchlist subset:
+
+```powershell
+python run_backtest.py --start 2024-01-01 --end 2026-08-08 --market taiwan
+python run_backtest.py --market us --symbols NVDA MSFT AMZN
+```
+
+Reuse only the persisted SQLite OHLCV cache:
+
+```powershell
+python run_backtest.py --offline
+```
+
+Backtest outputs are kept separate from the daily dashboard:
+
+- HTML: `reports/backtests/YYYY/MM/right-side_<start>_<end>_<id>.html`
+- Markdown: `reports/backtests/YYYY/MM/right-side_<start>_<end>_<id>.md`
+- Full audit JSON: `reports/backtests/YYYY/MM/right-side_<start>_<end>_<id>.json`
+- SQLite tables: `backtest_price_bars`, `backtest_price_coverage`, `backtest_runs`, `backtest_universe_members`, and `backtest_trades`
+
+The default execution contract is deliberately conservative:
+
+- A signal uses only data available at that session's close.
+- Entry occurs at the next session's open, including configured slippage.
+- Position size is limited by account risk, position weight, cash, maximum concurrent holdings, and a default 5% share of daily volume.
+- Taiwan locked-limit bars do not assume an executable fill; locked limit-down exits are deferred to the next tradable bar.
+- Stops, 2R targets, a maximum holding period, commissions, and sell taxes are included.
+- If stop and target are both touched inside one daily candle, the stop is assumed to occur first.
+- US, Taiwan, and crypto each use independent capital and currency; their P&L is never summed.
+- The final 30% of sessions is reported separately as out-of-sample, with five rolling validation folds over the latter half of the history.
+- Nine nearby target-R and holding-period combinations expose parameter sensitivity without re-optimizing signal history.
+- Profit concentration reports whether a few trades or symbols dominate gross profit.
+- Repaired adjusted OHLCV receives per-symbol coverage, staleness, zero-volume, and extreme-return diagnostics.
+- Taiwan performance uses adjusted `0050.TW` as an investable benchmark; `^TWII` remains the relative-strength reference.
+- A second replay must produce the same result fingerprint unless `--no-replay-check` is explicitly used.
+
+Historical news, analyst targets, Forward EPS, and institutional-flow fields are not reconstructed because free point-in-time histories are unavailable. The backtest therefore replays the inspectable technical right-side rules only, avoiding current-data leakage into old signals. It also uses the current watchlist, so results retain survivorship and selection bias; the exact universe is persisted with every run for auditability.
+
+Use `python run_backtest.py --help` for capital, commission, slippage, risk, holding period, volume participation, walk-forward folds, sensitivity, and sample-split controls.
 
 ## Interactive Dashboard & Data Management
 
@@ -207,7 +256,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register_daily_task.ps1 -Time 0
 ## Data Sources
 
 - Google News RSS: free RSS search, constrained by trusted domains and relevance checks
-- `yfinance`: unofficial Yahoo Finance data for valuation, price history, RSI, moving averages, and earnings dates
+- `yfinance`: unofficial Yahoo Finance data for valuation, adjusted daily OHLCV, RSI, moving averages, earnings dates, and backtest history with SQLite fallback
 - Federal Reserve: official FOMC calendar and statements
 - BLS: official selected-release calendar for NFP, CPI, and PPI, with BLS-specific and built-in fallback schedules
 - X/Twitter: manual input only; this MVP does not call paid or usage-billed X APIs
