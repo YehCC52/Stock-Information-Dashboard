@@ -1,0 +1,114 @@
+# 右側交易回測
+
+- 期間：{{ result.requested_start }} 至 {{ result.requested_end }}
+- 策略：{{ result.strategy }}
+- 規則版本：`{{ result.rule_version }}`
+- 決定性重播：{{ "通過" if result.deterministic_replay_passed else "未通過" }}
+- Run ID：`{{ result.run_id }}`
+- 回測樣本：{{ result.universe_source }}（{{ result.universe|length }} 檔）
+
+> 訊號於收盤後成立，下一交易日開盤成交；各市場資金、幣別與績效分開計算。
+
+{% for view in market_views %}
+{% set market = view.result %}
+{% set m = market.metrics %}
+## {{ market.label }}（{{ market.currency }}）
+
+| 指標 | 數值 |
+| --- | ---: |
+| 策略報酬 | {{ "%.2f%%"|format(m.total_return_pct) if m.total_return_pct is not none else "N/A" }} |
+| {{ market.benchmark_symbol }} 基準報酬 | {{ "%.2f%%"|format(m.benchmark_return_pct) if m.benchmark_return_pct is not none else "N/A" }} |
+| 超額報酬 | {{ "%+.2f%%"|format(m.excess_return_pct) if m.excess_return_pct is not none else "N/A" }} |
+| 最大回撤 | {{ "%.2f%%"|format(m.max_drawdown_pct) }} |
+| CAGR | {{ "%.2f%%"|format(m.cagr_pct) if m.cagr_pct is not none else "N/A" }} |
+| Sharpe | {{ "%.2f"|format(m.sharpe) if m.sharpe is not none else "N/A" }} |
+| 交易筆數 | {{ m.trade_count }} |
+| 勝率 | {{ "%.1f%%"|format(m.win_rate_pct) }} |
+| 期望值 | {{ "%+.3fR"|format(m.expectancy_r) }} |
+| 總成本 | {{ market.currency }} {{ "{:,.2f}".format(m.total_cost) }} |
+
+### 樣本內／樣本外
+
+| 區段 | 策略報酬 | 最大回撤 | 交易筆數 | 勝率 | 期望值 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 樣本內 | {{ "%.2f%%"|format(market.in_sample_metrics.total_return_pct) if market.in_sample_metrics.total_return_pct is not none else "N/A" }} | {{ "%.2f%%"|format(market.in_sample_metrics.max_drawdown_pct) }} | {{ market.in_sample_metrics.trade_count }} | {{ "%.1f%%"|format(market.in_sample_metrics.win_rate_pct) }} | {{ "%+.3fR"|format(market.in_sample_metrics.expectancy_r) }} |
+| 樣本外（{{ market.split_date }} 起） | {{ "%.2f%%"|format(market.out_of_sample_metrics.total_return_pct) if market.out_of_sample_metrics.total_return_pct is not none else "N/A" }} | {{ "%.2f%%"|format(market.out_of_sample_metrics.max_drawdown_pct) }} | {{ market.out_of_sample_metrics.trade_count }} | {{ "%.1f%%"|format(market.out_of_sample_metrics.win_rate_pct) }} | {{ "%+.3fR"|format(market.out_of_sample_metrics.expectancy_r) }} |
+{% set robust = view.robustness %}
+{% set wf = robust.walk_forward.summary %}
+{% set sensitivity = robust.sensitivity.summary %}
+{% set concentration = robust.concentration %}
+{% set quality = robust.data_quality %}
+### 穩健度驗證
+
+| 檢查 | 判讀 | 摘要 |
+| --- | --- | --- |
+| 整體 | {{ robust.overall.status_label }} | 綜合樣本外、參數與獲利集中度 |
+| 滾動樣本外 | {{ wf.status_label }} | {{ wf.completed_folds|default(0) }} 段、{{ wf.trade_count|default(0) }} 筆交易 |
+| 參數敏感度 | {{ sensitivity.status_label }} | {{ sensitivity.scenario_count|default(0) }} 組鄰近情境 |
+| 獲利集中度 | {{ concentration.status_label }} | 前五筆占 {{ "%.1f%%"|format(concentration.top_five_profit_share_pct) if concentration.top_five_profit_share_pct is not none else "N/A" }} |
+| 行情資料品質 | {{ quality.status_label }} | 中位分數 {{ "%.0f"|format(quality.median_score) if quality.median_score is not none else "N/A" }}、{{ quality.warning_count|default(0) }} 檔需留意 |
+
+{% if robust.walk_forward.rows %}
+#### 滾動樣本外區段
+
+| 區段 | 驗證期間 | 策略報酬 | 基準報酬 | 超額報酬 | 最大回撤 | 交易 | 期望值 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+{% for row in robust.walk_forward.rows %}| {{ row.fold }} | {{ row.validation_start }} 至 {{ row.validation_end }} | {{ "%.2f%%"|format(row.total_return_pct) if row.total_return_pct is not none else "N/A" }} | {{ "%.2f%%"|format(row.benchmark_return_pct) if row.benchmark_return_pct is not none else "N/A" }} | {{ "%+.2f%%"|format(row.excess_return_pct) if row.excess_return_pct is not none else "N/A" }} | {{ "%.2f%%"|format(row.max_drawdown_pct) }} | {{ row.trade_count }} | {{ "%+.3fR"|format(row.expectancy_r) }} |
+{% endfor %}
+{% endif %}
+
+{% if robust.sensitivity.rows %}
+#### 鄰近參數情境
+
+| 目標 R | 最長持有 | 情境 | 策略報酬 | 最大回撤 | 交易 | 期望值 |
+| ---: | ---: | --- | ---: | ---: | ---: | ---: |
+{% for row in robust.sensitivity.rows %}| {{ "%.1fR"|format(row.target_r) }} | {{ row.max_holding_sessions }} 日 | {{ "基準" if row.is_baseline else "鄰近測試" }} | {{ "%.2f%%"|format(row.total_return_pct) if row.total_return_pct is not none else "N/A" }} | {{ "%.2f%%"|format(row.max_drawdown_pct) }} | {{ row.trade_count }} | {{ "%+.3fR"|format(row.expectancy_r) }} |
+{% endfor %}
+{% endif %}
+
+{% if quality.rows %}
+#### 逐檔行情品質
+
+| 標的 | 狀態 | 分數 | 交易日 | 涵蓋率 | 最後資料日 | 說明 |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+{% for row in quality.rows %}| {{ row.ticker }} | {{ row.status_label }} | {{ row.score }} | {{ row.sessions }} | {{ "%.1f%%"|format(row.coverage_pct) }} | {{ row.last_date or "N/A" }} | {{ row.reason_label }} |
+{% endfor %}
+{% endif %}
+
+
+### 執行假設
+
+- 收盤產生訊號，下一交易日開盤成交。
+- 單筆風險 {{ result.settings.risk_per_trade_pct }}%，單一部位上限 {{ result.settings.max_position_pct }}%，最多 {{ result.settings.max_positions }} 個部位。
+- {{ result.settings.target_r }}R 目標、停損或持有 {{ result.settings.max_holding_sessions }} 個交易日後出場。
+- 同一根 K 線同時觸及停損與目標時，採保守的停損優先。
+- 單日成交量參與上限 {{ result.settings.max_volume_participation_pct }}%；台股股票漲跌停鎖死時不假設成交。
+- 手續費 {{ market.assumptions.commission_bps }} bps、滑價 {{ market.assumptions.slippage_bps }} bps、賣出稅 {{ market.assumptions.sell_tax_bps }} bps；ETF 賣出稅 {{ market.assumptions.etf_sell_tax_bps }} bps。
+
+### 交易明細
+
+{% if view.trade_rows %}
+| 標的 | 策略 | 訊號日 | 進場日 | 出場日 | 進場價 | 停損價 | 目標價 | 淨損益 | R | 出場原因 |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+{% for trade in view.trade_rows %}| {{ trade.ticker }} | {{ trade.setup_label }} | {{ trade.signal_date }} | {{ trade.entry_date }} | {{ trade.exit_date }} | {{ "%.4f"|format(trade.entry_price) }} | {{ "%.4f"|format(trade.initial_stop) }} | {{ "%.4f"|format(trade.target_price) }} | {{ "{:+,.2f}".format(trade.net_pnl) }} | {{ "%+.3fR"|format(trade.r_multiple) }} | {{ trade.exit_label }} |
+{% endfor %}
+{% else %}
+本區間沒有完成交易，請檢查訊號漏斗與資料涵蓋率。
+{% endif %}
+
+### 限制
+
+{% for warning in market.warnings %}
+- {{ warning }}
+{% endfor %}
+
+{% endfor %}
+## 稽核資訊
+
+- Config hash：`{{ result.config_hash }}`
+- Data fingerprint：`{{ result.data_fingerprint }}`
+- Result fingerprint：`{{ result.result_fingerprint }}`
+
+{% for warning in result.warnings %}
+- {{ warning }}
+{% endfor %}

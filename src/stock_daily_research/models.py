@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -650,3 +652,215 @@ class DailyReport:
     ticker_history: dict[str, list[TickerHistoryPoint]] = field(default_factory=dict)
     history_overview: dict[str, Any] = field(default_factory=dict)
     settings: "AppSettings | None" = None
+
+
+@dataclass(frozen=True)
+class HistoricalPriceBar:
+    ticker: str
+    market: str
+    session_date: date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    source: str
+    retrieved_at: datetime
+
+
+@dataclass(frozen=True)
+class BacktestUniverseMember:
+    ticker: str
+    company_name: str
+    market: str
+    currency: str
+    has_fundamentals: bool
+
+
+@dataclass(frozen=True)
+class BacktestSettings:
+    start_date: date
+    end_date: date
+    risk_per_trade_pct: float = 1.0
+    max_positions: int = 8
+    max_position_pct: float = 20.0
+    target_r: float = 2.0
+    max_holding_sessions: int = 40
+    max_signal_risk_pct: float = 8.0
+    max_entry_gap_pct: float = 3.0
+    warmup_sessions: int = 260
+    lookback_sessions: int = 500
+    out_of_sample_pct: float = 30.0
+    max_volume_participation_pct: float = 5.0
+    walk_forward_folds: int = 5
+    sensitivity_enabled: bool = True
+
+    def __post_init__(self) -> None:
+        if self.start_date >= self.end_date:
+            raise ValueError("backtest start_date must be before end_date")
+        if not 0 < self.risk_per_trade_pct <= 10:
+            raise ValueError("risk_per_trade_pct must be in (0, 10]")
+        if self.max_positions <= 0:
+            raise ValueError("max_positions must be positive")
+        if not 0 < self.max_position_pct <= 100:
+            raise ValueError("max_position_pct must be in (0, 100]")
+        if self.target_r <= 0:
+            raise ValueError("target_r must be positive")
+        if self.max_holding_sessions <= 0:
+            raise ValueError("max_holding_sessions must be positive")
+        if not 0 < self.max_signal_risk_pct <= 100:
+            raise ValueError("max_signal_risk_pct must be in (0, 100]")
+        if not 0 <= self.max_entry_gap_pct <= 100:
+            raise ValueError("max_entry_gap_pct must be in [0, 100]")
+        if self.warmup_sessions < 120:
+            raise ValueError("warmup_sessions must be at least 120")
+        if self.lookback_sessions < self.warmup_sessions:
+            raise ValueError("lookback_sessions must cover warmup_sessions")
+        if not 0 < self.out_of_sample_pct < 100:
+            raise ValueError("out_of_sample_pct must be in (0, 100)")
+        if not 0 < self.max_volume_participation_pct <= 100:
+            raise ValueError(
+                "max_volume_participation_pct must be in (0, 100]"
+            )
+        if not 2 <= self.walk_forward_folds <= 12:
+            raise ValueError("walk_forward_folds must be in [2, 12]")
+
+
+@dataclass(frozen=True)
+class BacktestMarketAssumptions:
+    key: str
+    label: str
+    currency: str
+    initial_capital: float
+    commission_bps: float
+    slippage_bps: float
+    sell_tax_bps: float
+    etf_sell_tax_bps: float
+    sessions_per_year: int
+    benchmark_symbol: str
+    rs_benchmark_symbols: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.key not in {"us", "taiwan", "crypto"}:
+            raise ValueError("unsupported backtest assumption key")
+        if not math.isfinite(self.initial_capital) or self.initial_capital <= 0:
+            raise ValueError("initial_capital must be finite and positive")
+        for field_name in (
+            "commission_bps",
+            "slippage_bps",
+            "sell_tax_bps",
+            "etf_sell_tax_bps",
+        ):
+            value = float(getattr(self, field_name))
+            if not math.isfinite(value) or not 0 <= value <= 10_000:
+                raise ValueError(
+                    f"{field_name} must be finite and in [0, 10000]"
+                )
+        if self.sessions_per_year <= 0:
+            raise ValueError("sessions_per_year must be positive")
+        if not self.currency or not self.benchmark_symbol:
+            raise ValueError("currency and benchmark_symbol are required")
+
+
+@dataclass(frozen=True)
+class BacktestSignal:
+    signal_id: str
+    ticker: str
+    company_name: str
+    market: str
+    currency: str
+    signal_date: date
+    entry_session: date
+    setup: str
+    trigger_price: float
+    entry_reference: float
+    stop_price: float
+    risk_pct: float
+    score: float | None
+    rs_average: float | None
+    rule_version: str
+
+
+@dataclass(frozen=True)
+class BacktestTrade:
+    trade_id: str
+    signal_id: str
+    ticker: str
+    company_name: str
+    market: str
+    currency: str
+    setup: str
+    signal_date: date
+    entry_date: date
+    exit_date: date
+    entry_reference: float
+    entry_price: float
+    exit_reference: float
+    exit_price: float
+    initial_stop: float
+    target_price: float
+    units: float
+    gross_pnl: float
+    net_pnl: float
+    return_pct: float
+    r_multiple: float
+    holding_sessions: int
+    exit_reason: str
+    entry_commission: float
+    exit_commission: float
+    sell_tax: float
+    slippage_cost: float
+    total_cost: float
+    score: float | None
+    rs_average: float | None
+
+
+@dataclass(frozen=True)
+class BacktestEquityPoint:
+    session_date: date
+    cash: float
+    equity: float
+    exposure_pct: float
+    drawdown_pct: float
+    benchmark_equity: float | None
+
+
+@dataclass(frozen=True)
+class BacktestMarketResult:
+    market: str
+    label: str
+    currency: str
+    start_date: date
+    end_date: date
+    split_date: date
+    benchmark_symbol: str
+    assumptions: BacktestMarketAssumptions
+    metrics: dict[str, Any]
+    in_sample_metrics: dict[str, Any]
+    out_of_sample_metrics: dict[str, Any]
+    diagnostics: dict[str, Any]
+    trades: list[BacktestTrade]
+    equity_curve: list[BacktestEquityPoint]
+    robustness: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class BacktestResult:
+    run_id: str
+    generated_at: datetime
+    strategy: str
+    rule_version: str
+    requested_start: date
+    requested_end: date
+    data_source: str
+    price_basis: str
+    config_hash: str
+    data_fingerprint: str
+    result_fingerprint: str
+    deterministic_replay_passed: bool
+    settings: BacktestSettings
+    markets: list[BacktestMarketResult]
+    universe_source: str = "current_watchlist"
+    universe: list[BacktestUniverseMember] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)

@@ -108,6 +108,16 @@ def fetch_technical_indicators(
     yf_ticker: Any,
     period: str = TECHNICAL_HISTORY_PERIOD,
 ) -> dict[str, Any]:
+    empty = empty_technical_indicators()
+    try:
+        hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
+    except Exception:
+        return empty
+    return technical_indicators_from_history(hist)
+
+
+def empty_technical_indicators() -> dict[str, Any]:
+    """Return the stable technical metric shape used by live and replay paths."""
     numeric_keys = (
         "sma_5",
         "sma_10",
@@ -156,10 +166,17 @@ def fetch_technical_indicators(
         "price_history_sessions": 0,
         "price_history_as_of_date": None,
     })
-    try:
-        hist = yf_ticker.history(period=period, auto_adjust=True, timeout=YF_HISTORY_TIMEOUT)
-    except Exception:
-        return empty
+    return empty
+
+
+def technical_indicators_from_history(
+    hist: Any,
+    *,
+    include_chart: bool = True,
+    chart_history_limit: int | None = None,
+) -> dict[str, Any]:
+    """Compute the live technical snapshot from only the supplied OHLCV rows."""
+    empty = empty_technical_indicators()
     if hist is None or hist.empty or "Close" not in hist.columns:
         return empty
     hist, regime = _latest_technical_history_regime(hist)
@@ -169,7 +186,15 @@ def fetch_technical_indicators(
     quality = compute_move_quality_metrics(hist)
     trend_structure = compute_trend_structure_metrics(hist)
     right_side_setup = compute_right_side_setup_metrics(hist)
-    price_chart = compute_price_chart_metrics(hist)
+    price_chart = (
+        compute_price_chart_metrics(
+            hist.tail(chart_history_limit)
+            if chart_history_limit is not None
+            else hist
+        )
+        if include_chart
+        else compute_price_chart_metrics(None)
+    )
     return {
         **{
             f"sma_{window}": _mean_last_n(closes, window)

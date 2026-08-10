@@ -14,9 +14,9 @@ Prefer decision clarity over feature count. Do not add a new top-level section u
 
 ## Current Status
 
-Updated: 2026-08-07
+Updated: 2026-08-10
 
-- Test suite: 365 tests passing.
+- Test suite: 389 tests passing.
 - Report output: `reports/YYYY/MM/YYYY-MM-DD.html` plus Markdown and brief text.
 - Markets: `us`, `twse`, `tpex`, and `crypto`; UI groups TWSE/TPEX under Taiwan.
 - Data policy: free sources by default; no paid API dependency.
@@ -30,6 +30,7 @@ Updated: 2026-08-07
 - Five-dimension health diagnostic: trend, momentum, volume/price, fundamentals, and risk, with a persisted five-session score trend.
 - Strategy screener: overall, breakout, pullback, squeeze, fundamental, daily unusual activity, and risk-first.
 - Right-side trading score with persisted five-session trend, execution gates, entry/invalidation/2R planning, and signal validation.
+- Auditable technical right-side backtest with repaired OHLCV quality checks, next-session execution, volume and Taiwan locked-limit constraints, market-aware costs, independent portfolios, rolling out-of-sample folds, nearby-parameter sensitivity, profit concentration, universe snapshots, a full trade ledger, and deterministic replay fingerprint.
 - Market-aware MA5/10/20/60/120 plus MA200 for US/crypto and MA240 for Taiwan, relative strength, RSI, ATR, volume, gap, squeeze, breakout-hold, Wyckoff, VPA, Adam Theory scenario, and operator discipline analysis.
 - Earnings, valuation, compact TTM-to-FY1 EPS outlook, Forward EPS, analyst-consensus targets, attributable major-firm targets, estimate revisions, data-quality confidence, trusted news, manual X signals, and macro context.
 - Taiwan whole-market pulse, breadth, industry rotation, monthly revenue, dividends, institutional flow, futures positioning, and listed-market margin maintenance estimate from official/free sources.
@@ -53,6 +54,16 @@ python run_daily.py --date 2026-07-17
 
 # Full test suite
 python -m pytest tests/ -q
+
+# Three-year right-side backtest for all markets
+python run_backtest.py
+
+# Taiwan-only period and offline cached replay
+python run_backtest.py --start 2024-01-01 --market taiwan
+python run_backtest.py --market taiwan --offline
+
+# Focused backtest tests
+python -m pytest tests/test_backtest.py -q
 
 # Focused report tests
 python -m pytest tests/test_report.py -q
@@ -79,6 +90,15 @@ watchlist.yaml
        -> daily_report.html.j2 / daily_report.md.j2
 ```
 
+```text
+run_backtest.py
+    -> backtest_runner.py
+       -> backtest_data.py (repaired adjusted OHLCV + quality checks + SQLite cache)
+       -> backtest.py (signals, execution constraints, replay, robustness)
+       -> backtest_report.py (compact summary + collapsed validation evidence)
+       -> backtest_report.html.j2 / backtest_report.md.j2 / audit JSON
+```
+
 ### Key Files
 
 | File | Responsibility |
@@ -89,6 +109,10 @@ watchlist.yaml
 | `src/stock_daily_research/report.py` | Pure analysis helpers, scoring, summaries, portfolio logic, render context |
 | `src/stock_daily_research/storage.py` | SQLite schema, migrations, snapshots, research state, history |
 | `src/stock_daily_research/valuation.py` | yfinance normalization and technical metric calculation |
+| `src/stock_daily_research/backtest_data.py` | Repaired adjusted OHLCV, quality diagnostics, SQLite coverage cache, offline fallback |
+| `src/stock_daily_research/backtest.py` | Point-in-time signals, executable fills, portfolio replay, performance and robustness metrics |
+| `src/stock_daily_research/backtest_runner.py` | Backtest orchestration, universe snapshots, fingerprints, deterministic replay, persistence |
+| `src/stock_daily_research/backtest_report.py` | Separate HTML/Markdown/JSON artifacts with compact robustness evidence |
 | `src/stock_daily_research/taiwan_market.py` | Official Taiwan market disclosures |
 | `src/stock_daily_research/templates/daily_report.html.j2` | Static UI, responsive CSS, and local-only interactivity |
 | `src/stock_daily_research/api_server.py` | Local research-state save endpoint on `127.0.0.1:8765` |
@@ -104,7 +128,7 @@ YAML defaults -> SQLite overrides -> localStorage session drafts -> export/impor
 
 - Do not silently overwrite user research state.
 - `watchlist.yaml` is the durable baseline for positions and plans.
-- SQLite stores research state, valuation/history snapshots, reviews, trades, and report runs.
+- SQLite stores research state, valuation/history snapshots, reviews, daily trades/report runs, backtest OHLCV coverage, backtest runs, tested-universe snapshots, and simulated trades.
 - localStorage is a session editing layer; preserve intentional empty values.
 - Reports are organized by year and month through `report_output_dir()`.
 
@@ -129,6 +153,15 @@ The five-dimension diagnostic and strategy screener live in `report.py`.
 - Do not let a missing fundamental dimension punish ETFs or crypto.
 - A strategy match is a candidate for review, not a buy/sell instruction.
 - Persist a signal before evaluating future performance. Never use future data when generating a historical signal.
+- Historical backtest signals may use only rows through the signal close; fills occur no earlier than the next session open.
+- If stop and target are both inside one daily bar, resolve the stop first.
+- Include commission, slippage, Taiwan sell tax, cash, position caps, and concurrent-position limits.
+- Keep US, Taiwan, and crypto as independent portfolios; never aggregate mixed-currency P&L.
+- Cap entries by configured daily-volume participation and never invent fills on zero-volume bars.
+- For Taiwan instruments, defer fills when an OHLC bar is locked at its daily limit.
+- Use adjusted `0050.TW` for Taiwan performance comparison and `^TWII` only for relative strength.
+- Report rolling out-of-sample, nearby-parameter sensitivity, data quality, and profit concentration without presenting them as proof of future returns.
+- Do not backfill current Forward EPS, targets, news, or institutional data into historical signals without a point-in-time source.
 - Keep new strategy thresholds market-aware and verify per-market ranking limits.
 
 ## UI and UX Rules
@@ -165,6 +198,7 @@ Scale tests with the change:
 | News | `tests/test_news.py` |
 | Valuation/earnings | `tests/test_valuation.py` and fallback/storage tests |
 | Taiwan data | `tests/test_taiwan_market.py` |
+| Backtest | `tests/test_backtest.py`, deterministic replay, real cached run, market isolation, and rendered artifact checks |
 | Scoring/strategy/UI | focused `tests/test_report.py`, rendered report, browser market/mobile checks |
 | Storage/schema/state | `tests/test_storage.py`, `tests/test_api_server.py`, migration coverage |
 | Runner/provider | provider unit tests plus `tests/test_runner.py` |
@@ -194,6 +228,8 @@ Use the narrowest applicable skill:
 
 ## Known Boundaries
 
+- Backtests persist the exact current-watchlist universe for auditability, but still retain selection and survivorship bias because historical constituents and delisted symbols are not reconstructed.
+- Historical strategy replay is technical-only until reliable free point-in-time fundamentals, estimates, and event histories are available.
 - The seven new strategy categories are current-day rankings; they do not yet have separate persisted performance histories.
 - The report is static and generated on demand. It is not a broker terminal.
 - No Level 2, options flow, broker order routing, or guaranteed real-time alerts without an appropriate licensed source.
